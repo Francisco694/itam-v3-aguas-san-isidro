@@ -1,0 +1,30 @@
+# Node
+node_modules/
+dist/
+coverage/
+
+# Variables de entorno
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+logs/
+
+# VS Code
+.vscode/
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+
+# Base de datos / respaldos
+backups/
+*.backup
+*.dump
+*.sql.gz
+
+# Temporales
+tmp/
+temp/
