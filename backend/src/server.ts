@@ -1,12 +1,35 @@
 import app from "./app";
+import { pool } from "./config/database";
+import { env } from "./config/env";
 
-const PORT = 3000;
+const startServer = async (): Promise<void> => {
+  try {
+    await pool.query("SELECT 1");
 
-app.listen(PORT, () => {
-  console.log("========================================");
-  console.log(" ITAM v3.0 - Aguas San Isidro");
-  console.log(" Backend iniciado correctamente");
-  console.log(` API: http://localhost:${PORT}`);
-  console.log(` Health: http://localhost:${PORT}/api/v1/health`);
-  console.log("========================================");
-});
+    console.log("PostgreSQL conectado correctamente");
+
+    app.listen(env.port, () => {
+      console.log("========================================");
+      console.log(" ITAM v3.0 - Aguas San Isidro");
+      console.log(" Backend iniciado correctamente");
+      console.log(` API: http://localhost:${env.port}`);
+      console.log(
+        ` Health: http://localhost:${env.port}/api/v1/health`
+      );
+      console.log(
+        ` Database: http://localhost:${env.port}/api/v1/health/database`
+      );
+      console.log("========================================");
+    });
+  } catch (error) {
+    console.error(
+      "No fue posible conectar con PostgreSQL."
+    );
+
+    console.error(error);
+
+    process.exit(1);
+  }
+};
+
+startServer();
