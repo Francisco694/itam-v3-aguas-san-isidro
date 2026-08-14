@@ -1,0 +1,6 @@
+.page-heading { display:flex; align-items:flex-end; justify-content:space-between; gap:1.5rem; margin-bottom:1.5rem; }
+.eyebrow { color:var(--color-primary); font-size:.72rem; font-weight:800; letter-spacing:.12em; margin:0 0 .35rem; text-transform:uppercase; }
+h1 { color:var(--color-ink); font-size:clamp(1.65rem,3vw,2.25rem); letter-spacing:-.035em; line-height:1.1; margin:0; }
+.subtitle { color:var(--color-muted); margin:.45rem 0 0; max-width:44rem; }
+.page-actions { display:flex; flex-wrap:wrap; gap:.65rem; }
+@media(max-width:700px){.page-heading{align-items:stretch;flex-direction:column}.page-actions>*{flex:1}}

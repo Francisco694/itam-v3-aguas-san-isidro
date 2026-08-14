@@ -12,7 +12,7 @@ Backend en desarrollo.
 - TypeScript
 - Express
 - PostgreSQL
-- React (frontend posterior)
+- Angular 22 (frontend)
 
 ## Autor
 

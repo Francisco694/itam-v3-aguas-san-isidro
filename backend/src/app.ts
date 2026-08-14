@@ -19,9 +19,11 @@ app.use(helmet());
 app.use(
   cors({
     origin:
-      env.nodeEnv === "development" && env.corsOrigin
+      env.corsOrigin
         ? env.corsOrigin
-        : undefined
+        : env.nodeEnv === "development"
+          ? "http://localhost:4200"
+          : false
   })
 );
 app.use(express.json());
