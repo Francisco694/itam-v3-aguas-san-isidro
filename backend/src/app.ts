@@ -2,12 +2,54 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import { pool } from "./config/database";
+import { env } from "./config/env";
+import {
+  errorHandler,
+  notFoundHandler
+} from "./shared/error.middleware";
+import estadosRoutes from "./modules/estados/estados.routes";
+import departamentosRoutes from "./modules/departamentos/departamentos.routes";
+import colaboradoresRoutes from "./modules/colaboradores/colaboradores.routes";
+import dispositivosRoutes from "./modules/dispositivos/dispositivos.routes";
+import simRoutes from "./modules/sim/sim.routes";
 
 const app = express();
 
 app.use(helmet());
-app.use(cors());
+app.use(
+  cors({
+    origin:
+      env.nodeEnv === "development" && env.corsOrigin
+        ? env.corsOrigin
+        : undefined
+  })
+);
 app.use(express.json());
+
+app.use("/api/v1/estados", estadosRoutes);
+app.use("/api/v1/departamentos", departamentosRoutes);
+app.use("/api/v1/colaboradores", colaboradoresRoutes);
+app.use("/api/v1/dispositivos", dispositivosRoutes);
+app.use("/api/v1/sim", simRoutes);
+
+
+// ============================================================
+// HEALTH CHECK - API
+// ============================================================
+
+app.get("/api/v1/health", (_req, res) => {
+  res.status(200).json({
+    success: true,
+    service: "ITAM v3.0 API",
+    status: "OK",
+    timestamp: new Date().toISOString()
+  });
+});
+
+
+// ============================================================
+// HEALTH CHECK - DATABASE
+// ============================================================
 
 app.get(
   "/api/v1/health/database",
@@ -26,9 +68,9 @@ app.get(
         status: "OK",
         database: result.rows[0].database,
         user: result.rows[0].user,
-        databaseTime:
-          result.rows[0].database_time
+        databaseTime: result.rows[0].database_time
       });
+
     } catch (error) {
       console.error(
         "Error comprobando PostgreSQL:",
@@ -37,11 +79,16 @@ app.get(
 
       res.status(503).json({
         success: false,
-        service: "PostgreSQL",
-        status: "UNAVAILABLE"
+        error: {
+          code: "DATABASE_UNAVAILABLE",
+          message: "PostgreSQL no se encuentra disponible."
+        }
       });
     }
   }
 );
+
+app.use(notFoundHandler);
+app.use(errorHandler);
 
 export default app;

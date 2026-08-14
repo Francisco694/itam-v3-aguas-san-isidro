@@ -7,6 +7,7 @@ export const pool = new Pool({
   database: env.database.name,
   user: env.database.user,
   password: env.database.password,
+  options: "-c search_path=itam,public",
 
   max: 10,
   idleTimeoutMillis: 30000,

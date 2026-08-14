@@ -23,6 +23,8 @@ export const env = {
 
   port: Number(process.env.PORT ?? 3000),
 
+  corsOrigin: process.env.CORS_ORIGIN,
+
   database: {
     host: process.env.DB_HOST!,
     port: Number(process.env.DB_PORT!),
