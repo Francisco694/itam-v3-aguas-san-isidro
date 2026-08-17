@@ -4,7 +4,7 @@ import { Component, input } from '@angular/core';
   selector: 'app-page-header',
   template: `
     <header class="page-heading">
-      <div><p class="eyebrow">{{ eyebrow() }}</p><h1>{{ title() }}</h1><p class="subtitle">{{ subtitle() }}</p></div>
+      <div><p class="eyebrow"><span></span>{{ eyebrow() }}</p><h1>{{ title() }}</h1><p class="subtitle">{{ subtitle() }}</p></div>
       <div class="page-actions"><ng-content /></div>
     </header>
   `,
@@ -13,5 +13,5 @@ import { Component, input } from '@angular/core';
 export class PageHeader {
   readonly title = input.required<string>();
   readonly subtitle = input('');
-  readonly eyebrow = input('Gestión de activos TI');
+  readonly eyebrow = input('Aguas San Isidro · ITAM v3.0');
 }

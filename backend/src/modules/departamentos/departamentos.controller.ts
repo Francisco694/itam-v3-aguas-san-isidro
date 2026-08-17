@@ -13,6 +13,7 @@ import {
   actualizarDepartamentoExistente,
   crearNuevoDepartamento,
   obtenerDepartamento,
+  obtenerInventarioDepartamento,
   obtenerDepartamentos
 } from "./departamentos.service";
 import type {
@@ -33,6 +34,13 @@ export const obtenerDepartamentoController = asyncHandler(
     const departamento = await obtenerDepartamento(id);
 
     sendItem(res, departamento);
+  }
+);
+
+export const obtenerInventarioDepartamentoController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const id = parsePositiveInteger(req.params.id, "id");
+    sendItem(res, await obtenerInventarioDepartamento(id));
   }
 );
 

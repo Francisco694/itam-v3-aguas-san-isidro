@@ -2,6 +2,7 @@ import { pool } from "../../config/database";
 import type { PoolClient } from "pg";
 import { obtenerColaboradorPorId } from "../colaboradores/colaboradores.repository";
 import { obtenerDispositivoPorCodigo } from "../dispositivos/dispositivos.repository";
+import { generateInventoryCode } from "../inventory-codes/inventory-code.service";
 import { toIsoDate, toIsoDateTime } from "../../shared/dates";
 import {
   ConflictError,
@@ -266,7 +267,17 @@ export const crearNuevaSim = async (
       );
     }
 
-    const sim = await crearSim(input, estadoDisponible.id, client);
+    const codigoInventario = await generateInventoryCode(
+      "SIM",
+      null,
+      client
+    );
+    const sim = await crearSim(
+      input,
+      codigoInventario,
+      estadoDisponible.id,
+      client
+    );
 
     await insertarHistorialSim(
       sim.sim_id,
@@ -276,7 +287,7 @@ export const crearNuevaSim = async (
       input.responsable,
       input.observaciones,
       {
-        codigoInventario: input.codigoInventario,
+        codigoInventario,
         iccidCodigoFabrica: input.iccidCodigoFabrica
       },
       client

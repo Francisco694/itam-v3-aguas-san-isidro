@@ -1,16 +1,5 @@
-import { Component, input, output } from '@angular/core';
-
-@Component({
-  selector: 'app-header',
-  template: `
-    <button class="menu" type="button" aria-label="Abrir menú" (click)="menu.emit()">☰</button>
-    <div class="context"><span class="context__dot"></span><span>Plataforma operativa</span></div>
-    <div class="header-end"><span class="date">{{ today }}</span><div class="avatar">TI</div></div>
-  `,
-  styleUrl: './header.scss'
-})
-export class Header {
-  readonly open = input(false);
-  readonly menu = output<void>();
-  protected readonly today = new Intl.DateTimeFormat('es-CL', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date());
-}
+import { Component, output } from '@angular/core';
+import { RouterLink } from '@angular/router';
+import { LucideDroplet, LucideMenu, LucidePackage, LucideUserMinus } from '@lucide/angular';
+@Component({selector:'app-header',imports:[RouterLink,LucideDroplet,LucideMenu,LucidePackage,LucideUserMinus],template:`<header><div class="header-inner"><button class="menu" type="button" aria-label="Abrir menú" (click)="menu.emit()"><svg lucideMenu></svg></button><a class="brand" routerLink="/dashboard" aria-label="Inicio ITAM"><span class="brand__icon"><svg lucideDroplet></svg></span><span><strong>Aguas San Isidro</strong><small>SISTEMA ITAM v3.0</small></span></a><nav aria-label="Accesos rápidos"><a routerLink="/dispositivos"><svg lucidePackage></svg>Inventario</a><a routerLink="/offboarding"><svg lucideUserMinus></svg>Offboarding</a></nav><div class="avatar" title="Departamento de TI">TI</div></div></header>`,styleUrl:'./header.scss'})
+export class Header { readonly menu=output<void>(); }

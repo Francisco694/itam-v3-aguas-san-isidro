@@ -59,7 +59,6 @@ export interface SimResumen {
 }
 
 export interface CrearSimInput {
-  codigoInventario: number;
   iccidCodigoFabrica: string;
   numeroAsociado?: string | null;
   compania?: string | null;

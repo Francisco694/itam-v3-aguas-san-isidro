@@ -32,6 +32,8 @@ import type {
 } from "./dispositivos.types";
 
 const protectedPatchFields = [
+  "codigoInventario",
+  "codigo_inventario",
   "estadoId",
   "estado_id",
   "colaboradorId",
@@ -56,6 +58,46 @@ const assertNoProtectedPatchFields = (
   }
 };
 
+const parseOptionalSpecificAttributes = (
+  value: unknown
+): Record<string, string | number | null> | undefined => {
+  if (value === undefined) return undefined;
+  if (
+    value === null ||
+    typeof value !== "object" ||
+    Array.isArray(value)
+  ) {
+    throw new ValidationError("atributosEspecificos debe ser un objeto.");
+  }
+
+  const entries = Object.entries(value);
+  if (entries.length > 20) {
+    throw new ValidationError("atributosEspecificos admite hasta 20 campos.");
+  }
+
+  const parsed: Record<string, string | number | null> = {};
+  for (const [key, attribute] of entries) {
+    if (!/^[a-z][A-Za-z0-9]{0,49}$/.test(key)) {
+      throw new ValidationError(`La clave ${key} no es válida.`);
+    }
+    if (
+      attribute !== null &&
+      typeof attribute !== "string" &&
+      typeof attribute !== "number"
+    ) {
+      throw new ValidationError(`El atributo ${key} tiene un tipo no válido.`);
+    }
+    if (typeof attribute === "string" && attribute.length > 250) {
+      throw new ValidationError(`El atributo ${key} admite hasta 250 caracteres.`);
+    }
+    if (typeof attribute === "number" && !Number.isFinite(attribute)) {
+      throw new ValidationError(`El atributo ${key} debe ser un número finito.`);
+    }
+    parsed[key] = attribute;
+  }
+  return parsed;
+};
+
 export const listarDispositivosController = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
     const filters: DispositivoFilters = {
@@ -63,6 +105,16 @@ export const listarDispositivosController = asyncHandler(
       tipo:
         parseOptionalString(req.query.tipo, "tipo", 80) ??
         undefined,
+      tipoDispositivoId:
+        parseOptionalPositiveInteger(
+          req.query.tipoDispositivoId,
+          "tipoDispositivoId"
+        ) ?? undefined,
+      familiaCodigoInventarioId:
+        parseOptionalPositiveInteger(
+          req.query.familiaCodigoInventarioId,
+          "familiaCodigoInventarioId"
+        ) ?? undefined,
       estado:
         parseOptionalString(req.query.estado, "estado", 40)
           ?.toUpperCase() ?? undefined,
@@ -102,16 +154,16 @@ export const obtenerDispositivoController = asyncHandler(
 export const crearDispositivoController = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
     const body = parseBodyObject(req.body);
+    if (body.codigoInventario !== undefined || body.codigo_inventario !== undefined) {
+      throw new ValidationError(
+        "El código ITAM es generado automáticamente por el backend."
+      );
+    }
 
     const input: CrearDispositivoInput = {
-      codigoInventario: parsePositiveInteger(
-        body.codigoInventario,
-        "codigoInventario"
-      ),
-      tipoDispositivo: parseRequiredString(
-        body.tipoDispositivo,
-        "tipoDispositivo",
-        80
+      tipoDispositivoId: parsePositiveInteger(
+        body.tipoDispositivoId,
+        "tipoDispositivoId"
       ),
       marca: parseOptionalString(body.marca, "marca", 100),
       modelo: parseOptionalString(body.modelo, "modelo", 150),
@@ -134,6 +186,9 @@ export const crearDispositivoController = asyncHandler(
       observaciones: parseOptionalString(
         body.observaciones,
         "observaciones"
+      ),
+      atributosEspecificos: parseOptionalSpecificAttributes(
+        body.atributosEspecificos
       ),
       responsable: parseRequiredString(
         body.responsable,
@@ -155,25 +210,23 @@ export const actualizarDispositivoController = asyncHandler(
 
     assertNoProtectedPatchFields(body);
     requireAtLeastOneDefined(body, [
-      "tipoDispositivo",
+      "tipoDispositivoId",
       "marca",
       "modelo",
       "numeroSerie",
       "imei",
       "localidad",
       "ubicacionDetalle",
-      "observaciones"
+      "observaciones",
+      "atributosEspecificos"
     ]);
 
     const input: ActualizarDispositivoInput = {
-      tipoDispositivo:
-        body.tipoDispositivo === undefined
-          ? undefined
-          : parseRequiredString(
-              body.tipoDispositivo,
-              "tipoDispositivo",
-              80
-            ),
+      tipoDispositivoId:
+        parseOptionalPositiveInteger(
+          body.tipoDispositivoId,
+          "tipoDispositivoId"
+        ) ?? undefined,
       marca: parseOptionalString(body.marca, "marca", 100),
       modelo: parseOptionalString(body.modelo, "modelo", 150),
       numeroSerie: parseOptionalString(
@@ -195,6 +248,9 @@ export const actualizarDispositivoController = asyncHandler(
       observaciones: parseOptionalString(
         body.observaciones,
         "observaciones"
+      ),
+      atributosEspecificos: parseOptionalSpecificAttributes(
+        body.atributosEspecificos
       )
     };
 
@@ -243,10 +299,6 @@ export const asignarDepartamentoController = asyncHandler(
       departamentoId: parsePositiveInteger(
         body.departamentoId,
         "departamentoId"
-      ),
-      recibidoPorId: parsePositiveInteger(
-        body.recibidoPorId,
-        "recibidoPorId"
       ),
       localidad: parseOptionalString(
         body.localidad,

@@ -18,6 +18,19 @@ const dispositivoSelect = `
     d.id AS dispositivo_id,
     d.codigo_inventario AS dispositivo_codigo_inventario,
     d.tipo_dispositivo,
+    tipo.id AS tipo_dispositivo_id,
+    tipo.nombre AS tipo_dispositivo_nombre,
+    tipo.descripcion AS tipo_dispositivo_descripcion,
+    tipo.activo AS tipo_dispositivo_activo,
+    tipo.requiere_imei AS tipo_dispositivo_requiere_imei,
+    tipo.configuracion_formulario AS tipo_dispositivo_configuracion_formulario,
+    tipo_familia.id AS tipo_familia_id,
+    tipo_familia.nombre_familia AS tipo_familia_nombre,
+    tipo_familia.prefijo AS tipo_familia_prefijo,
+    tipo_familia.activo AS tipo_familia_activa,
+    tipo_familia.estrategia_codigo AS tipo_familia_estrategia,
+    tipo_familia.agrupa_tipos AS tipo_familia_agrupa_tipos,
+    tipo_familia.etiqueta_operativa AS tipo_familia_etiqueta_operativa,
     d.marca,
     d.modelo,
     d.numero_serie,
@@ -25,6 +38,7 @@ const dispositivoSelect = `
     d.localidad,
     d.ubicacion_detalle,
     d.observaciones,
+    d.atributos_especificos,
     d.fecha_registro,
     d.creado_en,
     d.actualizado_en,
@@ -36,6 +50,8 @@ const dispositivoSelect = `
     c.nombre AS colaborador_nombre,
     c.cargo AS colaborador_cargo,
     c.localidad AS colaborador_localidad,
+    colaborador_dep.id AS colaborador_departamento_id,
+    colaborador_dep.nombre AS colaborador_departamento_nombre,
     dep.id AS departamento_id,
     dep.nombre AS departamento_nombre,
     recibido.id AS recibido_por_id,
@@ -54,8 +70,14 @@ const dispositivoSelect = `
   FROM itam.dispositivos d
   INNER JOIN itam.estados e
     ON e.id = d.estado_id
+  INNER JOIN itam.tipos_dispositivo tipo
+    ON tipo.id = d.tipo_dispositivo_id
+  LEFT JOIN itam.familias_codigo_inventario tipo_familia
+    ON tipo_familia.id = tipo.familia_codigo_inventario_id
   LEFT JOIN itam.colaboradores c
     ON c.id = d.colaborador_id
+  LEFT JOIN itam.departamentos colaborador_dep
+    ON colaborador_dep.id = c.departamento_id
   LEFT JOIN itam.departamentos dep
     ON dep.id = d.departamento_id
   LEFT JOIN itam.colaboradores recibido
@@ -77,7 +99,7 @@ export const listarDispositivos = async (
     where.push(`
       (
         d.codigo_inventario::TEXT ILIKE $${values.length}
-        OR d.tipo_dispositivo ILIKE $${values.length}
+        OR tipo.nombre ILIKE $${values.length}
         OR d.marca ILIKE $${values.length}
         OR d.modelo ILIKE $${values.length}
         OR d.numero_serie ILIKE $${values.length}
@@ -88,7 +110,12 @@ export const listarDispositivos = async (
 
   if (filters.tipo !== undefined) {
     values.push(`%${filters.tipo}%`);
-    where.push(`d.tipo_dispositivo ILIKE $${values.length}`);
+    where.push(`tipo.nombre ILIKE $${values.length}`);
+  }
+
+  if (filters.tipoDispositivoId !== undefined) {
+    values.push(filters.tipoDispositivoId);
+    where.push(`d.tipo_dispositivo_id = $${values.length}`);
   }
 
   if (filters.estado !== undefined) {
@@ -104,6 +131,16 @@ export const listarDispositivos = async (
   if (filters.departamentoId !== undefined) {
     values.push(filters.departamentoId);
     where.push(`d.departamento_id = $${values.length}`);
+  }
+
+  if (filters.familiaCodigoInventarioId !== undefined) {
+    values.push(filters.familiaCodigoInventarioId);
+    where.push(`tipo.familia_codigo_inventario_id = $${values.length}`);
+  }
+
+  if (filters.departamentoColaboradorId !== undefined) {
+    values.push(filters.departamentoColaboradorId);
+    where.push(`c.departamento_id = $${values.length}`);
   }
 
   if (filters.localidad !== undefined) {
@@ -179,6 +216,7 @@ export const obtenerEstadoDispositivoPorId = async (
 
 export const crearDispositivo = async (
   input: CrearDispositivoInput,
+  codigoInventario: number,
   estadoId: string,
   client: PoolClient
 ): Promise<DispositivoRow> => {
@@ -186,7 +224,7 @@ export const crearDispositivo = async (
     `
       INSERT INTO itam.dispositivos (
         codigo_inventario,
-        tipo_dispositivo,
+        tipo_dispositivo_id,
         marca,
         modelo,
         numero_serie,
@@ -194,14 +232,15 @@ export const crearDispositivo = async (
         estado_id,
         localidad,
         ubicacion_detalle,
-        observaciones
+        observaciones,
+        atributos_especificos
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       RETURNING codigo_inventario
     `,
     [
-      input.codigoInventario,
-      input.tipoDispositivo,
+      codigoInventario,
+      input.tipoDispositivoId,
       input.marca ?? null,
       input.modelo ?? null,
       input.numeroSerie ?? null,
@@ -209,7 +248,8 @@ export const crearDispositivo = async (
       estadoId,
       input.localidad ?? null,
       input.ubicacionDetalle ?? null,
-      input.observaciones ?? null
+      input.observaciones ?? null,
+      JSON.stringify(input.atributosEspecificos ?? {})
     ]
   );
 
@@ -223,13 +263,15 @@ export const crearDispositivo = async (
 
 export const actualizarDispositivo = async (
   codigoInventario: number,
-  input: ActualizarDispositivoInput
+  input: ActualizarDispositivoInput,
+  client?: PoolClient
 ): Promise<DispositivoRow | null> => {
-  const result = await pool.query<{ codigo_inventario: number }>(
+  const executor = getDb(client);
+  const result = await executor.query<{ codigo_inventario: number }>(
     `
       UPDATE itam.dispositivos
       SET
-        tipo_dispositivo = COALESCE($2, tipo_dispositivo),
+        tipo_dispositivo_id = COALESCE($2, tipo_dispositivo_id),
         marca = CASE WHEN $3::boolean THEN $4 ELSE marca END,
         modelo = CASE WHEN $5::boolean THEN $6 ELSE modelo END,
         numero_serie = CASE
@@ -248,13 +290,17 @@ export const actualizarDispositivo = async (
         observaciones = CASE
           WHEN $15::boolean THEN $16
           ELSE observaciones
+        END,
+        atributos_especificos = CASE
+          WHEN $17::boolean THEN $18::jsonb
+          ELSE atributos_especificos
         END
       WHERE codigo_inventario = $1
       RETURNING codigo_inventario
     `,
     [
       codigoInventario,
-      input.tipoDispositivo ?? null,
+      input.tipoDispositivoId ?? null,
       input.marca !== undefined,
       input.marca ?? null,
       input.modelo !== undefined,
@@ -268,7 +314,9 @@ export const actualizarDispositivo = async (
       input.ubicacionDetalle !== undefined,
       input.ubicacionDetalle ?? null,
       input.observaciones !== undefined,
-      input.observaciones ?? null
+      input.observaciones ?? null,
+      input.atributosEspecificos !== undefined,
+      JSON.stringify(input.atributosEspecificos ?? {})
     ]
   );
 
@@ -277,7 +325,8 @@ export const actualizarDispositivo = async (
   }
 
   return obtenerDispositivoPorCodigo(
-    result.rows[0].codigo_inventario
+    result.rows[0].codigo_inventario,
+    client
   );
 };
 
@@ -314,7 +363,6 @@ export const asignarDispositivoAColaborador = async (
 export const asignarDispositivoADepartamento = async (
   codigoInventario: number,
   departamentoId: number,
-  recibidoPorId: number,
   estadoId: string,
   localidad: string | null | undefined,
   ubicacionDetalle: string | null | undefined,
@@ -326,14 +374,14 @@ export const asignarDispositivoADepartamento = async (
       SET
         colaborador_id = NULL,
         departamento_id = $2,
-        recibido_por_id = $3,
-        estado_id = $4,
+        recibido_por_id = NULL,
+        estado_id = $3,
         localidad = CASE
-          WHEN $5::boolean THEN $6
+          WHEN $4::boolean THEN $5
           ELSE localidad
         END,
         ubicacion_detalle = CASE
-          WHEN $7::boolean THEN $8
+          WHEN $6::boolean THEN $7
           ELSE ubicacion_detalle
         END
       WHERE codigo_inventario = $1
@@ -342,7 +390,6 @@ export const asignarDispositivoADepartamento = async (
     [
       codigoInventario,
       departamentoId,
-      recibidoPorId,
       estadoId,
       localidad !== undefined,
       localidad ?? null,

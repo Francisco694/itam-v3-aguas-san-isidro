@@ -1,10 +1,16 @@
 import { pool } from "../../config/database";
 import { obtenerColaboradorPorId } from "../colaboradores/colaboradores.repository";
 import { obtenerDepartamentoPorId } from "../departamentos/departamentos.repository";
+import { generateInventoryCodeByFamilyId } from "../inventory-codes/inventory-code.service";
+import {
+  resolverTipoActivo,
+  resolverTipoActivoParaAlta
+} from "../tipos-dispositivo/tipos-dispositivo.service";
 import { toIsoDate, toIsoDateTime } from "../../shared/dates";
 import {
   ConflictError,
   NotFoundError,
+  ValidationError,
   isDatabaseBusinessRuleViolation,
   isForeignKeyViolation,
   isUniqueViolation
@@ -40,6 +46,62 @@ import type {
   HistorialDispositivoRow,
   SimAsociadaResumen
 } from "./dispositivos.types";
+import type { ConfiguracionFormularioTipo } from "../tipos-dispositivo/tipos-dispositivo.types";
+
+export const normalizeSpecificAttributes = (
+  attributes: Record<string, string | number | null> | undefined,
+  configuration: ConfiguracionFormularioTipo
+): Record<string, string | number | null> => {
+  const provided = attributes ?? {};
+  const allowed = new Map(
+    configuration.camposEspecificos.map((field) => [field.clave, field])
+  );
+  const unknown = Object.keys(provided).find((key) => !allowed.has(key));
+  if (unknown) {
+    throw new ValidationError(
+      `El atributo ${unknown} no corresponde al tipo de activo seleccionado.`
+    );
+  }
+
+  const normalized: Record<string, string | number | null> = {};
+  for (const field of configuration.camposEspecificos) {
+    const value = provided[field.clave];
+    const empty = value === undefined || value === null || value === "";
+    if (field.requerido && empty) {
+      throw new ValidationError(`${field.etiqueta} es obligatorio.`);
+    }
+    if (empty) continue;
+
+    if (field.tipo === "number") {
+      if (typeof value !== "number" || !Number.isFinite(value)) {
+        throw new ValidationError(`${field.etiqueta} debe ser un número.`);
+      }
+      if (field.min !== undefined && value < field.min) {
+        throw new ValidationError(`${field.etiqueta} debe ser mayor o igual a ${field.min}.`);
+      }
+      if (field.max !== undefined && value > field.max) {
+        throw new ValidationError(`${field.etiqueta} debe ser menor o igual a ${field.max}.`);
+      }
+      normalized[field.clave] = value;
+      continue;
+    }
+
+    if (typeof value !== "string") {
+      throw new ValidationError(`${field.etiqueta} debe ser texto.`);
+    }
+    const clean = value.trim();
+    if (field.maxLength !== undefined && clean.length > field.maxLength) {
+      throw new ValidationError(
+        `${field.etiqueta} admite hasta ${field.maxLength} caracteres.`
+      );
+    }
+    if (field.tipo === "select" && !field.opciones?.includes(clean)) {
+      throw new ValidationError(`${field.etiqueta} no contiene una opción válida.`);
+    }
+    normalized[field.clave] = clean;
+  }
+  return normalized;
+};
 
 const mapEstado = (
   id: string,
@@ -56,7 +118,9 @@ const mapColaborador = (
   rut: string | null,
   nombre: string | null,
   cargo: string | null,
-  localidad: string | null
+  localidad: string | null,
+  departamentoId: string | null = null,
+  departamentoNombre: string | null = null
 ): ColaboradorResumen | null => {
   if (!id || !rut || !nombre) {
     return null;
@@ -67,7 +131,11 @@ const mapColaborador = (
     rut,
     nombre,
     cargo,
-    localidad
+    localidad,
+    departamento:
+      departamentoId && departamentoNombre
+        ? { id: departamentoId, nombre: departamentoNombre }
+        : null
   };
 };
 
@@ -118,6 +186,29 @@ const mapDispositivo = (
   id: row.dispositivo_id,
   codigoInventario: row.dispositivo_codigo_inventario,
   tipoDispositivo: row.tipo_dispositivo,
+  tipo: {
+    id: row.tipo_dispositivo_id,
+    nombre: row.tipo_dispositivo_nombre,
+    descripcion: row.tipo_dispositivo_descripcion,
+    activo: row.tipo_dispositivo_activo,
+    requiereImei: row.tipo_dispositivo_requiere_imei,
+    configuracionFormulario: row.tipo_dispositivo_configuracion_formulario,
+    familiaCodigoInventario:
+      row.tipo_familia_id &&
+      row.tipo_familia_nombre &&
+      row.tipo_familia_prefijo &&
+      row.tipo_familia_activa !== null
+        ? {
+            id: row.tipo_familia_id,
+            nombre: row.tipo_familia_nombre,
+            prefijo: row.tipo_familia_prefijo,
+            activo: row.tipo_familia_activa,
+            estrategiaCodigo: row.tipo_familia_estrategia!,
+            agrupaTipos: row.tipo_familia_agrupa_tipos ?? false,
+            etiquetaOperativa: row.tipo_familia_etiqueta_operativa
+          }
+        : null
+  },
   marca: row.marca,
   modelo: row.modelo,
   numeroSerie: row.numero_serie,
@@ -125,6 +216,7 @@ const mapDispositivo = (
   localidad: row.localidad,
   ubicacionDetalle: row.ubicacion_detalle,
   observaciones: row.observaciones,
+  atributosEspecificos: row.atributos_especificos,
   fechaRegistro: toIsoDate(row.fecha_registro),
   creadoEn: toIsoDateTime(row.creado_en),
   actualizadoEn: toIsoDateTime(row.actualizado_en),
@@ -138,7 +230,9 @@ const mapDispositivo = (
     row.colaborador_rut,
     row.colaborador_nombre,
     row.colaborador_cargo,
-    row.colaborador_localidad
+    row.colaborador_localidad,
+    row.colaborador_departamento_id,
+    row.colaborador_departamento_nombre
   ),
   departamento: mapDepartamento(
     row.departamento_id,
@@ -151,8 +245,35 @@ const mapDispositivo = (
     row.recibido_por_cargo,
     row.recibido_por_localidad
   ),
-  simAsociada: mapSimAsociada(row)
+  simAsociada: mapSimAsociada(row),
+  tipoCustodia: row.colaborador_id
+    ? "COLABORADOR"
+    : row.departamento_id
+      ? "DEPARTAMENTO"
+      : "NONE"
 });
+
+const custodySnapshot = (row: DispositivoRow) => {
+  if (row.colaborador_id) {
+    return {
+      tipo: "COLABORADOR",
+      id: row.colaborador_id,
+      nombre: row.colaborador_nombre,
+      rut: row.colaborador_rut,
+      departamento: row.colaborador_departamento_nombre
+    };
+  }
+
+  if (row.departamento_id) {
+    return {
+      tipo: "DEPARTAMENTO",
+      id: row.departamento_id,
+      nombre: row.departamento_nombre
+    };
+  }
+
+  return { tipo: "NONE" };
+};
 
 const mapHistorial = (
   row: HistorialDispositivoRow
@@ -265,8 +386,22 @@ export const crearNuevoDispositivo = async (
       );
     }
 
+    const tipo = await resolverTipoActivoParaAlta(
+      input.tipoDispositivoId,
+      client
+    );
+    const atributosEspecificos = normalizeSpecificAttributes(
+      input.atributosEspecificos,
+      tipo.configuracion_formulario
+    );
+    const codigoInventario = await generateInventoryCodeByFamilyId(
+      tipo.familia_codigo_inventario_id!,
+      "DISPOSITIVO",
+      client
+    );
     const dispositivo = await crearDispositivo(
-      input,
+      { ...input, atributosEspecificos },
+      codigoInventario,
       estadoDisponible.id,
       client
     );
@@ -279,8 +414,9 @@ export const crearNuevoDispositivo = async (
       input.responsable,
       input.observaciones,
       {
-        codigoInventario: input.codigoInventario,
-        tipoDispositivo: input.tipoDispositivo
+        codigoInventario,
+        tipoDispositivo: { id: tipo.id, nombre: tipo.nombre },
+        atributosEspecificos
       },
       client
     );
@@ -300,19 +436,74 @@ export const actualizarDispositivoExistente = async (
   codigoInventario: number,
   input: ActualizarDispositivoInput
 ): Promise<DispositivoResumen> => {
+  const client = await pool.connect();
   try {
+    await client.query("BEGIN");
+    const anterior = await obtenerDispositivoPorCodigo(codigoInventario, client);
+    if (!anterior) {
+      throw new NotFoundError("Dispositivo no encontrado.");
+    }
+
+    let nuevoTipo = null;
+    if (input.tipoDispositivoId !== undefined) {
+      nuevoTipo = await resolverTipoActivo(input.tipoDispositivoId, client);
+      const familiaAnterior = anterior.tipo_familia_id;
+      const familiaNueva = nuevoTipo.familia_codigo_inventario_id;
+      if (familiaAnterior !== familiaNueva) {
+        throw new ConflictError(
+          "No se puede cambiar el tipo porque alteraría la familia histórica del código ITAM."
+        );
+      }
+    }
+    if (input.atributosEspecificos !== undefined || nuevoTipo) {
+      input.atributosEspecificos = normalizeSpecificAttributes(
+        input.atributosEspecificos,
+        nuevoTipo?.configuracion_formulario ??
+          anterior.tipo_dispositivo_configuracion_formulario
+      );
+    }
     const dispositivo = await actualizarDispositivo(
       codigoInventario,
-      input
+      input,
+      client
     );
 
     if (!dispositivo) {
       throw new NotFoundError("Dispositivo no encontrado.");
     }
 
+    if (nuevoTipo && nuevoTipo.id !== anterior.tipo_dispositivo_id) {
+      await insertarHistorialDispositivo(
+        anterior.dispositivo_id,
+        "CAMBIAR_TIPO_DISPOSITIVO",
+        anterior.estado_id,
+        anterior.estado_id,
+        "Sistema ITAM",
+        null,
+        {
+          tipoAnterior: {
+            id: anterior.tipo_dispositivo_id,
+            nombre: anterior.tipo_dispositivo_nombre,
+            familiaCodigoInventarioId: anterior.tipo_familia_id
+          },
+          tipoNuevo: {
+            id: nuevoTipo.id,
+            nombre: nuevoTipo.nombre,
+            familiaCodigoInventarioId: nuevoTipo.familia_codigo_inventario_id
+          }
+        },
+        client
+      );
+    }
+
+    await client.query("COMMIT");
+
     return mapDispositivo(dispositivo);
   } catch (error) {
+    await client.query("ROLLBACK");
     return normalizarErrorDispositivo(error);
+  } finally {
+    client.release();
   }
 };
 
@@ -362,7 +553,8 @@ export const asignarAColaborador = async (
       input.responsable,
       input.observaciones,
       {
-        colaboradorId: input.colaboradorId
+        custodiaAnterior: custodySnapshot(anterior),
+        custodiaNueva: custodySnapshot(actualizado)
       },
       client
     );
@@ -390,14 +582,6 @@ export const asignarADepartamento = async (
     throw new NotFoundError("Departamento no encontrado.");
   }
 
-  const recibidoPor = await obtenerColaboradorPorId(
-    input.recibidoPorId
-  );
-
-  if (!recibidoPor) {
-    throw new NotFoundError("Colaborador receptor no encontrado.");
-  }
-
   const estadoAsignado = await obtenerEstadoObligatorio("ASIGNADO");
   const client = await pool.connect();
 
@@ -416,7 +600,6 @@ export const asignarADepartamento = async (
     const actualizado = await asignarDispositivoADepartamento(
       codigoInventario,
       input.departamentoId,
-      input.recibidoPorId,
       estadoAsignado.id,
       input.localidad,
       input.ubicacionDetalle,
@@ -435,8 +618,8 @@ export const asignarADepartamento = async (
       input.responsable,
       input.observaciones,
       {
-        departamentoId: input.departamentoId,
-        recibidoPorId: input.recibidoPorId
+        custodiaAnterior: custodySnapshot(anterior),
+        custodiaNueva: custodySnapshot(actualizado)
       },
       client
     );
@@ -490,7 +673,10 @@ export const devolverDispositivoExistente = async (
       estadoRetenido.id,
       input.responsable,
       input.observaciones,
-      {},
+      {
+        custodiaAnterior: custodySnapshot(anterior),
+        custodiaNueva: custodySnapshot(actualizado)
+      },
       client
     );
 

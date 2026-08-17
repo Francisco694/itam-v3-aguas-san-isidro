@@ -10,6 +10,7 @@ export interface ColaboradorResumen {
   nombre: string;
   cargo: string | null;
   localidad: string | null;
+  departamento: DepartamentoResumen | null;
 }
 
 export interface DepartamentoResumen {
@@ -26,10 +27,29 @@ export interface SimAsociadaResumen {
   estado: EstadoResumen | null;
 }
 
+export interface TipoDispositivoResumen {
+  id: string;
+  nombre: string;
+  descripcion: string | null;
+  activo: boolean;
+  requiereImei: boolean;
+  configuracionFormulario: import("../tipos-dispositivo/tipos-dispositivo.types").ConfiguracionFormularioTipo;
+  familiaCodigoInventario: {
+    id: string;
+    nombre: string;
+    prefijo: string;
+    activo: boolean;
+    estrategiaCodigo: "REPEAT_PREFIX";
+    agrupaTipos: boolean;
+    etiquetaOperativa: string | null;
+  } | null;
+}
+
 export interface DispositivoResumen {
   id: string;
   codigoInventario: number;
   tipoDispositivo: string;
+  tipo: TipoDispositivoResumen;
   marca: string | null;
   modelo: string | null;
   numeroSerie: string | null;
@@ -37,6 +57,7 @@ export interface DispositivoResumen {
   localidad: string | null;
   ubicacionDetalle: string | null;
   observaciones: string | null;
+  atributosEspecificos: Record<string, string | number | null>;
   fechaRegistro: string;
   creadoEn: string;
   actualizadoEn: string;
@@ -45,12 +66,26 @@ export interface DispositivoResumen {
   departamento: DepartamentoResumen | null;
   recibidoPor: ColaboradorResumen | null;
   simAsociada: SimAsociadaResumen | null;
+  tipoCustodia: "NONE" | "COLABORADOR" | "DEPARTAMENTO";
 }
 
 export interface DispositivoRow {
   dispositivo_id: string;
   dispositivo_codigo_inventario: number;
   tipo_dispositivo: string;
+  tipo_dispositivo_id: string;
+  tipo_dispositivo_nombre: string;
+  tipo_dispositivo_descripcion: string | null;
+  tipo_dispositivo_activo: boolean;
+  tipo_dispositivo_requiere_imei: boolean;
+  tipo_dispositivo_configuracion_formulario: import("../tipos-dispositivo/tipos-dispositivo.types").ConfiguracionFormularioTipo;
+  tipo_familia_id: string | null;
+  tipo_familia_nombre: string | null;
+  tipo_familia_prefijo: string | null;
+  tipo_familia_activa: boolean | null;
+  tipo_familia_estrategia: "REPEAT_PREFIX" | null;
+  tipo_familia_agrupa_tipos: boolean | null;
+  tipo_familia_etiqueta_operativa: string | null;
   marca: string | null;
   modelo: string | null;
   numero_serie: string | null;
@@ -58,6 +93,7 @@ export interface DispositivoRow {
   localidad: string | null;
   ubicacion_detalle: string | null;
   observaciones: string | null;
+  atributos_especificos: Record<string, string | number | null>;
   fecha_registro: Date | string;
   creado_en: Date | string;
   actualizado_en: Date | string;
@@ -69,6 +105,8 @@ export interface DispositivoRow {
   colaborador_nombre: string | null;
   colaborador_cargo: string | null;
   colaborador_localidad: string | null;
+  colaborador_departamento_id: string | null;
+  colaborador_departamento_nombre: string | null;
   departamento_id: string | null;
   departamento_nombre: string | null;
   recibido_por_id: string | null;
@@ -89,15 +127,17 @@ export interface DispositivoRow {
 export interface DispositivoFilters {
   q?: string;
   tipo?: string;
+  tipoDispositivoId?: number;
+  familiaCodigoInventarioId?: number;
   estado?: string;
   colaboradorId?: number;
   departamentoId?: number;
+  departamentoColaboradorId?: number;
   localidad?: string;
 }
 
 export interface CrearDispositivoInput {
-  codigoInventario: number;
-  tipoDispositivo: string;
+  tipoDispositivoId: number;
   marca?: string | null;
   modelo?: string | null;
   numeroSerie?: string | null;
@@ -105,11 +145,12 @@ export interface CrearDispositivoInput {
   localidad?: string | null;
   ubicacionDetalle?: string | null;
   observaciones?: string | null;
+  atributosEspecificos?: Record<string, string | number | null>;
   responsable: string;
 }
 
 export interface ActualizarDispositivoInput {
-  tipoDispositivo?: string;
+  tipoDispositivoId?: number;
   marca?: string | null;
   modelo?: string | null;
   numeroSerie?: string | null;
@@ -117,6 +158,7 @@ export interface ActualizarDispositivoInput {
   localidad?: string | null;
   ubicacionDetalle?: string | null;
   observaciones?: string | null;
+  atributosEspecificos?: Record<string, string | number | null>;
 }
 
 export interface AsignarColaboradorInput {
@@ -127,7 +169,6 @@ export interface AsignarColaboradorInput {
 
 export interface AsignarDepartamentoInput {
   departamentoId: number;
-  recibidoPorId: number;
   localidad?: string | null;
   ubicacionDetalle?: string | null;
   responsable: string;

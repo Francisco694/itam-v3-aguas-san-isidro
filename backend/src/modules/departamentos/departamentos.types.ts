@@ -27,3 +27,14 @@ export interface ActualizarDepartamentoInput {
   activo?: boolean;
   observaciones?: string | null;
 }
+
+export interface InventarioDepartamento {
+  departamento: Departamento;
+  resumen: {
+    custodiaDirecta: number;
+    conColaboradores: number;
+    totalRelacionado: number;
+  };
+  custodiaDirecta: import("../dispositivos/dispositivos.types").DispositivoResumen[];
+  activosColaboradores: import("../dispositivos/dispositivos.types").DispositivoResumen[];
+}

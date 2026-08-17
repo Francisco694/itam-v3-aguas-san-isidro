@@ -15,8 +15,10 @@ import type {
   ActualizarDepartamentoInput,
   CrearDepartamentoInput,
   Departamento,
-  DepartamentoRow
+  DepartamentoRow,
+  InventarioDepartamento
 } from "./departamentos.types";
+import { obtenerDispositivos } from "../dispositivos/dispositivos.service";
 
 const mapDepartamento = (
   row: DepartamentoRow
@@ -60,6 +62,28 @@ export const obtenerDepartamento = async (
   }
 
   return mapDepartamento(row);
+};
+
+export const obtenerInventarioDepartamento = async (
+  id: number
+): Promise<InventarioDepartamento> => {
+  const departamento = await obtenerDepartamento(id);
+  const [custodiaDirecta, activosColaboradores] = await Promise.all([
+    obtenerDispositivos({ departamentoId: id }),
+    obtenerDispositivos({ departamentoColaboradorId: id })
+  ]);
+
+  return {
+    departamento,
+    resumen: {
+      custodiaDirecta: custodiaDirecta.length,
+      conColaboradores: activosColaboradores.length,
+      totalRelacionado:
+        custodiaDirecta.length + activosColaboradores.length
+    },
+    custodiaDirecta,
+    activosColaboradores
+  };
 };
 
 export const crearNuevoDepartamento = async (

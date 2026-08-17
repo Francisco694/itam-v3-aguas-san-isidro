@@ -32,7 +32,7 @@ const simSelect = `
     c.cargo AS colaborador_cargo,
     d.id AS dispositivo_id,
     d.codigo_inventario AS dispositivo_codigo_inventario,
-    d.tipo_dispositivo,
+    dispositivo_tipo.nombre AS tipo_dispositivo,
     d.marca AS dispositivo_marca,
     d.modelo AS dispositivo_modelo,
     de.id AS dispositivo_estado_id,
@@ -45,6 +45,8 @@ const simSelect = `
     ON c.id = s.colaborador_id
   LEFT JOIN itam.dispositivos d
     ON d.id = s.dispositivo_id
+  LEFT JOIN itam.tipos_dispositivo dispositivo_tipo
+    ON dispositivo_tipo.id = d.tipo_dispositivo_id
   LEFT JOIN itam.estados de
     ON de.id = d.estado_id
 `;
@@ -132,6 +134,7 @@ export const obtenerEstadoSimPorId = async (
 
 export const crearSim = async (
   input: CrearSimInput,
+  codigoInventario: number,
   estadoId: string,
   client: PoolClient
 ): Promise<SimRow> => {
@@ -149,7 +152,7 @@ export const crearSim = async (
       RETURNING codigo_inventario
     `,
     [
-      input.codigoInventario,
+      codigoInventario,
       input.iccidCodigoFabrica,
       input.numeroAsociado ?? null,
       input.compania ?? null,

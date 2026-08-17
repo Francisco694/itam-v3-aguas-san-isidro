@@ -128,6 +128,78 @@ Errores:
 
 - 400 si `tipoEntidad` no es valido.
 
+## Familias de código ITAM
+
+### GET /familias-codigo
+
+Lista la configuración administrativa de familias. Admite `activo=true|false` y `tipoEntidad=DISPOSITIVO|SIM`. Cada elemento expone nombre, prefijo, estrategia, versión, último ordinal, próximo código estimado, tipos asociados y `tieneCodigosEmitidos`. `agrupaTipos` y `etiquetaOperativa` permiten que Angular represente varios tipos concretos bajo una opción operacional, sin exponer el prefijo ni crear un tipo genérico.
+
+### GET /familias-codigo/prefijo-sugerido
+
+Sugiere el primer prefijo libre entre `1` y `9`. La sugerencia nunca crea una familia ni reemplaza la confirmación del administrador. Si no quedan prefijos simples, indica que debe definirse una nueva estrategia/versionado.
+
+### GET /familias-codigo/:id
+
+Obtiene una familia o responde 404.
+
+### POST /familias-codigo
+
+```json
+{
+  "nombreFamilia": "Audio",
+  "prefijo": "7",
+  "estrategiaCodigo": "REPEAT_PREFIX",
+  "activo": true
+}
+```
+
+### PATCH /familias-codigo/:id
+
+Permite editar nombre, prefijo, estrategia y estado. No existe `DELETE`: se utiliza desactivación lógica. Nombre y prefijo son únicos; `REPEAT_PREFIX` admite solamente un dígito de `1` a `9`. El prefijo no puede cambiar si la familia ya emitió códigos.
+
+La numeración confirmada es:
+
+- Smartphone: `1001` … `1999`, luego `11001` … `11999`;
+- SIM: `2001` … `2999`, luego `22001` … `22999`.
+- Notebook: prefijo `3`;
+- Monitor: prefijo `4`;
+- PC: prefijo `5`;
+- Periféricos: prefijo `6`, sin crear un tipo periférico genérico.
+
+Los prefijos `7`, `8` y `9` no se crean automáticamente. Los demás tipos se crean desde el catálogo y deben asociarse explícitamente a una familia activa; la API no deduce familias por el nombre.
+
+## Tipos de dispositivo
+
+`tipos_dispositivo` describe qué es el activo. La familia de código describe cómo se numera. Son conceptos diferentes y la familia es opcional en el catálogo.
+
+### GET /tipos-dispositivo
+
+Lista el catálogo con la familia relacionada y `configuracionFormulario`, que define los campos técnicos visibles y los atributos específicos permitidos para el alta. Query param opcional:
+
+- `activo`: `true` o `false`.
+
+### GET /tipos-dispositivo/:id
+
+Devuelve un tipo. Responde 404 si no existe.
+
+### POST /tipos-dispositivo
+
+```json
+{
+  "nombre": "Smartphone",
+  "descripcion": "Teléfono inteligente corporativo",
+  "familiaCodigoInventarioId": 1,
+  "requiereImei": true,
+  "activo": true
+}
+```
+
+### PATCH /tipos-dispositivo/:id
+
+Permite editar nombre, descripción, familia, `requiereImei` y estado activo. `familiaCodigoInventarioId` acepta `null`. No existe `DELETE`; los tipos referenciados se conservan para trazabilidad. Una vez que el tipo posee dispositivos, no puede trasladarse a otra familia.
+
+Los nombres son únicos sin distinguir mayúsculas. Una familia asociada debe pertenecer a `DISPOSITIVO`; la familia de SIM no se puede asociar a este catálogo. La configuración dinámica es administrada mediante migraciones en esta etapa; los endpoints de catálogo no aceptan modificaciones arbitrarias de `configuracionFormulario`.
+
 ## Departamentos
 
 ### GET /departamentos
@@ -161,6 +233,16 @@ Errores:
 
 - 400 si `id` no es entero positivo.
 - 404 si no existe.
+
+### GET /departamentos/:id/inventario
+
+Devuelve el detalle operacional en una única consulta API, separando:
+
+- `custodiaDirecta`: dispositivos cuyo custodio directo es el departamento;
+- `activosColaboradores`: dispositivos cuyo custodio directo es un colaborador perteneciente al departamento;
+- `resumen`: cantidades de ambas categorías y total relacionado.
+
+Los activos de colaboradores no se consideran custodia directa del departamento.
 
 ### POST /departamentos
 
@@ -306,6 +388,8 @@ Query params opcionales:
 
 - `q`
 - `tipo`
+- `tipoDispositivoId` (preferido; FK del catálogo)
+- `familiaCodigoInventarioId`
 - `estado`
 - `colaboradorId`
 - `departamentoId`
@@ -322,10 +406,18 @@ Respuesta 200:
       "id": "1",
       "codigoInventario": 3001,
       "tipoDispositivo": "Notebook",
+      "tipo": {
+        "id": "2",
+        "nombre": "Notebook",
+        "descripcion": null,
+        "activo": true,
+        "familiaCodigoInventario": null
+      },
       "marca": "Lenovo",
       "modelo": "ThinkPad",
       "numeroSerie": "ABC123",
       "imei": null,
+      "atributosEspecificos": {},
       "localidad": "San Isidro",
       "ubicacionDetalle": "Oficina TI",
       "observaciones": null,
@@ -357,18 +449,18 @@ Errores:
 
 ### POST /dispositivos
 
-Crea dispositivo sin custodia, con estado `DISPONIBLE`, y registra `ALTA_DISPOSITIVO` en la misma transaccion.
+Crea dispositivo sin custodia, con estado `DISPONIBLE`, genera el código ITAM en el backend y registra `ALTA_DISPOSITIVO` en la misma transacción.
 
 Body:
 
 ```json
 {
-  "codigoInventario": 3001,
-  "tipoDispositivo": "Notebook",
+  "tipoDispositivoId": 1,
   "marca": "Lenovo",
   "modelo": "ThinkPad",
   "numeroSerie": "ABC123",
   "imei": null,
+  "atributosEspecificos": {},
   "localidad": "San Isidro",
   "ubicacionDetalle": "Oficina TI",
   "observaciones": null,
@@ -378,17 +470,23 @@ Body:
 
 Errores:
 
-- 400 si faltan `codigoInventario`, `tipoDispositivo` o `responsable`.
-- 409 si codigo, serie o IMEI ya existen, o si el codigo global ya lo usa una SIM.
+- 400 si faltan `tipoDispositivoId` o `responsable`, el tipo está inactivo, no tiene una familia de código activa o `atributosEspecificos` no cumple la configuración del tipo.
+- 404 si `tipoDispositivoId` no existe.
+- 409 si serie o IMEI ya existen.
+
+El código es globalmente único entre dispositivos y SIM. El backend obtiene la familia desde `tipos_dispositivo.familia_codigo_inventario_id`; Angular nunca selecciona prefijos. La reserva usa bloqueo de fila transaccional y no utiliza `MAX + 1`.
+
+`atributosEspecificos` es un objeto JSON plano y extensible. Solo acepta las claves declaradas por `configuracionFormulario.camposEspecificos`; el backend valida obligatoriedad, tipo, longitud, rango y opciones permitidas. Por ejemplo, Cable exige `tipoCable`, mientras que Teclado puede guardar `partNumber`.
 
 ### PATCH /dispositivos/:codigo
 
-No permite modificar directamente estado/custodia.
+No permite modificar directamente código, estado o custodia. `codigoInventario` es inmutable tanto en la API como en PostgreSQL.
 
 Body, al menos un campo:
 
 ```json
 {
+  "tipoDispositivoId": 1,
   "marca": "Dell",
   "modelo": "Latitude",
   "ubicacionDetalle": "Bodega TI"
@@ -397,7 +495,7 @@ Body, al menos un campo:
 
 Errores:
 
-- 400 si incluye `estadoId`, `colaboradorId`, `departamentoId` o `recibidoPorId`.
+- 400 si incluye `codigoInventario`, `estadoId`, `colaboradorId`, `departamentoId` o `recibidoPorId`.
 - 404 si no existe.
 - 409 por identificadores duplicados.
 
@@ -427,7 +525,6 @@ Body:
 ```json
 {
   "departamentoId": 1,
-  "recibidoPorId": 2,
   "localidad": "San Isidro",
   "ubicacionDetalle": "Sala de control",
   "responsable": "TI",
@@ -435,12 +532,12 @@ Body:
 }
 ```
 
-Registra `ASIGNAR_DEPARTAMENTO`.
+Registra `ASIGNAR_DEPARTAMENTO`. La custodia es directa del departamento; no se requiere ni se almacena un receptor personal nuevo.
 
 Errores:
 
 - 400 si faltan campos obligatorios.
-- 404 si dispositivo, departamento o receptor no existen.
+- 404 si dispositivo o departamento no existen.
 
 ### POST /dispositivos/:codigo/devolver
 
@@ -547,13 +644,12 @@ Errores:
 
 ### POST /sim
 
-Crea SIM con estado `DISPONIBLE` y registra `ALTA_SIM`.
+Crea SIM con estado `DISPONIBLE`, genera el código ITAM de familia `2` y registra `ALTA_SIM`.
 
 Body:
 
 ```json
 {
-  "codigoInventario": 2001,
   "iccidCodigoFabrica": "8956032255756673254",
   "numeroAsociado": "+56911111111",
   "compania": "Compania",
@@ -564,12 +660,12 @@ Body:
 
 Errores:
 
-- 400 si faltan `codigoInventario`, `iccidCodigoFabrica` o `responsable`.
-- 409 si codigo o ICCID ya existen, o si el codigo global ya lo usa un dispositivo.
+- 400 si faltan `iccidCodigoFabrica` o `responsable`.
+- 409 si el ICCID ya existe.
 
 ### PATCH /sim/:codigo
 
-No permite modificar directamente estado, colaborador o dispositivo.
+No permite modificar directamente código, estado, colaborador o dispositivo.
 
 Body, al menos un campo:
 

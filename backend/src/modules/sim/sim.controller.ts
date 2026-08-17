@@ -31,6 +31,8 @@ import type {
 } from "./sim.types";
 
 const protectedPatchFields = [
+  "codigoInventario",
+  "codigo_inventario",
   "estadoId",
   "estado_id",
   "colaboradorId",
@@ -88,12 +90,13 @@ export const obtenerSimController = asyncHandler(
 export const crearSimController = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
     const body = parseBodyObject(req.body);
+    if (body.codigoInventario !== undefined || body.codigo_inventario !== undefined) {
+      throw new ValidationError(
+        "El código ITAM es generado automáticamente por el backend."
+      );
+    }
 
     const input: CrearSimInput = {
-      codigoInventario: parsePositiveInteger(
-        body.codigoInventario,
-        "codigoInventario"
-      ),
       iccidCodigoFabrica: parseRequiredString(
         body.iccidCodigoFabrica,
         "iccidCodigoFabrica",
