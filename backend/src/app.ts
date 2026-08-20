@@ -14,6 +14,8 @@ import dispositivosRoutes from "./modules/dispositivos/dispositivos.routes";
 import simRoutes from "./modules/sim/sim.routes";
 import inventoryCodeRoutes from "./modules/inventory-codes/inventory-code.routes";
 import tiposDispositivoRoutes from "./modules/tipos-dispositivo/tipos-dispositivo.routes";
+import servicioTecnicoRoutes from "./modules/servicio-tecnico/servicio-tecnico.routes";
+import actasEntregaRoutes from "./modules/actas-entrega/actas-entrega.routes";
 
 const app = express();
 
@@ -37,6 +39,8 @@ app.use("/api/v1/dispositivos", dispositivosRoutes);
 app.use("/api/v1/sim", simRoutes);
 app.use("/api/v1/familias-codigo", inventoryCodeRoutes);
 app.use("/api/v1/tipos-dispositivo", tiposDispositivoRoutes);
+app.use("/api/v1/servicio-tecnico", servicioTecnicoRoutes);
+app.use("/api/v1/actas-entrega", actasEntregaRoutes);
 
 
 // ============================================================

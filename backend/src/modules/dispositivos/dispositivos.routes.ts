@@ -6,14 +6,18 @@ import {
   cambiarEstadoDispositivoController,
   crearDispositivoController,
   devolverDispositivoController,
+  darBajaDispositivoController,
   historialDispositivoController,
   listarDispositivosController,
-  obtenerDispositivoController
+  obtenerDispositivoController,
+  resumenGerencialController,
+  resultadoOffboardingController
 } from "./dispositivos.controller";
 
 const router = Router();
 
 router.get("/", listarDispositivosController);
+router.get("/resumen-gerencial", resumenGerencialController);
 router.get("/:codigo/historial", historialDispositivoController);
 router.get("/:codigo", obtenerDispositivoController);
 router.post("/", crearDispositivoController);
@@ -27,6 +31,8 @@ router.post(
   asignarDepartamentoController
 );
 router.post("/:codigo/devolver", devolverDispositivoController);
+router.post("/:codigo/resultado-offboarding", resultadoOffboardingController);
+router.post("/:codigo/dar-baja", darBajaDispositivoController);
 router.post(
   "/:codigo/cambiar-estado",
   cambiarEstadoDispositivoController

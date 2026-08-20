@@ -16,6 +16,8 @@ export const routes: Routes = [
       { path: 'tipos-dispositivo', loadComponent: () => import('./features/tipos-dispositivo/tipos-dispositivo-list').then((m) => m.TiposDispositivoList) },
       { path: 'familias-codigo', loadComponent: () => import('./features/familias-codigo/familias-codigo-list').then((m) => m.FamiliasCodigoList) },
       { path: 'offboarding', loadComponent: () => import('./features/offboarding/offboarding').then((m) => m.Offboarding) },
+      { path: 'servicio-tecnico', loadComponent: () => import('./features/servicio-tecnico/servicio-tecnico').then((m) => m.ServicioTecnico) },
+      { path: 'actas', loadComponent: () => import('./features/actas/actas').then((m) => m.Actas) },
       { path: '**', loadComponent: () => import('./features/not-found/not-found').then((m) => m.NotFound) }
     ]
   }

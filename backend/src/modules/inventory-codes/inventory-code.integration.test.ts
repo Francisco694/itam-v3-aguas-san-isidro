@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test, { after } from "node:test";
 import { pool } from "../../config/database";
 import { generateInventoryCode } from "./inventory-code.service";
+import { formatInventoryCode } from "./inventory-code";
 
 after(async () => { await pool.end(); });
 
@@ -30,10 +31,18 @@ test("el generador salta un código legacy existente", async () => {
   try {
     await client.query("BEGIN");
     const state = await client.query<{ id: string }>(`SELECT id FROM itam.estados WHERE tipo_entidad='DISPOSITIVO' AND codigo='DISPONIBLE' LIMIT 1`);
-    const tipo = await client.query<{ id: string }>(`SELECT id FROM itam.tipos_dispositivo WHERE LOWER(nombre)='smartphone' LIMIT 1`);
-    await client.query(`INSERT INTO itam.dispositivos(codigo_inventario,tipo_dispositivo_id,estado_id) VALUES(1001,$1,$2)`, [tipo.rows[0]!.id, state.rows[0]!.id]);
+    const tipo = await client.query<{ id: string; prefijo: string; ultimo_ordinal: number }>(`
+      SELECT tipo.id,familia.prefijo,familia.ultimo_ordinal
+      FROM itam.tipos_dispositivo tipo
+      JOIN itam.familias_codigo_inventario familia
+        ON familia.id=tipo.familia_codigo_inventario_id
+      WHERE LOWER(tipo.nombre)='smartphone' LIMIT 1
+    `);
+    const occupiedCode = formatInventoryCode(tipo.rows[0]!.prefijo, tipo.rows[0]!.ultimo_ordinal + 1);
+    const expectedCode = formatInventoryCode(tipo.rows[0]!.prefijo, tipo.rows[0]!.ultimo_ordinal + 2);
+    await client.query(`INSERT INTO itam.dispositivos(codigo_inventario,tipo_dispositivo_id,estado_id) VALUES($1,$2,$3)`, [occupiedCode, tipo.rows[0]!.id, state.rows[0]!.id]);
     const code = await generateInventoryCode("DISPOSITIVO", "SMARTPHONE", client);
-    assert.equal(code, 1002);
+    assert.equal(code, expectedCode);
   } finally {
     await client.query("ROLLBACK");
     client.release();

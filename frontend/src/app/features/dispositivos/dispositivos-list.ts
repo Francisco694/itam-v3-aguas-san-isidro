@@ -1,6 +1,6 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { LucideCamera, LucidePlus, LucideScanBarcode, LucideSearch, LucideSlidersHorizontal } from '@lucide/angular';
 import { Departamento, Dispositivo, Estado, TipoDispositivo } from '../../core/models/itam.models';
 import { DepartamentosService } from '../../core/services/departamentos.service';
@@ -13,6 +13,17 @@ import { StatusBadge } from '../../shared/components/status-badge/status-badge';
 import { ViewState } from '../../shared/components/view-state/view-state';
 import { errorMessage } from '../../shared/utils/error-message';
 
+export const quickSearchMode = (query: string): 'DEVICE_CODE' | 'FILTER' | 'EMPTY' => {
+  const normalized = query.trim();
+  if (!normalized) return 'EMPTY';
+  return /^\d+$/.test(normalized) ? 'DEVICE_CODE' : 'FILTER';
+};
+
+export const inventoryStateCount = (
+  items: readonly Pick<Dispositivo, 'estado'>[],
+  code: string
+): number => code ? items.filter((item) => item.estado.codigo === code).length : items.length;
+
 @Component({
   selector: 'app-dispositivos-list',
   imports: [FormsModule, RouterLink, PageHeader, StatusBadge, ViewState, LucideCamera, LucidePlus, LucideScanBarcode, LucideSearch, LucideSlidersHorizontal],
@@ -24,11 +35,14 @@ import { errorMessage } from '../../shared/utils/error-message';
       <div class="scan-card__icon"><svg lucideScanBarcode></svg></div>
       <form class="scan-card__form" (ngSubmit)="quickSearch()">
         <label id="scan-title" for="asset-search">Escanear con Pistola USB o Digitar Código</label>
-        <div class="scan-input"><svg lucideSearch aria-hidden="true"></svg><input id="asset-search" name="assetSearch" [(ngModel)]="quickQuery" autocomplete="off" inputmode="search" placeholder="Código de inventario, serie, marca o modelo..." /><button class="btn btn--primary" type="submit" [disabled]="quickLoading()">{{ quickLoading() ? 'Buscando…' : 'Buscar' }}</button></div>
+        <div class="scan-input"><svg lucideSearch aria-hidden="true"></svg><input id="asset-search" name="assetSearch" [(ngModel)]="quickQuery" (keydown.enter)="$event.preventDefault(); quickSearch()" autocomplete="off" inputmode="search" placeholder="Código de inventario, serie, marca o modelo..." /><button class="btn btn--primary" type="submit" [disabled]="quickLoading()">{{ quickLoading() ? 'Buscando…' : 'Buscar' }}</button></div>
         <p>Los lectores USB funcionan como teclado: escanee el activo y presione Enter.</p>
       </form>
       <button class="camera-button" type="button" disabled title="Lectura mediante cámara pendiente de implementación real"><svg lucideCamera></svg><span>Cámara<small>Próximamente</small></span></button>
     </section>
+    <nav class="state-shortcuts" aria-label="Filtros rápidos por estado">
+      @for(shortcut of shortcuts;track shortcut.code){<button type="button" [class.active]="filters.estado===shortcut.code" (click)="selectState(shortcut.code)"><span>{{shortcut.label}}</span><strong>{{stateCount(shortcut.code)}}</strong></button>}
+    </nav>
     <section class="card inventory-card">
       <form class="filter-panel" (ngSubmit)="load()">
         <div class="filter-panel__title"><svg lucideSlidersHorizontal></svg><strong>Filtros del inventario</strong></div>
@@ -41,7 +55,7 @@ import { errorMessage } from '../../shared/utils/error-message';
       </form>
       @if (loading()) { <app-view-state kind="loading" title="Cargando dispositivos" message="Consultando el inventario real…" /> }
       @else if (error()) { <app-view-state kind="error" title="No se pudo cargar" [message]="error()" (retry)="load()" /> }
-      @else if (!items().length) { <div class="empty-with-action"><app-view-state kind="empty" title="No hay dispositivos registrados" message="No existen activos que coincidan con los filtros aplicados." /><a class="btn btn--primary" routerLink="nuevo"><svg lucidePlus></svg> Registrar dispositivo</a></div> }
+      @else if (!items().length) { <div class="empty-with-action"><app-view-state kind="empty" [title]="emptyTitle()" [message]="emptyMessage()" />@if(!allItems().length){<a class="btn btn--primary" routerLink="nuevo"><svg lucidePlus></svg> Registrar dispositivo</a>}</div> }
       @else {
         <div class="table-heading"><div><strong>{{ items().length }}</strong><span>{{ items().length === 1 ? 'activo encontrado' : 'activos encontrados' }}</span></div></div>
         <div class="table-wrap"><table class="data-table inventory-table"><thead><tr><th>ID / Código</th><th>Equipo</th><th>Estado</th><th>Responsable</th><th>Ubicación</th><th><span class="sr-only">Acciones</span></th></tr></thead><tbody>
@@ -57,12 +71,15 @@ export class DispositivosList implements OnInit {
   private readonly estados = inject(EstadosService);
   private readonly deptService = inject(DepartamentosService);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
   private readonly toast = inject(ToastService);
   private readonly typeService = inject(TiposDispositivoService);
   protected readonly items = signal<Dispositivo[]>([]);
   protected readonly states = signal<Estado[]>([]);
   protected readonly departments = signal<Departamento[]>([]);
   protected readonly types = signal<TipoDispositivo[]>([]);
+  protected readonly allItems = signal<Dispositivo[]>([]);
+  protected readonly shortcuts=[{code:'',label:'Todos'},{code:'DISPONIBLE',label:'Disponibles'},{code:'ASIGNADO',label:'Asignados'},{code:'SERVICIO_TECNICO',label:'Servicio Técnico'},{code:'EXTRAVIADO',label:'Extraviados'},{code:'DADO_BAJA',label:'Dados de Baja'}];
   protected readonly loading = signal(true);
   protected readonly quickLoading = signal(false);
   protected readonly error = signal('');
@@ -70,15 +87,20 @@ export class DispositivosList implements OnInit {
   protected filters = { q: '', tipoDispositivoId: '', estado: '', departamentoId: '', localidad: '' };
 
   ngOnInit(): void {
+    this.filters.estado=this.route.snapshot.queryParamMap.get('estado')||'';
     this.estados.listar('DISPOSITIVO').subscribe({ next: (items) => this.states.set(items) });
     this.deptService.listar().subscribe({ next: (items) => this.departments.set(items) });
     this.typeService.listar().subscribe({ next: (items) => this.types.set(items) });
+    this.service.listar().subscribe({next:items=>this.allItems.set(items)});
     this.load();
   }
+  protected stateCount(code:string):number{return inventoryStateCount(this.allItems(),code);}
+  protected selectState(code:string):void{this.filters.estado=code;void this.router.navigate([], {relativeTo:this.route,queryParams:{estado:code||null},queryParamsHandling:'merge',replaceUrl:true});this.load();}
   protected quickSearch(): void {
     const query = this.quickQuery.trim();
-    if (!query) return;
-    if (/^\d+$/.test(query)) {
+    const mode = quickSearchMode(query);
+    if (mode === 'EMPTY') return;
+    if (mode === 'DEVICE_CODE') {
       this.quickLoading.set(true);
       this.service.obtener(Number(query)).subscribe({ next: (item) => { this.quickLoading.set(false); void this.router.navigate(['/dispositivos', item.codigoInventario]); }, error: (error) => { this.quickLoading.set(false); this.toast.error('Activo no encontrado', errorMessage(error)); } });
       return;
@@ -92,4 +114,18 @@ export class DispositivosList implements OnInit {
   }
   protected clear(): void { this.filters = { q: '', tipoDispositivoId: '', estado: '', departamentoId: '', localidad: '' }; this.load(); }
   protected custody(item: Dispositivo): string { return item.colaborador?.nombre || item.departamento?.nombre || 'Sin responsable'; }
+  protected emptyTitle():string {
+    if(!this.allItems().length)return 'No hay dispositivos registrados';
+    if(this.hasCombinedFilters())return 'Sin resultados para los filtros aplicados';
+    return ({DISPONIBLE:'No hay dispositivos disponibles',ASIGNADO:'No hay dispositivos asignados',SERVICIO_TECNICO:'No hay equipos en servicio técnico',EXTRAVIADO:'No hay dispositivos extraviados',DADO_BAJA:'No hay dispositivos dados de baja'} as Record<string,string>)[this.filters.estado]||'Sin resultados para los filtros aplicados';
+  }
+  protected emptyMessage():string {
+    if(!this.allItems().length)return 'Aún no se han ingresado activos al sistema.';
+    if(this.hasCombinedFilters())return 'No existen dispositivos que coincidan con esta combinación de filtros.';
+    if(this.filters.estado==='DISPONIBLE')return 'Existen activos registrados, pero ninguno se encuentra disponible actualmente.';
+    return 'No existen activos en este estado actualmente.';
+  }
+  private hasCombinedFilters():boolean {
+    return Boolean(this.filters.q||this.filters.tipoDispositivoId||this.filters.departamentoId||this.filters.localidad);
+  }
 }

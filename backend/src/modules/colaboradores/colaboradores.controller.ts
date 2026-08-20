@@ -15,7 +15,9 @@ import {
   crearNuevoColaborador,
   obtenerColaborador,
   obtenerColaboradorPorRutExistente,
-  obtenerColaboradores
+  obtenerColaboradores,
+  obtenerInventarioColaborador,
+  obtenerPendientesOffboarding
 } from "./colaboradores.service";
 import type {
   ActualizarColaboradorInput,
@@ -42,6 +44,18 @@ export const listarColaboradoresController = asyncHandler(
     const colaboradores = await obtenerColaboradores(filters);
 
     sendCollection(res, colaboradores);
+  }
+);
+
+export const obtenerInventarioColaboradorController = asyncHandler(
+  async (req:Request,res:Response):Promise<void> => {
+    sendItem(res,await obtenerInventarioColaborador(parsePositiveInteger(req.params.id,"id")));
+  }
+);
+
+export const pendientesOffboardingController = asyncHandler(
+  async (_req:Request,res:Response):Promise<void> => {
+    sendCollection(res,await obtenerPendientesOffboarding());
   }
 );
 

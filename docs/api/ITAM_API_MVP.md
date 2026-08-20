@@ -805,3 +805,52 @@ Respuesta 200:
   ]
 }
 ```
+
+## ExtensiÃ³n de ciclo de vida patrimonial
+
+### GET /colaboradores/:id/inventario
+
+Retorna los equipos actualmente bajo custodia directa del colaborador, su valor
+comercial total calculado y el historial de asignaciones/devoluciones.
+
+### POST /dispositivos/:codigo/dar-baja
+
+Registra una baja controlada. Requiere `motivo`, `responsable` y admite
+`observaciones`. Conserva el valor comercial vigente en el registro histÃ³rico
+de la baja. No se permite reemplazar esta operaciÃ³n con un cambio de estado
+genÃ©rico.
+
+### POST /dispositivos/:codigo/resultado-offboarding
+
+Registra `DEVUELTO`, `PENDIENTE`, `NO_ENTREGADO`, `EXTRAVIADO`,
+`ROBADO_HURTADO` o `DANADO`, junto con condiciÃ³n, responsable TI y
+observaciones. Los resultados pendientes conservan la custodia; una recepciÃ³n
+la libera y deja el equipo en revisiÃ³n. ExtravÃ­o o robo conservan la custodia
+para mantener el activo pendiente y actualizan su estado de inventario.
+
+### Servicio tÃ©cnico
+
+- `GET /servicio-tecnico`
+- `GET /servicio-tecnico/:id`
+- `POST /servicio-tecnico`
+- `PATCH /servicio-tecnico/:id/cotizacion`
+- `POST /servicio-tecnico/:id/decision`
+- `POST /servicio-tecnico/:id/cerrar`
+
+Una orden abierta bloquea asignaciÃ³n, devoluciÃ³n y cambios de estado
+incompatibles. El flujo persiste falla, diagnÃ³stico, cotizaciÃ³n, decisiÃ³n,
+costo final, resultado y responsables en cada etapa.
+
+### Actas de entrega
+
+- `GET /actas-entrega`
+- `GET /actas-entrega/:id`
+- `GET /actas-entrega/:id/pdf`
+- `POST /actas-entrega`
+
+La creaciÃ³n admite uno o varios `dispositivosCodigos`, destinatario colaborador
+o departamento con recepcionante, localidad, responsable TI y observaciones.
+La numeraciÃ³n persistente usa el formato `AE-AAAA-000001`. El endpoint PDF
+entrega un documento A4 real (`application/pdf`). El envÃ­o por correo no forma
+parte de esta API mientras no exista infraestructura SMTP y un correo de
+colaborador definido en el modelo.

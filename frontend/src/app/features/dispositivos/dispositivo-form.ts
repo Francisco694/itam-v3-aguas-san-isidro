@@ -11,6 +11,8 @@ import { PageHeader } from '../../shared/components/page-header/page-header';
 import { ViewState } from '../../shared/components/view-state/view-state';
 import { errorMessage } from '../../shared/utils/error-message';
 
+export const COMMERCIAL_VALUE_PATTERN = /^\d+$/;
+
 export const allowsDeviceCreation = (type: TipoDispositivo): boolean =>
   type.activo && !!type.familiaCodigoInventario?.activo;
 
@@ -87,6 +89,7 @@ export const typesForOperationalGroup = (
             @if (visibility().modelo) { <div class="field"><label for="modelo">Modelo</label><input id="modelo" maxlength="150" formControlName="modelo" /></div> }
             @if (visibility().numeroSerie) { <div class="field"><label for="serie">Número de serie</label><input class="code" id="serie" maxlength="150" formControlName="numeroSerie" /></div> }
             @if (visibility().imei) { <div class="field"><label for="imei">IMEI</label><input class="code" id="imei" maxlength="30" formControlName="imei" /></div> }
+            <div class="field"><label for="commercial-value">Valor comercial (CLP)</label><input id="commercial-value" type="number" min="0" step="1" formControlName="valorComercial" /><p class="hint">Ingrese solamente el valor numérico, sin puntos ni signo peso.</p>@if(form.controls.valorComercial.invalid&&form.controls.valorComercial.touched){<p class="field-error">Debe ser un valor entero mayor o igual a cero.</p>}</div>
             <ng-container formGroupName="atributosEspecificos">
               @for (field of visibility().camposEspecificos; track field.clave) {
                 <div class="field"><label [for]="'specific-' + field.clave">{{ field.etiqueta }}{{ field.requerido ? ' *' : '' }}</label>
@@ -136,7 +139,7 @@ export class DispositivoForm implements OnInit {
   protected readonly attributesForm = this.fb.group({ partNumber: [''], tipoCable: [''], longitud: [''], potencia: [''], tipoAdaptador: [''], cantidadPuertos: [''], nombrePeriferico: [''] });
   protected readonly form = this.fb.nonNullable.group({
     tipoPrincipal: ['', Validators.required], tipoDispositivoId: [''], marca: ['', Validators.maxLength(100)], modelo: ['', Validators.maxLength(150)],
-    numeroSerie: ['', Validators.maxLength(150)], imei: ['', Validators.maxLength(30)], localidad: ['', Validators.maxLength(120)], ubicacionDetalle: ['', Validators.maxLength(250)],
+    numeroSerie: ['', Validators.maxLength(150)], imei: ['', Validators.maxLength(30)], valorComercial: [0, [Validators.required,Validators.min(0),Validators.pattern(COMMERCIAL_VALUE_PATTERN)]], localidad: ['', Validators.maxLength(120)], ubicacionDetalle: ['', Validators.maxLength(250)],
     observaciones: [''], responsable: ['', [Validators.required, Validators.maxLength(150)]], atributosEspecificos: this.attributesForm
   });
   protected selectedGroupFamilyId(): string {
@@ -163,7 +166,7 @@ export class DispositivoForm implements OnInit {
     const grouped = device.tipo.familiaCodigoInventario?.agrupaTipos;
     this.form.patchValue({ tipoPrincipal: grouped ? `group:${device.tipo.familiaCodigoInventario!.id}` : device.tipo.id, tipoDispositivoId: device.tipo.id,
       marca: device.marca || '', modelo: device.modelo || '', numeroSerie: device.numeroSerie || '', imei: device.imei || '', localidad: device.localidad || '',
-      ubicacionDetalle: device.ubicacionDetalle || '', observaciones: device.observaciones || '', atributosEspecificos: Object.fromEntries(Object.entries(device.atributosEspecificos).map(([key, value]) => [key, value === null ? '' : String(value)])) });
+      ubicacionDetalle: device.ubicacionDetalle || '', valorComercial:device.valorComercial, observaciones: device.observaciones || '', atributosEspecificos: Object.fromEntries(Object.entries(device.atributosEspecificos).map(([key, value]) => [key, value === null ? '' : String(value)])) });
     this.configureSpecificValidators();
   }
   protected onPrimarySelection(): void { const value = this.form.controls.tipoPrincipal.value; this.form.controls.tipoDispositivoId.setValue(value.startsWith('group:') ? '' : value); this.clearTechnicalFields(); this.configureSpecificValidators(); }
@@ -189,6 +192,7 @@ export class DispositivoForm implements OnInit {
     this.submitting.set(true); this.apiError.set(''); const value = this.form.getRawValue(); const visible = this.visibility();
     const base = { tipoDispositivoId: Number(selected.id), marca: visible.marca ? value.marca.trim() || null : null, modelo: visible.modelo ? value.modelo.trim() || null : null,
       numeroSerie: visible.numeroSerie ? value.numeroSerie.trim() || null : null, imei: visible.imei ? value.imei.trim() || null : null,
+      valorComercial:Number(value.valorComercial),
       atributosEspecificos: this.specificAttributes(), localidad: value.localidad.trim() || null, ubicacionDetalle: value.ubicacionDetalle.trim() || null, observaciones: value.observaciones.trim() || null };
     const request = this.codigo ? this.service.actualizar(this.codigo, base) : this.service.crear({ ...base, responsable: value.responsable.trim() });
     request.subscribe({ next: (item) => { this.submitting.set(false); if (this.codigo) void this.router.navigate(['/dispositivos', item.codigoInventario]); else this.created.set(item); }, error: (error) => { this.apiError.set(errorMessage(error)); this.submitting.set(false); } });

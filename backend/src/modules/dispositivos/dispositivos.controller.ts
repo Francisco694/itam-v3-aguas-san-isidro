@@ -4,6 +4,9 @@ import { ValidationError } from "../../shared/errors";
 import { sendCollection, sendItem } from "../../shared/responses";
 import {
   parseBodyObject,
+  parseEnum,
+  parseOptionalEnum,
+  parseOptionalNonNegativeInteger,
   parseOptionalPositiveInteger,
   parseOptionalString,
   parsePositiveInteger,
@@ -16,9 +19,12 @@ import {
   asignarADepartamento,
   cambiarEstadoDispositivoExistente,
   crearNuevoDispositivo,
+  darDeBajaDispositivo,
   devolverDispositivoExistente,
+  registrarResultadoOffboarding,
   obtenerDispositivo,
   obtenerDispositivos,
+  obtenerIndicadoresGerenciales,
   obtenerHistorialDispositivo
 } from "./dispositivos.service";
 import type {
@@ -28,7 +34,10 @@ import type {
   CambiarEstadoDispositivoInput,
   CrearDispositivoInput,
   DevolverDispositivoInput,
-  DispositivoFilters
+  DispositivoFilters,
+  DarBajaDispositivoInput,
+  MotivoBaja,
+  RegistrarResultadoOffboardingInput
 } from "./dispositivos.types";
 
 const protectedPatchFields = [
@@ -142,6 +151,12 @@ export const listarDispositivosController = asyncHandler(
   }
 );
 
+export const resumenGerencialController = asyncHandler(
+  async (_req: Request, res: Response): Promise<void> => {
+    sendItem(res, await obtenerIndicadoresGerenciales());
+  }
+);
+
 export const obtenerDispositivoController = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
     const codigo = parsePositiveInteger(req.params.codigo, "codigo");
@@ -190,6 +205,8 @@ export const crearDispositivoController = asyncHandler(
       atributosEspecificos: parseOptionalSpecificAttributes(
         body.atributosEspecificos
       ),
+      valorComercial:
+        parseOptionalNonNegativeInteger(body.valorComercial, "valorComercial") ?? undefined,
       responsable: parseRequiredString(
         body.responsable,
         "responsable",
@@ -219,6 +236,7 @@ export const actualizarDispositivoController = asyncHandler(
       "ubicacionDetalle",
       "observaciones",
       "atributosEspecificos"
+      ,"valorComercial"
     ]);
 
     const input: ActualizarDispositivoInput = {
@@ -251,7 +269,9 @@ export const actualizarDispositivoController = asyncHandler(
       ),
       atributosEspecificos: parseOptionalSpecificAttributes(
         body.atributosEspecificos
-      )
+      ),
+      valorComercial:
+        parseOptionalNonNegativeInteger(body.valorComercial, "valorComercial") ?? undefined
     };
 
     const dispositivo = await actualizarDispositivoExistente(
@@ -300,6 +320,10 @@ export const asignarDepartamentoController = asyncHandler(
         body.departamentoId,
         "departamentoId"
       ),
+      recibidoPorId: parsePositiveInteger(
+        body.recibidoPorId,
+        "recibidoPorId"
+      ),
       localidad: parseOptionalString(
         body.localidad,
         "localidad",
@@ -341,6 +365,12 @@ export const devolverDispositivoController = asyncHandler(
       observaciones: parseOptionalString(
         body.observaciones,
         "observaciones"
+      ),
+      condicion: parseOptionalString(body.condicion, "condicion", 120),
+      resultado: parseOptionalEnum(
+        body.resultado,
+        "resultado",
+        ["DEVUELTO", "DANADO"] as const
       )
     };
 
@@ -350,6 +380,42 @@ export const devolverDispositivoController = asyncHandler(
     );
 
     sendItem(res, dispositivo);
+  }
+);
+
+const resultadosOffboarding = [
+  "DEVUELTO","PENDIENTE","NO_ENTREGADO","EXTRAVIADO","ROBADO_HURTADO","DANADO"
+] as const;
+
+export const resultadoOffboardingController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const codigo = parsePositiveInteger(req.params.codigo, "codigo");
+    const body = parseBodyObject(req.body);
+    const input: RegistrarResultadoOffboardingInput = {
+      resultado: parseEnum(body.resultado, "resultado", resultadosOffboarding),
+      responsable: parseRequiredString(body.responsable, "responsable", 150),
+      condicion: parseOptionalString(body.condicion, "condicion", 120),
+      observaciones: parseOptionalString(body.observaciones, "observaciones")
+    };
+    sendItem(res, await registrarResultadoOffboarding(codigo, input));
+  }
+);
+
+const motivosBaja = [
+  "IRREPARABLE","REPARACION_NO_CONVENIENTE","MULTIPLES_REPARACIONES",
+  "OBSOLESCENCIA","DANO_FISICO","SIN_REPUESTOS","OTRO"
+] as const satisfies readonly MotivoBaja[];
+
+export const darBajaDispositivoController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const codigo = parsePositiveInteger(req.params.codigo, "codigo");
+    const body = parseBodyObject(req.body);
+    const input: DarBajaDispositivoInput = {
+      motivo: parseEnum(body.motivo, "motivo", motivosBaja),
+      responsable: parseRequiredString(body.responsable, "responsable", 150),
+      observaciones: parseOptionalString(body.observaciones, "observaciones")
+    };
+    sendItem(res, await darDeBajaDispositivo(codigo, input));
   }
 );
 

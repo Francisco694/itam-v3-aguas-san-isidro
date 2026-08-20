@@ -95,6 +95,23 @@ export const parseOptionalPositiveInteger = (
   return parsePositiveInteger(value, field);
 };
 
+export const parseOptionalNonNegativeInteger = (
+  value: unknown,
+  field: string
+): number | null | undefined => {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  const parsed = typeof value === "number"
+    ? value
+    : typeof value === "string" && value.trim() !== ""
+      ? Number(value)
+      : NaN;
+  if (!Number.isSafeInteger(parsed) || parsed < 0) {
+    throw new ValidationError(`${field} debe ser un entero mayor o igual a cero.`);
+  }
+  return parsed;
+};
+
 export const parseOptionalBoolean = (
   value: unknown,
   field: string

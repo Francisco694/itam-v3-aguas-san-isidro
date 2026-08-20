@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "npm run build && node --test --test-concurrency=1 dist/modules/inventory-codes/*.test.js",
+    "test": "tsc && node --test --test-concurrency=1 dist/modules/*/*.test.js",
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
@@ -19,12 +19,14 @@
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "helmet": "^8.3.0",
+    "pdfkit": "^0.19.1",
     "pg": "^8.23.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/node": "^26.2.0",
+    "@types/pdfkit": "^0.17.6",
     "@types/pg": "^8.21.0",
     "tsx": "^4.23.12",
     "typescript": "^7.0.2"

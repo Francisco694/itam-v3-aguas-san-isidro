@@ -1,0 +1,14 @@
+import type {Request,Response} from "express";
+import {asyncHandler} from "../../shared/async-handler";
+import {sendCollection,sendItem} from "../../shared/responses";
+import {parseBodyObject,parseEnum,parseOptionalNonNegativeInteger,parseOptionalString,parsePositiveInteger,parseRequiredString} from "../../shared/validation";
+import {ValidationError} from "../../shared/errors";
+import {cerrarOrdenServicio,crearOrdenServicio,decidirOrdenServicio,obtenerOrdenServicio,obtenerOrdenesServicio,registrarCotizacion} from "./servicio-tecnico.service";
+
+const money=(value:unknown,field:string)=>{const parsed=parseOptionalNonNegativeInteger(value,field);if(parsed===undefined||parsed===null)throw new ValidationError(`${field} es obligatorio.`);return parsed};
+export const listarOrdenesController=asyncHandler(async(_req:Request,res:Response)=>sendCollection(res,await obtenerOrdenesServicio()));
+export const obtenerOrdenController=asyncHandler(async(req:Request,res:Response)=>sendItem(res,await obtenerOrdenServicio(parsePositiveInteger(req.params.id,"id"))));
+export const crearOrdenController=asyncHandler(async(req:Request,res:Response)=>{const b=parseBodyObject(req.body);sendItem(res,await crearOrdenServicio({dispositivoCodigo:parsePositiveInteger(b.dispositivoCodigo,"dispositivoCodigo"),proveedor:parseOptionalString(b.proveedor,"proveedor",180),fallaReportada:parseRequiredString(b.fallaReportada,"fallaReportada"),responsable:parseRequiredString(b.responsable,"responsable",150)}),201)});
+export const cotizarOrdenController=asyncHandler(async(req:Request,res:Response)=>{const b=parseBodyObject(req.body);sendItem(res,await registrarCotizacion(parsePositiveInteger(req.params.id,"id"),{diagnostico:parseRequiredString(b.diagnostico,"diagnostico"),descripcionReparacion:parseRequiredString(b.descripcionReparacion,"descripcionReparacion"),montoCotizacion:money(b.montoCotizacion,"montoCotizacion"),proveedor:parseOptionalString(b.proveedor,"proveedor",180),responsable:parseRequiredString(b.responsable,"responsable",150)}))});
+export const decidirOrdenController=asyncHandler(async(req:Request,res:Response)=>{const b=parseBodyObject(req.body);sendItem(res,await decidirOrdenServicio(parsePositiveInteger(req.params.id,"id"),{decision:parseEnum(b.decision,"decision",["APROBAR","RECHAZAR","DAR_BAJA"] as const),motivo:parseOptionalString(b.motivo,"motivo",80),observaciones:parseOptionalString(b.observaciones,"observaciones"),responsable:parseRequiredString(b.responsable,"responsable",150)}))});
+export const cerrarOrdenController=asyncHandler(async(req:Request,res:Response)=>{const b=parseBodyObject(req.body);sendItem(res,await cerrarOrdenServicio(parsePositiveInteger(req.params.id,"id"),{costoFinal:money(b.costoFinal,"costoFinal"),fechaRetorno:parseOptionalString(b.fechaRetorno,"fechaRetorno",40),resultado:parseRequiredString(b.resultado,"resultado"),responsable:parseRequiredString(b.responsable,"responsable",150)}))});

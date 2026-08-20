@@ -12,13 +12,17 @@ import {
   listarColaboradores,
   obtenerColaboradorPorId,
   obtenerColaboradorPorRut
+  ,listarActivosActualesColaborador
+  ,listarHistorialActivosColaborador
+  ,listarPendientesOffboarding
 } from "./colaboradores.repository";
 import type {
   ActualizarColaboradorInput,
   Colaborador,
   ColaboradorFilters,
   ColaboradorRow,
-  CrearColaboradorInput
+  CrearColaboradorInput,
+  PendienteOffboarding
 } from "./colaboradores.types";
 
 const mapColaborador = (row: ColaboradorRow): Colaborador => ({
@@ -159,3 +163,31 @@ export const actualizarColaboradorExistente = async (
     throw error;
   }
 };
+
+export const obtenerInventarioColaborador = async (id:number) => {
+  const colaborador=await obtenerColaborador(id);
+  const [actuales,historial]=await Promise.all([
+    listarActivosActualesColaborador(id),listarHistorialActivosColaborador(id)
+  ]);
+  const map=(row:import("./colaboradores.types").ActivoColaboradorRow)=>({
+    id:row.dispositivo_id,codigoInventario:row.codigo_inventario,tipo:row.tipo_dispositivo,
+    marca:row.marca,modelo:row.modelo,numeroSerie:row.numero_serie,imei:row.imei,
+    valorComercial:Number(row.valor_comercial),estado:{codigo:row.estado_codigo,nombre:row.estado_nombre}
+  });
+  return {colaborador,valorTotalCustodia:actuales.reduce((sum,row)=>sum+Number(row.valor_comercial),0),
+    equiposActuales:actuales.map(map),historialEquipos:historial.map(row=>({...map(row),
+      fechaAsignacion:toIsoDateTime(row.fecha_asignacion),
+      fechaDevolucion:row.fecha_devolucion?toIsoDateTime(row.fecha_devolucion):null,
+      resultado:row.resultado}))};
+};
+
+export const obtenerPendientesOffboarding = async ():Promise<PendienteOffboarding[]> =>
+  (await listarPendientesOffboarding()).map(row=>({
+    colaborador:mapColaborador({id:row.colaborador_id,rut:row.rut,nombre:row.nombre,cargo:row.cargo,
+      departamento_id:row.departamento_id,departamento_nombre:row.departamento_nombre,
+      localidad:row.localidad,activo:row.activo,observaciones:row.observaciones,
+      creado_en:row.creado_en,actualizado_en:row.actualizado_en}),
+    activosPendientes:Number(row.activos_pendientes)||0,
+    valorPendiente:Number(row.valor_pendiente)||0,
+    estado:"PENDIENTE"
+  }));

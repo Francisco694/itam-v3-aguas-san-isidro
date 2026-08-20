@@ -4,6 +4,7 @@ import { sendCollection, sendItem } from "../../shared/responses";
 import {
   parseBodyObject,
   parseOptionalBoolean,
+  parseOptionalPositiveInteger,
   parseOptionalString,
   parsePositiveInteger,
   parseRequiredString,
@@ -54,7 +55,8 @@ export const crearDepartamentoController = asyncHandler(
       observaciones: parseOptionalString(
         body.observaciones,
         "observaciones"
-      )
+      ),
+      dependencia_id: parseOptionalPositiveInteger(body.dependencia_id, "dependencia_id")
     };
 
     const departamento = await crearNuevoDepartamento(input);
@@ -71,7 +73,8 @@ export const actualizarDepartamentoController = asyncHandler(
     requireAtLeastOneDefined(body, [
       "nombre",
       "activo",
-      "observaciones"
+      "observaciones",
+      "dependencia_id"
     ]);
 
     const input: ActualizarDepartamentoInput = {
@@ -83,7 +86,8 @@ export const actualizarDepartamentoController = asyncHandler(
       observaciones: parseOptionalString(
         body.observaciones,
         "observaciones"
-      )
+      ),
+      dependencia_id: parseOptionalPositiveInteger(body.dependencia_id, "dependencia_id")
     };
 
     const departamento = await actualizarDepartamentoExistente(

@@ -6,7 +6,8 @@ import type {
   DispositivoFilters,
   DispositivoRow,
   EstadoRow,
-  HistorialDispositivoRow
+  HistorialDispositivoRow,
+  ResumenGerencialRow
 } from "./dispositivos.types";
 
 type DbExecutor = Pool | PoolClient;
@@ -39,6 +40,7 @@ const dispositivoSelect = `
     d.ubicacion_detalle,
     d.observaciones,
     d.atributos_especificos,
+    d.valor_comercial,
     d.fecha_registro,
     d.creado_en,
     d.actualizado_en,
@@ -66,7 +68,8 @@ const dispositivoSelect = `
     s.compania,
     sim_estado.id AS sim_estado_id,
     sim_estado.codigo AS sim_estado_codigo,
-    sim_estado.nombre AS sim_estado_nombre
+    sim_estado.nombre AS sim_estado_nombre,
+    offboarding.resultado AS ultimo_resultado_offboarding
   FROM itam.dispositivos d
   INNER JOIN itam.estados e
     ON e.id = d.estado_id
@@ -86,6 +89,15 @@ const dispositivoSelect = `
     ON s.dispositivo_id = d.id
   LEFT JOIN itam.estados sim_estado
     ON sim_estado.id = s.estado_id
+  LEFT JOIN LATERAL (
+    SELECT h.detalle->>'resultado' AS resultado
+    FROM itam.historial_eventos h
+    WHERE h.dispositivo_id=d.id
+      AND h.tipo_evento IN ('RESULTADO_OFFBOARDING','DEVOLVER_DISPOSITIVO')
+      AND h.detalle ? 'resultado'
+    ORDER BY h.fecha_evento DESC,h.id DESC
+    LIMIT 1
+  ) offboarding ON TRUE
 `;
 
 export const listarDispositivos = async (
@@ -233,9 +245,10 @@ export const crearDispositivo = async (
         localidad,
         ubicacion_detalle,
         observaciones,
-        atributos_especificos
+        atributos_especificos,
+        valor_comercial
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
       RETURNING codigo_inventario
     `,
     [
@@ -249,7 +262,8 @@ export const crearDispositivo = async (
       input.localidad ?? null,
       input.ubicacionDetalle ?? null,
       input.observaciones ?? null,
-      JSON.stringify(input.atributosEspecificos ?? {})
+      JSON.stringify(input.atributosEspecificos ?? {}),
+      input.valorComercial ?? 0
     ]
   );
 
@@ -294,6 +308,10 @@ export const actualizarDispositivo = async (
         atributos_especificos = CASE
           WHEN $17::boolean THEN $18::jsonb
           ELSE atributos_especificos
+        END,
+        valor_comercial = CASE
+          WHEN $19::boolean THEN $20
+          ELSE valor_comercial
         END
       WHERE codigo_inventario = $1
       RETURNING codigo_inventario
@@ -316,7 +334,9 @@ export const actualizarDispositivo = async (
       input.observaciones !== undefined,
       input.observaciones ?? null,
       input.atributosEspecificos !== undefined,
-      JSON.stringify(input.atributosEspecificos ?? {})
+      JSON.stringify(input.atributosEspecificos ?? {}),
+      input.valorComercial !== undefined,
+      input.valorComercial ?? null
     ]
   );
 
@@ -328,6 +348,36 @@ export const actualizarDispositivo = async (
     result.rows[0].codigo_inventario,
     client
   );
+};
+
+export const obtenerResumenGerencial = async (): Promise<ResumenGerencialRow> => {
+  const result = await pool.query<ResumenGerencialRow>(`
+    SELECT
+      COUNT(*) AS total_cantidad,
+      COALESCE(SUM(d.valor_comercial), 0) AS total_valor,
+      COUNT(*) FILTER (WHERE e.codigo = 'DISPONIBLE') AS disponibles_cantidad,
+      COALESCE(SUM(d.valor_comercial) FILTER (WHERE e.codigo = 'DISPONIBLE'), 0) AS disponibles_valor,
+      COUNT(*) FILTER (WHERE d.colaborador_id IS NOT NULL OR d.departamento_id IS NOT NULL) AS asignados_cantidad,
+      COALESCE(SUM(d.valor_comercial) FILTER (
+        WHERE d.colaborador_id IS NOT NULL OR d.departamento_id IS NOT NULL
+      ), 0) AS asignados_valor,
+      COUNT(*) FILTER (WHERE e.codigo = 'EXTRAVIADO') AS extraviados_cantidad,
+      COALESCE(SUM(d.valor_comercial) FILTER (WHERE e.codigo = 'EXTRAVIADO'), 0) AS extraviados_valor,
+      COUNT(*) FILTER (WHERE e.codigo = 'DADO_BAJA') AS bajas_cantidad,
+      COALESCE(SUM(COALESCE(baja.valor_comercial_momento, d.valor_comercial)) FILTER (
+        WHERE e.codigo = 'DADO_BAJA'
+      ), 0) AS bajas_valor
+    FROM itam.dispositivos d
+    INNER JOIN itam.estados e ON e.id = d.estado_id
+    LEFT JOIN LATERAL (
+      SELECT b.valor_comercial_momento
+      FROM itam.bajas_dispositivo b
+      WHERE b.dispositivo_id = d.id
+      ORDER BY b.creado_en DESC, b.id DESC
+      LIMIT 1
+    ) baja ON TRUE
+  `);
+  return result.rows[0]!;
 };
 
 export const asignarDispositivoAColaborador = async (
@@ -363,6 +413,7 @@ export const asignarDispositivoAColaborador = async (
 export const asignarDispositivoADepartamento = async (
   codigoInventario: number,
   departamentoId: number,
+  recibidoPorId: number,
   estadoId: string,
   localidad: string | null | undefined,
   ubicacionDetalle: string | null | undefined,
@@ -374,14 +425,14 @@ export const asignarDispositivoADepartamento = async (
       SET
         colaborador_id = NULL,
         departamento_id = $2,
-        recibido_por_id = NULL,
-        estado_id = $3,
+        recibido_por_id = $3,
+        estado_id = $4,
         localidad = CASE
-          WHEN $4::boolean THEN $5
+          WHEN $5::boolean THEN $6
           ELSE localidad
         END,
         ubicacion_detalle = CASE
-          WHEN $6::boolean THEN $7
+          WHEN $7::boolean THEN $8
           ELSE ubicacion_detalle
         END
       WHERE codigo_inventario = $1
@@ -390,6 +441,7 @@ export const asignarDispositivoADepartamento = async (
     [
       codigoInventario,
       departamentoId,
+      recibidoPorId,
       estadoId,
       localidad !== undefined,
       localidad ?? null,
@@ -405,6 +457,24 @@ export const asignarDispositivoADepartamento = async (
   return obtenerDispositivoPorCodigo(
     result.rows[0].codigo_inventario,
     client
+  );
+};
+
+export const registrarBajaDispositivo = async (
+  dispositivoId: string,
+  motivo: string,
+  observaciones: string | null | undefined,
+  valorComercial: number,
+  responsable: string,
+  ordenServicioId: string | null,
+  client: PoolClient
+): Promise<void> => {
+  await client.query(
+    `INSERT INTO itam.bajas_dispositivo(
+       dispositivo_id,motivo,observacion,valor_comercial_momento,
+       responsable,orden_servicio_id
+     ) VALUES ($1,$2,$3,$4,$5,$6)`,
+    [dispositivoId,motivo,observaciones ?? null,valorComercial,responsable,ordenServicioId]
   );
 };
 

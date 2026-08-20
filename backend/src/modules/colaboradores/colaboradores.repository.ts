@@ -3,7 +3,10 @@ import type {
   ActualizarColaboradorInput,
   ColaboradorFilters,
   ColaboradorRow,
-  CrearColaboradorInput
+  CrearColaboradorInput,
+  ActivoColaboradorRow,
+  HistorialActivoColaboradorRow,
+  PendienteOffboardingRow
 } from "./colaboradores.types";
 
 const colaboradorSelect = `
@@ -202,3 +205,52 @@ export const actualizarColaborador = async (
 
   return result.rows[0] ?? null;
 };
+
+export const listarActivosActualesColaborador = async (
+  colaboradorId:number
+):Promise<ActivoColaboradorRow[]> => (await pool.query<ActivoColaboradorRow>(`
+  SELECT d.id dispositivo_id,d.codigo_inventario,t.nombre tipo_dispositivo,
+    d.marca,d.modelo,d.numero_serie,d.imei,d.valor_comercial,
+    e.codigo estado_codigo,e.nombre estado_nombre
+  FROM itam.dispositivos d JOIN itam.tipos_dispositivo t ON t.id=d.tipo_dispositivo_id
+  JOIN itam.estados e ON e.id=d.estado_id WHERE d.colaborador_id=$1
+  ORDER BY d.codigo_inventario`,[colaboradorId])).rows;
+
+export const listarHistorialActivosColaborador = async (
+  colaboradorId:number
+):Promise<HistorialActivoColaboradorRow[]> => (await pool.query<HistorialActivoColaboradorRow>(`
+  WITH asignaciones AS (
+    SELECT h.dispositivo_id,h.fecha_evento fecha_asignacion
+    FROM itam.historial_eventos h
+    WHERE h.tipo_entidad='DISPOSITIVO' AND h.tipo_evento='ASIGNAR_COLABORADOR'
+      AND COALESCE(h.detalle#>>'{custodiaNueva,id}',h.detalle->>'colaboradorId')=$1::text
+  )
+  SELECT d.id dispositivo_id,d.codigo_inventario,t.nombre tipo_dispositivo,
+    d.marca,d.modelo,d.numero_serie,d.imei,d.valor_comercial,
+    e.codigo estado_codigo,e.nombre estado_nombre,a.fecha_asignacion,
+    siguiente.fecha_evento fecha_devolucion,
+    CASE WHEN siguiente.fecha_evento IS NULL AND d.colaborador_id=$1::bigint THEN 'ASIGNADO'
+         WHEN siguiente.tipo_evento='DEVOLVER_DISPOSITIVO' THEN 'DEVUELTO'
+         ELSE 'FINALIZADO' END resultado
+  FROM asignaciones a JOIN itam.dispositivos d ON d.id=a.dispositivo_id
+  JOIN itam.tipos_dispositivo t ON t.id=d.tipo_dispositivo_id
+  JOIN itam.estados e ON e.id=d.estado_id
+  LEFT JOIN LATERAL (
+    SELECT h2.fecha_evento,h2.tipo_evento FROM itam.historial_eventos h2
+    WHERE h2.dispositivo_id=a.dispositivo_id AND h2.fecha_evento>a.fecha_asignacion
+      AND h2.tipo_evento IN ('DEVOLVER_DISPOSITIVO','ASIGNAR_COLABORADOR','ASIGNAR_DEPARTAMENTO')
+    ORDER BY h2.fecha_evento LIMIT 1
+  ) siguiente ON TRUE ORDER BY a.fecha_asignacion DESC`,[colaboradorId])).rows;
+
+export const listarPendientesOffboarding = async ():Promise<PendienteOffboardingRow[]> =>
+  (await pool.query<PendienteOffboardingRow>(`
+    SELECT c.id colaborador_id,c.rut,c.nombre,c.cargo,c.localidad,c.activo,c.observaciones,
+      c.creado_en,c.actualizado_en,dep.id departamento_id,dep.nombre departamento_nombre,
+      COUNT(d.id) activos_pendientes,COALESCE(SUM(d.valor_comercial),0) valor_pendiente
+    FROM itam.colaboradores c
+    JOIN itam.dispositivos d ON d.colaborador_id=c.id
+    LEFT JOIN itam.departamentos dep ON dep.id=c.departamento_id
+    GROUP BY c.id,c.rut,c.nombre,c.cargo,c.localidad,c.activo,c.observaciones,c.creado_en,
+      c.actualizado_en,dep.id,dep.nombre
+    ORDER BY c.nombre
+  `)).rows;

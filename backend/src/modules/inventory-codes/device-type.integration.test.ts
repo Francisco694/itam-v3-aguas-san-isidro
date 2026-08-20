@@ -12,6 +12,7 @@ import {
   resolverTipoActivoParaAlta
 } from "../tipos-dispositivo/tipos-dispositivo.service";
 import { generateInventoryCodeByFamilyId } from "./inventory-code.service";
+import { formatInventoryCode } from "./inventory-code";
 
 after(async () => { await pool.end(); });
 
@@ -150,8 +151,8 @@ test("Mouse y Teclado comparten familia 6 y reciben códigos correlativos", asyn
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const family = await client.query<{ id: string }>(
-      "SELECT id FROM itam.familias_codigo_inventario WHERE prefijo='6' LIMIT 1"
+    const family = await client.query<{ id: string; ultimo_ordinal: number }>(
+      "SELECT id,ultimo_ordinal FROM itam.familias_codigo_inventario WHERE prefijo='6' LIMIT 1"
     );
     const state = await client.query<{ id: string }>(
       "SELECT id FROM itam.estados WHERE tipo_entidad='DISPOSITIVO' AND codigo='DISPONIBLE' LIMIT 1"
@@ -160,13 +161,13 @@ test("Mouse y Teclado comparten familia 6 y reciben códigos correlativos", asyn
     const keyboard = await crearTipoDispositivo({ nombre: "TEST Teclado", familiaCodigoInventarioId: Number(family.rows[0]!.id) }, client);
     const mouseType = await resolverTipoActivoParaAlta(Number(mouse.id), client);
     const firstCode = await generateInventoryCodeByFamilyId(mouseType.familia_codigo_inventario_id!, "DISPOSITIVO", client);
-    assert.equal(firstCode, 6001);
+    assert.equal(firstCode, formatInventoryCode("6", family.rows[0]!.ultimo_ordinal + 1));
     await client.query(
       "INSERT INTO itam.dispositivos(codigo_inventario,tipo_dispositivo_id,estado_id) VALUES($1,$2,$3)",
       [firstCode, mouse.id, state.rows[0]!.id]
     );
     const secondCode = await generateInventoryCodeByFamilyId(family.rows[0]!.id, "DISPOSITIVO", client);
-    assert.equal(secondCode, 6002);
+    assert.equal(secondCode, formatInventoryCode("6", family.rows[0]!.ultimo_ordinal + 2));
     await client.query(
       "UPDATE itam.dispositivos SET tipo_dispositivo_id=$2 WHERE codigo_inventario=$1",
       [firstCode, keyboard.id]
@@ -229,6 +230,9 @@ test("Cable persiste sus atributos específicos con código automático de famil
     const state = await client.query<{ id: string }>(
       "SELECT id FROM itam.estados WHERE tipo_entidad='DISPOSITIVO' AND codigo='DISPONIBLE' LIMIT 1"
     );
+    const family = await client.query<{ ultimo_ordinal: number }>(
+      "SELECT ultimo_ordinal FROM itam.familias_codigo_inventario WHERE prefijo='6' LIMIT 1"
+    );
     const tipo = await resolverTipoActivoParaAlta(Number(cable.rows[0]!.id), client);
     const code = await generateInventoryCodeByFamilyId(
       tipo.familia_codigo_inventario_id!, "DISPOSITIVO", client
@@ -240,7 +244,7 @@ test("Cable persiste sus atributos específicos con código automático de famil
       responsable: "TEST"
     }, code, state.rows[0]!.id, client);
 
-    assert.equal(code, 6001);
+    assert.equal(code, formatInventoryCode("6", family.rows[0]!.ultimo_ordinal + 1));
     assert.equal(created.tipo_dispositivo_nombre, "Cable");
     assert.deepEqual(created.atributos_especificos, {
       tipoCable: "USB-C", longitud: "2 m"

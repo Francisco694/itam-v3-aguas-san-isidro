@@ -58,6 +58,7 @@ export interface DispositivoResumen {
   ubicacionDetalle: string | null;
   observaciones: string | null;
   atributosEspecificos: Record<string, string | number | null>;
+  valorComercial: number;
   fechaRegistro: string;
   creadoEn: string;
   actualizadoEn: string;
@@ -67,6 +68,7 @@ export interface DispositivoResumen {
   recibidoPor: ColaboradorResumen | null;
   simAsociada: SimAsociadaResumen | null;
   tipoCustodia: "NONE" | "COLABORADOR" | "DEPARTAMENTO";
+  ultimoResultadoOffboarding: ResultadoOffboarding | null;
 }
 
 export interface DispositivoRow {
@@ -94,6 +96,7 @@ export interface DispositivoRow {
   ubicacion_detalle: string | null;
   observaciones: string | null;
   atributos_especificos: Record<string, string | number | null>;
+  valor_comercial: string | number;
   fecha_registro: Date | string;
   creado_en: Date | string;
   actualizado_en: Date | string;
@@ -122,6 +125,7 @@ export interface DispositivoRow {
   sim_estado_id: string | null;
   sim_estado_codigo: string | null;
   sim_estado_nombre: string | null;
+  ultimo_resultado_offboarding: ResultadoOffboarding | null;
 }
 
 export interface DispositivoFilters {
@@ -146,6 +150,7 @@ export interface CrearDispositivoInput {
   ubicacionDetalle?: string | null;
   observaciones?: string | null;
   atributosEspecificos?: Record<string, string | number | null>;
+  valorComercial?: number;
   responsable: string;
 }
 
@@ -159,6 +164,28 @@ export interface ActualizarDispositivoInput {
   ubicacionDetalle?: string | null;
   observaciones?: string | null;
   atributosEspecificos?: Record<string, string | number | null>;
+  valorComercial?: number;
+}
+
+export interface ResumenGerencialRow {
+  total_cantidad: string | number;
+  total_valor: string | number;
+  disponibles_cantidad: string | number;
+  disponibles_valor: string | number;
+  asignados_cantidad: string | number;
+  asignados_valor: string | number;
+  extraviados_cantidad: string | number;
+  extraviados_valor: string | number;
+  bajas_cantidad: string | number;
+  bajas_valor: string | number;
+}
+
+export interface ResumenGerencial {
+  inventario: { cantidad: number; valor: number };
+  disponibles: { cantidad: number; valor: number };
+  asignados: { cantidad: number; valor: number };
+  extraviados: { cantidad: number; valor: number };
+  bajas: { cantidad: number; valor: number };
 }
 
 export interface AsignarColaboradorInput {
@@ -169,6 +196,7 @@ export interface AsignarColaboradorInput {
 
 export interface AsignarDepartamentoInput {
   departamentoId: number;
+  recibidoPorId: number;
   localidad?: string | null;
   ubicacionDetalle?: string | null;
   responsable: string;
@@ -178,10 +206,42 @@ export interface AsignarDepartamentoInput {
 export interface DevolverDispositivoInput {
   responsable: string;
   observaciones?: string | null;
+  condicion?: string | null;
+  resultado?: "DEVUELTO" | "DANADO";
+}
+
+export type ResultadoOffboarding =
+  | "DEVUELTO"
+  | "PENDIENTE"
+  | "NO_ENTREGADO"
+  | "EXTRAVIADO"
+  | "ROBADO_HURTADO"
+  | "DANADO";
+
+export interface RegistrarResultadoOffboardingInput {
+  resultado: ResultadoOffboarding;
+  responsable: string;
+  condicion?: string | null;
+  observaciones?: string | null;
 }
 
 export interface CambiarEstadoDispositivoInput {
   estadoId: number;
+  responsable: string;
+  observaciones?: string | null;
+}
+
+export type MotivoBaja =
+  | "IRREPARABLE"
+  | "REPARACION_NO_CONVENIENTE"
+  | "MULTIPLES_REPARACIONES"
+  | "OBSOLESCENCIA"
+  | "DANO_FISICO"
+  | "SIN_REPUESTOS"
+  | "OTRO";
+
+export interface DarBajaDispositivoInput {
+  motivo: MotivoBaja;
   responsable: string;
   observaciones?: string | null;
 }

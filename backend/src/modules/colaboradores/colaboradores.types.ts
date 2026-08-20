@@ -56,3 +56,25 @@ export interface ActualizarColaboradorInput {
   activo?: boolean;
   observaciones?: string | null;
 }
+
+export interface ActivoColaboradorRow {
+  dispositivo_id:string;codigo_inventario:number;tipo_dispositivo:string;
+  marca:string|null;modelo:string|null;numero_serie:string|null;imei:string|null;
+  valor_comercial:string|number;estado_codigo:string;estado_nombre:string;
+}
+
+export interface HistorialActivoColaboradorRow extends ActivoColaboradorRow {
+  fecha_asignacion:Date|string;fecha_devolucion:Date|string|null;
+  resultado:string;
+}
+
+export interface PendienteOffboardingRow {
+  colaborador_id:string;rut:string;nombre:string;cargo:string|null;localidad:string|null;
+  activo:boolean;observaciones:string|null;creado_en:Date|string;actualizado_en:Date|string;
+  departamento_id:string|null;departamento_nombre:string|null;
+  activos_pendientes:string|number;valor_pendiente:string|number;
+}
+
+export interface PendienteOffboarding {
+  colaborador:Colaborador;activosPendientes:number;valorPendiente:number;estado:"PENDIENTE";
+}

@@ -14,7 +14,7 @@ import { ToastViewport } from '../../shared/components/toast-viewport/toast-view
       <div class="shell">
         <aside [class.open]="sidebarOpen()"><app-sidebar (navigate)="sidebarOpen.set(false)" /></aside>
         @if (sidebarOpen()) { <button class="backdrop" aria-label="Cerrar menú" (click)="sidebarOpen.set(false)"></button> }
-        <section class="workspace"><main><router-outlet /></main></section>
+        <section class="workspace"><main><router-outlet /></main><footer class="app-footer"><div><strong>ITAM v3.0</strong><span>Information Technology Asset Management</span><span>Gestión de Activos de Tecnología de la Información</span></div><div><span>Sistema desarrollado para Aguas San Isidro.</span><span>Desarrollado por: Francisco Javier Ponce Barril</span><strong>Aguas San Isidro · 2026</strong></div></footer></section>
       </div>
       <app-confirmation-dialog /><app-toast-viewport />
     </div>

@@ -27,7 +27,9 @@ import {
   listarHistorialDispositivo,
   obtenerDispositivoPorCodigo,
   obtenerEstadoDispositivoPorCodigo,
-  obtenerEstadoDispositivoPorId
+  obtenerEstadoDispositivoPorId,
+  obtenerResumenGerencial,
+  registrarBajaDispositivo
 } from "./dispositivos.repository";
 import type {
   ActualizarDispositivoInput,
@@ -37,6 +39,7 @@ import type {
   ColaboradorResumen,
   CrearDispositivoInput,
   DepartamentoResumen,
+  DarBajaDispositivoInput,
   DevolverDispositivoInput,
   DispositivoFilters,
   DispositivoResumen,
@@ -44,8 +47,25 @@ import type {
   EstadoResumen,
   HistorialDispositivo,
   HistorialDispositivoRow,
+  RegistrarResultadoOffboardingInput,
+  ResumenGerencial,
   SimAsociadaResumen
 } from "./dispositivos.types";
+
+export const obtenerIndicadoresGerenciales = async (): Promise<ResumenGerencial> => {
+  const row = await obtenerResumenGerencial();
+  const metric = (cantidad: string | number, valor: string | number) => ({
+    cantidad: Number(cantidad) || 0,
+    valor: Number(valor) || 0
+  });
+  return {
+    inventario: metric(row.total_cantidad, row.total_valor),
+    disponibles: metric(row.disponibles_cantidad, row.disponibles_valor),
+    asignados: metric(row.asignados_cantidad, row.asignados_valor),
+    extraviados: metric(row.extraviados_cantidad, row.extraviados_valor),
+    bajas: metric(row.bajas_cantidad, row.bajas_valor)
+  };
+};
 import type { ConfiguracionFormularioTipo } from "../tipos-dispositivo/tipos-dispositivo.types";
 
 export const normalizeSpecificAttributes = (
@@ -217,6 +237,7 @@ const mapDispositivo = (
   ubicacionDetalle: row.ubicacion_detalle,
   observaciones: row.observaciones,
   atributosEspecificos: row.atributos_especificos,
+  valorComercial: Number(row.valor_comercial),
   fechaRegistro: toIsoDate(row.fecha_registro),
   creadoEn: toIsoDateTime(row.creado_en),
   actualizadoEn: toIsoDateTime(row.actualizado_en),
@@ -250,7 +271,8 @@ const mapDispositivo = (
     ? "COLABORADOR"
     : row.departamento_id
       ? "DEPARTAMENTO"
-      : "NONE"
+      : "NONE",
+  ultimoResultadoOffboarding: row.ultimo_resultado_offboarding
 });
 
 const custodySnapshot = (row: DispositivoRow) => {
@@ -507,6 +529,24 @@ export const actualizarDispositivoExistente = async (
   }
 };
 
+const assertSinOrdenServicioAbierta = async (
+  dispositivoId: string,
+  client: import("pg").PoolClient
+): Promise<void> => {
+  const result = await client.query(
+    `SELECT id FROM itam.ordenes_servicio_tecnico
+     WHERE dispositivo_id=$1
+       AND estado NOT IN ('CERRADA','BAJA','REPARACION_RECHAZADA')
+     LIMIT 1`,
+    [dispositivoId]
+  );
+  if (result.rows[0]) {
+    throw new ConflictError(
+      "El dispositivo tiene una orden de servicio técnico abierta."
+    );
+  }
+};
+
 export const asignarAColaborador = async (
   codigoInventario: number,
   input: AsignarColaboradorInput
@@ -533,6 +573,8 @@ export const asignarAColaborador = async (
     if (!anterior) {
       throw new NotFoundError("Dispositivo no encontrado.");
     }
+
+    await assertSinOrdenServicioAbierta(anterior.dispositivo_id, client);
 
     const actualizado = await asignarDispositivoAColaborador(
       codigoInventario,
@@ -582,6 +624,16 @@ export const asignarADepartamento = async (
     throw new NotFoundError("Departamento no encontrado.");
   }
 
+  const recepcionante = await obtenerColaboradorPorId(input.recibidoPorId);
+  if (!recepcionante || !recepcionante.activo) {
+    throw new NotFoundError("Persona que recepciona no encontrada o inactiva.");
+  }
+  if (recepcionante.departamento_id !== departamento.id) {
+    throw new ValidationError(
+      "La persona que recepciona debe pertenecer al departamento seleccionado."
+    );
+  }
+
   const estadoAsignado = await obtenerEstadoObligatorio("ASIGNADO");
   const client = await pool.connect();
 
@@ -597,9 +649,13 @@ export const asignarADepartamento = async (
       throw new NotFoundError("Dispositivo no encontrado.");
     }
 
+
+    await assertSinOrdenServicioAbierta(anterior.dispositivo_id, client);
+
     const actualizado = await asignarDispositivoADepartamento(
       codigoInventario,
       input.departamentoId,
+      input.recibidoPorId,
       estadoAsignado.id,
       input.localidad,
       input.ubicacionDetalle,
@@ -619,7 +675,16 @@ export const asignarADepartamento = async (
       input.observaciones,
       {
         custodiaAnterior: custodySnapshot(anterior),
-        custodiaNueva: custodySnapshot(actualizado)
+        custodiaNueva: custodySnapshot(actualizado),
+        recepcionadoPor: {
+          id: recepcionante.id,
+          nombre: recepcionante.nombre,
+          rut: recepcionante.rut,
+          cargo: recepcionante.cargo
+        },
+        responsableTi: input.responsable,
+        localidad: actualizado.localidad,
+        ubicacion: actualizado.ubicacion_detalle
       },
       client
     );
@@ -656,6 +721,9 @@ export const devolverDispositivoExistente = async (
       throw new NotFoundError("Dispositivo no encontrado.");
     }
 
+
+    await assertSinOrdenServicioAbierta(anterior.dispositivo_id, client);
+
     const actualizado = await devolverDispositivo(
       codigoInventario,
       estadoRetenido.id,
@@ -675,7 +743,9 @@ export const devolverDispositivoExistente = async (
       input.observaciones,
       {
         custodiaAnterior: custodySnapshot(anterior),
-        custodiaNueva: custodySnapshot(actualizado)
+        custodiaNueva: custodySnapshot(actualizado),
+        condicion: input.condicion ?? null,
+        resultado: input.resultado ?? "DEVUELTO"
       },
       client
     );
@@ -683,6 +753,63 @@ export const devolverDispositivoExistente = async (
     await client.query("COMMIT");
 
     return mapDispositivo(actualizado);
+  } catch (error) {
+    await client.query("ROLLBACK");
+    return normalizarErrorDispositivo(error);
+  } finally {
+    client.release();
+  }
+};
+
+export const registrarResultadoOffboarding = async (
+  codigoInventario: number,
+  input: RegistrarResultadoOffboardingInput
+): Promise<DispositivoResumen> => {
+  const esRecepcion = input.resultado === "DEVUELTO" || input.resultado === "DANADO";
+  const esPerdida = input.resultado === "EXTRAVIADO" || input.resultado === "ROBADO_HURTADO";
+  const estadoDestino = esRecepcion
+    ? await obtenerEstadoObligatorio("RETENIDO_REVISION")
+    : esPerdida
+      ? await obtenerEstadoObligatorio("EXTRAVIADO")
+      : null;
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+    const anterior = await obtenerDispositivoPorCodigo(codigoInventario, client);
+    if (!anterior) throw new NotFoundError("Dispositivo no encontrado.");
+    if (!anterior.colaborador_id) {
+      throw new ConflictError("El dispositivo no estÃ¡ bajo custodia directa de un colaborador.");
+    }
+    if (esRecepcion || esPerdida) {
+      await assertSinOrdenServicioAbierta(anterior.dispositivo_id, client);
+    }
+
+    let actualizado = anterior;
+    if (esRecepcion) {
+      actualizado = await devolverDispositivo(codigoInventario, estadoDestino!.id, client) ?? anterior;
+    } else if (esPerdida) {
+      actualizado = await cambiarEstadoDispositivo(codigoInventario, Number(estadoDestino!.id), client) ?? anterior;
+    }
+
+    await insertarHistorialDispositivo(
+      anterior.dispositivo_id,
+      esRecepcion ? "DEVOLVER_DISPOSITIVO" : "RESULTADO_OFFBOARDING",
+      anterior.estado_id,
+      estadoDestino?.id ?? anterior.estado_id,
+      input.responsable,
+      input.observaciones,
+      {
+        resultado: input.resultado,
+        condicion: input.condicion ?? null,
+        custodiaAnterior: custodySnapshot(anterior),
+        custodiaNueva: custodySnapshot(actualizado)
+      },
+      client
+    );
+    await client.query("COMMIT");
+    const refreshed = await obtenerDispositivoPorCodigo(codigoInventario);
+    return mapDispositivo(refreshed ?? actualizado);
   } catch (error) {
     await client.query("ROLLBACK");
     return normalizarErrorDispositivo(error);
@@ -717,6 +844,14 @@ export const cambiarEstadoDispositivoExistente = async (
       throw new NotFoundError("Dispositivo no encontrado.");
     }
 
+
+    await assertSinOrdenServicioAbierta(anterior.dispositivo_id, client);
+    if (estado.codigo === "DADO_BAJA") {
+      throw new ConflictError(
+        "Utilice la operación de baja con motivo obligatorio."
+      );
+    }
+
     const actualizado = await cambiarEstadoDispositivo(
       codigoInventario,
       input.estadoId,
@@ -742,6 +877,55 @@ export const cambiarEstadoDispositivoExistente = async (
 
     await client.query("COMMIT");
 
+    return mapDispositivo(actualizado);
+  } catch (error) {
+    await client.query("ROLLBACK");
+    return normalizarErrorDispositivo(error);
+  } finally {
+    client.release();
+  }
+};
+
+export const darDeBajaDispositivo = async (
+  codigoInventario: number,
+  input: DarBajaDispositivoInput
+): Promise<DispositivoResumen> => {
+  const estadoBaja = await obtenerEstadoObligatorio("DADO_BAJA");
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const anterior = await obtenerDispositivoPorCodigo(codigoInventario, client);
+    if (!anterior) throw new NotFoundError("Dispositivo no encontrado.");
+    const orden = await client.query<{id:string}>(
+      `SELECT id FROM itam.ordenes_servicio_tecnico
+       WHERE dispositivo_id=$1 AND estado NOT IN ('CERRADA','BAJA','REPARACION_RECHAZADA')
+       LIMIT 1 FOR UPDATE`,
+      [anterior.dispositivo_id]
+    );
+    if (orden.rows[0]) {
+      await client.query(
+        `UPDATE itam.ordenes_servicio_tecnico
+         SET estado='BAJA',decision='DAR_BAJA',motivo_decision=$2,
+             fecha_decision=NOW(),responsable_decision=$3
+         WHERE id=$1`,
+        [orden.rows[0].id,input.motivo,input.responsable]
+      );
+    }
+    const actualizado = await cambiarEstadoDispositivo(
+      codigoInventario,Number(estadoBaja.id),client
+    );
+    if (!actualizado) throw new NotFoundError("Dispositivo no encontrado.");
+    await registrarBajaDispositivo(
+      anterior.dispositivo_id,input.motivo,input.observaciones,
+      Number(anterior.valor_comercial),input.responsable,
+      orden.rows[0]?.id ?? null,client
+    );
+    await insertarHistorialDispositivo(
+      anterior.dispositivo_id,"DAR_BAJA",anterior.estado_id,estadoBaja.id,
+      input.responsable,input.observaciones,
+      {motivo:input.motivo,valorComercial:Number(anterior.valor_comercial)},client
+    );
+    await client.query("COMMIT");
     return mapDispositivo(actualizado);
   } catch (error) {
     await client.query("ROLLBACK");

@@ -11,14 +11,17 @@ export const listarDepartamentos = async (): Promise<
   const result = await pool.query<DepartamentoRow>(
     `
       SELECT
-        id,
-        nombre,
-        activo,
-        observaciones,
-        creado_en,
-        actualizado_en
-      FROM itam.departamentos
-      ORDER BY nombre ASC
+        departamento.id,
+        departamento.nombre,
+        departamento.activo,
+        departamento.observaciones,
+        departamento.dependencia_id,
+        dependencia.nombre AS dependencia_nombre,
+        departamento.creado_en,
+        departamento.actualizado_en
+      FROM itam.departamentos departamento
+      LEFT JOIN itam.departamentos dependencia ON dependencia.id = departamento.dependencia_id
+      ORDER BY departamento.nombre ASC
     `
   );
 
@@ -31,14 +34,17 @@ export const obtenerDepartamentoPorId = async (
   const result = await pool.query<DepartamentoRow>(
     `
       SELECT
-        id,
-        nombre,
-        activo,
-        observaciones,
-        creado_en,
-        actualizado_en
-      FROM itam.departamentos
-      WHERE id = $1
+        departamento.id,
+        departamento.nombre,
+        departamento.activo,
+        departamento.observaciones,
+        departamento.dependencia_id,
+        dependencia.nombre AS dependencia_nombre,
+        departamento.creado_en,
+        departamento.actualizado_en
+      FROM itam.departamentos departamento
+      LEFT JOIN itam.departamentos dependencia ON dependencia.id = departamento.dependencia_id
+      WHERE departamento.id = $1
       LIMIT 1
     `,
     [id]
@@ -53,14 +59,17 @@ export const obtenerDepartamentoPorNombre = async (
   const result = await pool.query<DepartamentoRow>(
     `
       SELECT
-        id,
-        nombre,
-        activo,
-        observaciones,
-        creado_en,
-        actualizado_en
-      FROM itam.departamentos
-      WHERE LOWER(BTRIM(nombre)) = LOWER(BTRIM($1))
+        departamento.id,
+        departamento.nombre,
+        departamento.activo,
+        departamento.observaciones,
+        departamento.dependencia_id,
+        dependencia.nombre AS dependencia_nombre,
+        departamento.creado_en,
+        departamento.actualizado_en
+      FROM itam.departamentos departamento
+      LEFT JOIN itam.departamentos dependencia ON dependencia.id = departamento.dependencia_id
+      WHERE LOWER(BTRIM(departamento.nombre)) = LOWER(BTRIM($1))
       LIMIT 1
     `,
     [nombre]
@@ -74,24 +83,25 @@ export const crearDepartamento = async (
 ): Promise<DepartamentoRow> => {
   const result = await pool.query<DepartamentoRow>(
     `
-      INSERT INTO itam.departamentos (
-        nombre,
-        activo,
-        observaciones
-      )
-      VALUES ($1, COALESCE($2, TRUE), $3)
-      RETURNING
-        id,
+      WITH inserted AS (INSERT INTO itam.departamentos (
         nombre,
         activo,
         observaciones,
-        creado_en,
-        actualizado_en
+        dependencia_id
+      )
+      VALUES ($1, COALESCE($2, TRUE), $3, $4)
+      RETURNING *)
+      SELECT inserted.id,inserted.nombre,inserted.activo,inserted.observaciones,
+        inserted.dependencia_id,dependencia.nombre dependencia_nombre,
+        inserted.creado_en,inserted.actualizado_en
+      FROM inserted
+      LEFT JOIN itam.departamentos dependencia ON dependencia.id=inserted.dependencia_id
     `,
     [
       input.nombre,
       input.activo ?? null,
-      input.observaciones ?? null
+      input.observaciones ?? null,
+      input.dependencia_id ?? null
     ]
   );
 
@@ -104,29 +114,31 @@ export const actualizarDepartamento = async (
 ): Promise<DepartamentoRow | null> => {
   const result = await pool.query<DepartamentoRow>(
     `
-      UPDATE itam.departamentos
+      WITH updated AS (UPDATE itam.departamentos
       SET
         nombre = COALESCE($2, nombre),
         activo = COALESCE($3, activo),
         observaciones = CASE
           WHEN $4::boolean THEN $5
           ELSE observaciones
-        END
+        END,
+        dependencia_id = CASE WHEN $6::boolean THEN $7 ELSE dependencia_id END
       WHERE id = $1
-      RETURNING
-        id,
-        nombre,
-        activo,
-        observaciones,
-        creado_en,
-        actualizado_en
+      RETURNING *)
+      SELECT updated.id,updated.nombre,updated.activo,updated.observaciones,
+        updated.dependencia_id,dependencia.nombre dependencia_nombre,
+        updated.creado_en,updated.actualizado_en
+      FROM updated
+      LEFT JOIN itam.departamentos dependencia ON dependencia.id=updated.dependencia_id
     `,
     [
       id,
       input.nombre ?? null,
       input.activo ?? null,
       input.observaciones !== undefined,
-      input.observaciones ?? null
+      input.observaciones ?? null,
+      input.dependencia_id !== undefined,
+      input.dependencia_id ?? null
     ]
   );
 
