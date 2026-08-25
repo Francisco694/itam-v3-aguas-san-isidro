@@ -59,6 +59,7 @@ export interface DispositivoResumen {
   observaciones: string | null;
   atributosEspecificos: Record<string, string | number | null>;
   valorComercial: number;
+  facturaAdquisicion:{id:string;numeroFactura:string;fechaFactura:string|null;proveedor:string|null;montoTotal:number|null;observaciones:string|null;referenciaDocumental:string|null;documento:{nombreOriginal:string;mimeType:string;tamanoBytes:number}|null}|null;
   fechaRegistro: string;
   creadoEn: string;
   actualizadoEn: string;
@@ -97,6 +98,16 @@ export interface DispositivoRow {
   observaciones: string | null;
   atributos_especificos: Record<string, string | number | null>;
   valor_comercial: string | number;
+  factura_adquisicion_id:string|null;
+  numero_factura:string|null;
+  fecha_factura:Date|string|null;
+  factura_proveedor:string|null;
+  factura_monto_total:string|number|null;
+  factura_observaciones:string|null;
+  factura_referencia_documental:string|null;
+  factura_documento_nombre_original:string|null;
+  factura_documento_mime_type:string|null;
+  factura_documento_tamano_bytes:string|number|null;
   fecha_registro: Date | string;
   creado_en: Date | string;
   actualizado_en: Date | string;
@@ -210,6 +221,18 @@ export interface DevolverDispositivoInput {
   resultado?: "DEVUELTO" | "DANADO";
 }
 
+export interface ComprobanteDevolucionResumen {
+  id: string;
+  numeroComprobante: string;
+  fecha: string;
+  resultado: "DEVUELTO" | "DANADO";
+}
+
+export interface ResultadoDevolucion {
+  dispositivo: DispositivoResumen;
+  comprobante: ComprobanteDevolucionResumen;
+}
+
 export type ResultadoOffboarding =
   | "DEVUELTO"
   | "PENDIENTE"
@@ -267,6 +290,9 @@ export interface HistorialDispositivoRow {
   observaciones: string | null;
   detalle: Record<string, unknown>;
   fecha_evento: Date | string;
+  usuario_ejecutor_id:string|null;
+  usuario_ejecutor_nombre:string|null;
+  usuario_ejecutor_email:string|null;
 }
 
 export interface HistorialDispositivo {
@@ -280,4 +306,5 @@ export interface HistorialDispositivo {
   observaciones: string | null;
   detalle: Record<string, unknown>;
   fechaEvento: string;
+  usuarioEjecutor:{id:string;nombre:string;email:string}|null;
 }

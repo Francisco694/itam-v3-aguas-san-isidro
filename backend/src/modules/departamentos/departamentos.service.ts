@@ -9,6 +9,7 @@ import {
 import {
   actualizarDepartamento,
   crearDepartamento,
+  dependenciaGeneraCiclo,
   listarDepartamentos,
   obtenerDepartamentoPorId,
   obtenerDepartamentoPorNombre
@@ -78,6 +79,14 @@ const validarDependencia = async (
   }
   if (!await obtenerDepartamentoPorId(dependenciaId)) {
     throw new NotFoundError("El departamento seleccionado como dependencia no existe.");
+  }
+  if (departamentoId !== undefined) {
+    const generaCiclo = await dependenciaGeneraCiclo(departamentoId, dependenciaId);
+    if (generaCiclo) {
+      throw new ValidationError(
+        "La dependencia seleccionada genera un ciclo organizacional."
+      );
+    }
   }
 };
 

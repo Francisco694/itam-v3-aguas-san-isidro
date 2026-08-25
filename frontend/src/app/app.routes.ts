@@ -1,10 +1,13 @@
 import { Routes } from '@angular/router';
 import { MainLayout } from './layout/main-layout/main-layout';
+import { authGuard } from './core/guards/auth.guard';
 
 export const routes: Routes = [
+  {path:'login',loadComponent:()=>import('./features/login/login').then(m=>m.Login)},
   {
     path: '',
     component: MainLayout,
+    canActivate:[authGuard],
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
       { path: 'dashboard', loadComponent: () => import('./features/dashboard/dashboard').then((m) => m.Dashboard) },
@@ -18,6 +21,9 @@ export const routes: Routes = [
       { path: 'offboarding', loadComponent: () => import('./features/offboarding/offboarding').then((m) => m.Offboarding) },
       { path: 'servicio-tecnico', loadComponent: () => import('./features/servicio-tecnico/servicio-tecnico').then((m) => m.ServicioTecnico) },
       { path: 'actas', loadComponent: () => import('./features/actas/actas').then((m) => m.Actas) },
+      { path: 'reportes', loadComponent: () => import('./features/reportes/reportes').then((m) => m.Reportes) },
+      { path: 'administracion/usuarios', loadComponent: () => import('./features/usuarios/usuarios').then((m) => m.Usuarios) },
+      { path: 'mi-acceso', loadComponent: () => import('./features/mi-acceso/mi-acceso').then((m) => m.MiAcceso) },
       { path: '**', loadComponent: () => import('./features/not-found/not-found').then((m) => m.NotFound) }
     ]
   }

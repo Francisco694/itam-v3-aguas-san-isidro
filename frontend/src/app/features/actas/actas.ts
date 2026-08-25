@@ -1,16 +1,18 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
-import { ActaEntrega } from '../../core/models/itam.models';
+import { ActaEntrega, ComprobanteDevolucion } from '../../core/models/itam.models';
 import { ActasEntregaService } from '../../core/services/actas-entrega.service';
+import { ComprobantesDevolucionService } from '../../core/services/comprobantes-devolucion.service';
 import { ActaPreview } from '../../shared/components/acta-preview/acta-preview';
 import { PageHeader } from '../../shared/components/page-header/page-header';
 import { ViewState } from '../../shared/components/view-state/view-state';
+import { ComprobanteDevolucionPreview } from '../../shared/components/document-preview/comprobante-devolucion-preview';
 import { formatClp } from '../../shared/utils/currency';
 import { errorMessage } from '../../shared/utils/error-message';
 @Component({
   selector: 'app-actas',
-  imports: [DatePipe, RouterLink, ActaPreview, PageHeader, ViewState],
+  imports: [DatePipe, RouterLink, ActaPreview, ComprobanteDevolucionPreview, PageHeader, ViewState],
   template: `<app-page-header
       title="Actas de entrega"
       subtitle="Documentos persistidos y numerados de asignaciones."
@@ -44,7 +46,9 @@ import { errorMessage } from '../../shared/utils/error-message';
                 <th>Destinatario</th>
                 <th>Equipos</th>
                 <th>Valor total</th>
-                <th></th>
+                <th>Estado</th>
+                <th>Devolución</th>
+                <th>Documentos</th>
               </tr>
             </thead>
             <tbody>
@@ -55,15 +59,18 @@ import { errorMessage } from '../../shared/utils/error-message';
                   <td>{{ acta.colaborador?.nombre || acta.departamento?.nombre }}</td>
                   <td>{{ acta.dispositivos.length }}</td>
                   <td>{{ clp(acta.valorTotal) }}</td>
-                  <td>
+                  <td><span class="state-pill">{{ statusLabel(acta.estadoDocumental) }}</span></td>
+                  <td>{{ returnedCount(acta) }} de {{ acta.dispositivos.length }}</td>
+                  <td><div class="actions">
                     <button
                       class="btn btn--secondary btn--small"
                       type="button"
                       (click)="selected.set(acta)"
                     >
-                      Ver documento
+                      Ver acta
                     </button>
-                  </td>
+                    @for(device of acta.dispositivos;track device.id){@if(device.devolucion){<button class="btn btn--ghost btn--small" type="button" (click)="openReturn(device.devolucion.id)">Ver {{device.devolucion.numeroComprobante}}</button>}@else if(device.devuelto){<small>Sin comprobante histórico</small>}}
+                  </div></td>
                 </tr>
               }
             </tbody>
@@ -77,15 +84,21 @@ import { errorMessage } from '../../shared/utils/error-message';
         [pdfUrl]="service.pdfUrl(acta.id)"
         (close)="selected.set(null)"
       />
-    }`,
+    }
+    @if(selectedReturn();as proof){<app-comprobante-devolucion-preview [comprobante]="proof" [pdfUrl]="returns.pdfUrl(proof.id)" (close)="selectedReturn.set(null)" />}`,
 })
 export class Actas implements OnInit {
   protected readonly service = inject(ActasEntregaService);
+  protected readonly returns = inject(ComprobantesDevolucionService);
   protected readonly items = signal<ActaEntrega[]>([]);
   protected readonly selected = signal<ActaEntrega | null>(null);
+  protected readonly selectedReturn = signal<ComprobanteDevolucion | null>(null);
   protected readonly loading = signal(true);
   protected readonly error = signal('');
   protected readonly clp = formatClp;
+  protected returnedCount(acta:ActaEntrega){return acta.dispositivos.filter(device=>device.devuelto).length;}
+  protected statusLabel(status:ActaEntrega['estadoDocumental']){return {VIGENTE:'Vigente',DEVOLUCION_PARCIAL:'Devolución parcial',CERRADA:'Devuelta',ANULADA:'Anulada'}[status];}
+  protected openReturn(id:string){this.returns.obtener(id).subscribe({next:proof=>this.selectedReturn.set(proof),error:e=>this.error.set(errorMessage(e))});}
   ngOnInit() {
     this.service.listar().subscribe({
       next: (items) => {

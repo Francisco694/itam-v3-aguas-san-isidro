@@ -28,3 +28,6 @@ backups/
 # Temporales
 tmp/
 temp/
+
+# Documentos privados cargados localmente
+backend/storage/

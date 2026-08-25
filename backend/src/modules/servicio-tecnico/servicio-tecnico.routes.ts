@@ -1,7 +1,10 @@
 import {Router} from "express";
-import {cerrarOrdenController,cotizarOrdenController,crearOrdenController,decidirOrdenController,listarOrdenesController,obtenerOrdenController} from "./servicio-tecnico.controller";
+import {cerrarOrdenController,cerrarTemporalController,cotizarOrdenController,crearOrdenController,decidirOrdenController,entregarTemporalController,envioPdfController,listarOrdenesController,obtenerOrdenController} from "./servicio-tecnico.controller";
 const router=Router();
 router.get("/",listarOrdenesController);router.get("/:id",obtenerOrdenController);
 router.post("/",crearOrdenController);router.patch("/:id/cotizacion",cotizarOrdenController);
+router.get("/:id/envio/pdf",envioPdfController);
 router.post("/:id/decision",decidirOrdenController);router.post("/:id/cerrar",cerrarOrdenController);
+router.post("/:id/equipo-temporal",entregarTemporalController);
+router.post("/:id/equipo-temporal/:entregaId/cerrar",cerrarTemporalController);
 export default router;

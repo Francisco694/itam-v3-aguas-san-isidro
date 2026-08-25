@@ -10,11 +10,12 @@ import {
   LucideX,
 } from '@lucide/angular';
 import { forkJoin } from 'rxjs';
-import { Colaborador, Dispositivo, PendienteOffboarding, ResultadoOffboarding } from '../../core/models/itam.models';
+import { Colaborador, ComprobanteDevolucion, Dispositivo, PendienteOffboarding, ResultadoOffboarding } from '../../core/models/itam.models';
 import { ColaboradoresService } from '../../core/services/colaboradores.service';
 import { DispositivosService } from '../../core/services/dispositivos.service';
+import { ComprobantesDevolucionService } from '../../core/services/comprobantes-devolucion.service';
 import { ToastService } from '../../core/services/toast.service';
-import { DocumentPreview } from '../../shared/components/document-preview/document-preview';
+import { ComprobanteDevolucionPreview } from '../../shared/components/document-preview/comprobante-devolucion-preview';
 import { PageHeader } from '../../shared/components/page-header/page-header';
 import { StatusBadge } from '../../shared/components/status-badge/status-badge';
 import { ViewState } from '../../shared/components/view-state/view-state';
@@ -30,7 +31,7 @@ interface EmployeeResult {
   selector: 'app-offboarding',
   imports: [
     ReactiveFormsModule,
-    DocumentPreview,
+    ComprobanteDevolucionPreview,
     PageHeader,
     StatusBadge,
     ViewState,
@@ -342,12 +343,10 @@ interface EmployeeResult {
         </form>
       </div>
     }
-    @if (receiptPreview(); as device) {
-      <app-document-preview
-        documentType="receipt"
-        [device]="device"
-        [collaborator]="selected()"
-        [observations]="lastObservations()"
+    @if (receiptPreview(); as proof) {
+      <app-comprobante-devolucion-preview
+        [comprobante]="proof"
+        [pdfUrl]="proofService.pdfUrl(proof.id)"
         (close)="receiptPreview.set(null)"
       />
     }
@@ -358,6 +357,7 @@ export class Offboarding implements OnInit {
   private readonly fb = inject(FormBuilder);
   private readonly peopleService = inject(ColaboradoresService);
   private readonly devicesService = inject(DispositivosService);
+  protected readonly proofService = inject(ComprobantesDevolucionService);
   private readonly toast = inject(ToastService);
   protected readonly searchForm = this.fb.nonNullable.group({
     query: ['', [Validators.required, Validators.minLength(2)]],
@@ -376,7 +376,7 @@ export class Offboarding implements OnInit {
   protected readonly selected = signal<Colaborador | null>(null);
   protected readonly selectedAssets = signal<Dispositivo[]>([]);
   protected readonly receiving = signal<Dispositivo | null>(null);
-  protected readonly receiptPreview = signal<Dispositivo | null>(null);
+  protected readonly receiptPreview = signal<ComprobanteDevolucion | null>(null);
   protected readonly lastObservations = signal('');
   protected readonly searching = signal(false);
   protected readonly searched = signal(false);
@@ -517,7 +517,8 @@ export class Offboarding implements OnInit {
       return;
     }
     request.subscribe({
-      next: (updated) => {
+      next: (result) => {
+        const updated = 'comprobante' in result ? result.dispositivo : result;
         this.allAssets.update((items) =>
           items.map((item) => (item.id === updated.id ? updated : item)),
         );
@@ -531,11 +532,16 @@ export class Offboarding implements OnInit {
         this.submitting.set(false);
         this.refreshSelectedAssets();
         this.loadGlobalSummary();
-        if (returned) this.receiptPreview.set(updated);
+        if (returned && 'comprobante' in result) {
+          this.proofService.obtener(result.comprobante.id).subscribe({
+            next: (proof) => this.receiptPreview.set(proof),
+            error: (error) => this.toast.warning('Devolución registrada', `No fue posible abrir el comprobante: ${errorMessage(error)}`),
+          });
+        }
         this.toast.success(
           'Resultado registrado',
           returned
-            ? 'La devolución quedó registrada en el historial.'
+            ? 'La devolución y su comprobante quedaron registrados.'
             : 'El activo continúa pendiente y su estado fue actualizado.',
         );
       },

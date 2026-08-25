@@ -12,4 +12,20 @@ export const listarActas=async():Promise<ActaRow[]>=>
 export const obtenerActa=async(id:number,client?:PoolClient):Promise<ActaRow|null>=>
  ((await (client??pool).query<ActaRow>(`${selectActa} WHERE a.id=$1`,[id])).rows[0]??null);
 export const listarDetalleActa=async(id:number,client?:PoolClient):Promise<ActaDetalleRow[]>=>
- (await (client??pool).query<ActaDetalleRow>(`SELECT * FROM itam.actas_entrega_detalle WHERE acta_entrega_id=$1 ORDER BY codigo_inventario`,[id])).rows;
+ (await (client??pool).query<ActaDetalleRow>(`SELECT detalle.*,
+   comprobante.id AS comprobante_id,
+   comprobante.numero_comprobante,
+   comprobante.fecha AS fecha_devolucion,
+   comprobante.resultado AS resultado_devolucion,
+   EXISTS(
+     SELECT 1 FROM itam.historial_eventos historial
+     WHERE historial.dispositivo_id=detalle.dispositivo_id
+       AND historial.tipo_evento='DEVOLVER_DISPOSITIVO'
+       AND historial.fecha_evento>=acta.fecha
+   ) AS devuelto_historico
+   FROM itam.actas_entrega_detalle detalle
+   INNER JOIN itam.actas_entrega acta ON acta.id=detalle.acta_entrega_id
+   LEFT JOIN itam.comprobantes_devolucion comprobante
+     ON comprobante.acta_entrega_detalle_id=detalle.id
+   WHERE detalle.acta_entrega_id=$1
+   ORDER BY detalle.codigo_inventario`,[id])).rows;

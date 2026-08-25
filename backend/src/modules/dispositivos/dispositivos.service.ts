@@ -1,6 +1,10 @@
 import { pool } from "../../config/database";
 import { obtenerColaboradorPorId } from "../colaboradores/colaboradores.repository";
 import { obtenerDepartamentoPorId } from "../departamentos/departamentos.repository";
+import {
+  buscarActaDetalleVigente,
+  crearComprobante
+} from "../comprobantes-devolucion/comprobantes-devolucion.repository";
 import { generateInventoryCodeByFamilyId } from "../inventory-codes/inventory-code.service";
 import {
   resolverTipoActivo,
@@ -48,6 +52,7 @@ import type {
   HistorialDispositivo,
   HistorialDispositivoRow,
   RegistrarResultadoOffboardingInput,
+  ResultadoDevolucion,
   ResumenGerencial,
   SimAsociadaResumen
 } from "./dispositivos.types";
@@ -238,6 +243,7 @@ const mapDispositivo = (
   observaciones: row.observaciones,
   atributosEspecificos: row.atributos_especificos,
   valorComercial: Number(row.valor_comercial),
+  facturaAdquisicion:row.factura_adquisicion_id&&row.numero_factura?{id:row.factura_adquisicion_id,numeroFactura:row.numero_factura,fechaFactura:row.fecha_factura?toIsoDate(row.fecha_factura):null,proveedor:row.factura_proveedor,montoTotal:row.factura_monto_total===null?null:Number(row.factura_monto_total),observaciones:row.factura_observaciones,referenciaDocumental:row.factura_referencia_documental,documento:row.factura_documento_nombre_original&&row.factura_documento_mime_type&&row.factura_documento_tamano_bytes!==null?{nombreOriginal:row.factura_documento_nombre_original,mimeType:row.factura_documento_mime_type,tamanoBytes:Number(row.factura_documento_tamano_bytes)}:null}:null,
   fechaRegistro: toIsoDate(row.fecha_registro),
   creadoEn: toIsoDateTime(row.creado_en),
   actualizadoEn: toIsoDateTime(row.actualizado_en),
@@ -327,7 +333,8 @@ const mapHistorial = (
   responsable: row.responsable,
   observaciones: row.observaciones,
   detalle: row.detalle,
-  fechaEvento: toIsoDateTime(row.fecha_evento)
+  fechaEvento: toIsoDateTime(row.fecha_evento),
+  usuarioEjecutor:row.usuario_ejecutor_id&&row.usuario_ejecutor_nombre&&row.usuario_ejecutor_email?{id:row.usuario_ejecutor_id,nombre:row.usuario_ejecutor_nombre,email:row.usuario_ejecutor_email}:null
 });
 
 const normalizarErrorDispositivo = (error: unknown): never => {
@@ -529,7 +536,7 @@ export const actualizarDispositivoExistente = async (
   }
 };
 
-const assertSinOrdenServicioAbierta = async (
+export const assertSinOrdenServicioAbierta = async (
   dispositivoId: string,
   client: import("pg").PoolClient
 ): Promise<void> => {
@@ -543,6 +550,23 @@ const assertSinOrdenServicioAbierta = async (
   if (result.rows[0]) {
     throw new ConflictError(
       "El dispositivo tiene una orden de servicio técnico abierta."
+    );
+  }
+};
+
+const assertCustodiaDisponible = (dispositivo: DispositivoRow): void => {
+  if (dispositivo.colaborador_id || dispositivo.departamento_id) {
+    throw new ConflictError(
+      "El dispositivo ya tiene un custodio vigente. Registre primero su devolución."
+    );
+  }
+};
+
+const assertNoTerminal = async (dispositivo: DispositivoRow): Promise<void> => {
+  const estado = await obtenerEstadoDispositivoPorId(Number(dispositivo.estado_id));
+  if (estado && ["EXTRAVIADO", "DADO_BAJA"].includes(estado.codigo)) {
+    throw new ConflictError(
+      `El dispositivo está en estado terminal ${estado.nombre} y no admite esta operación.`
     );
   }
 };
@@ -574,6 +598,8 @@ export const asignarAColaborador = async (
       throw new NotFoundError("Dispositivo no encontrado.");
     }
 
+    await assertNoTerminal(anterior);
+    assertCustodiaDisponible(anterior);
     await assertSinOrdenServicioAbierta(anterior.dispositivo_id, client);
 
     const actualizado = await asignarDispositivoAColaborador(
@@ -649,7 +675,8 @@ export const asignarADepartamento = async (
       throw new NotFoundError("Dispositivo no encontrado.");
     }
 
-
+    await assertNoTerminal(anterior);
+    assertCustodiaDisponible(anterior);
     await assertSinOrdenServicioAbierta(anterior.dispositivo_id, client);
 
     const actualizado = await asignarDispositivoADepartamento(
@@ -703,7 +730,14 @@ export const asignarADepartamento = async (
 export const devolverDispositivoExistente = async (
   codigoInventario: number,
   input: DevolverDispositivoInput
-): Promise<DispositivoResumen> => {
+): Promise<ResultadoDevolucion> =>
+  registrarDevolucionCentral(codigoInventario, input, "INVENTARIO");
+
+const registrarDevolucionCentral = async (
+  codigoInventario: number,
+  input: DevolverDispositivoInput,
+  origen: "INVENTARIO" | "OFFBOARDING"
+): Promise<ResultadoDevolucion> => {
   const estadoRetenido = await obtenerEstadoObligatorio(
     "RETENIDO_REVISION"
   );
@@ -722,7 +756,18 @@ export const devolverDispositivoExistente = async (
     }
 
 
+    await assertNoTerminal(anterior);
+    if (!anterior.colaborador_id && !anterior.departamento_id) {
+      throw new ConflictError("El dispositivo no tiene una custodia vigente que devolver.");
+    }
     await assertSinOrdenServicioAbierta(anterior.dispositivo_id, client);
+
+    const actaDetalleId = await buscarActaDetalleVigente(
+      anterior.dispositivo_id,
+      anterior.colaborador_id,
+      anterior.departamento_id,
+      client
+    );
 
     const actualizado = await devolverDispositivo(
       codigoInventario,
@@ -733,6 +778,22 @@ export const devolverDispositivoExistente = async (
     if (!actualizado) {
       throw new NotFoundError("Dispositivo no encontrado.");
     }
+
+    const comprobante = await crearComprobante(
+      {
+        dispositivoId: anterior.dispositivo_id,
+        actaEntregaDetalleId: actaDetalleId,
+        colaboradorId: anterior.colaborador_id,
+        departamentoId: anterior.departamento_id,
+        devueltoPorId: anterior.colaborador_id ?? anterior.recibido_por_id,
+        condicion: input.condicion,
+        resultado: input.resultado ?? "DEVUELTO",
+        observaciones: input.observaciones,
+        responsableTi: input.responsable,
+        origen
+      },
+      client
+    );
 
     await insertarHistorialDispositivo(
       actualizado.dispositivo_id,
@@ -745,14 +806,56 @@ export const devolverDispositivoExistente = async (
         custodiaAnterior: custodySnapshot(anterior),
         custodiaNueva: custodySnapshot(actualizado),
         condicion: input.condicion ?? null,
-        resultado: input.resultado ?? "DEVUELTO"
+        resultado: input.resultado ?? "DEVUELTO",
+        comprobanteDevolucionId: comprobante.id,
+        numeroComprobante: comprobante.numero_comprobante,
+        actaEntregaDetalleId: actaDetalleId,
+        origen
       },
       client
     );
+    await insertarHistorialDispositivo(
+      actualizado.dispositivo_id,
+      "GENERAR_COMPROBANTE_DEVOLUCION",
+      estadoRetenido.id,
+      estadoRetenido.id,
+      input.responsable,
+      input.observaciones,
+      {
+        comprobanteDevolucionId: comprobante.id,
+        numeroComprobante: comprobante.numero_comprobante,
+        actaEntregaDetalleId: actaDetalleId,
+        origen
+      },
+      client
+    );
+    if (origen === "OFFBOARDING") {
+      await insertarHistorialDispositivo(
+        actualizado.dispositivo_id,
+        "RECUPERAR_ACTIVO_OFFBOARDING",
+        estadoRetenido.id,
+        estadoRetenido.id,
+        input.responsable,
+        input.observaciones,
+        {
+          comprobanteDevolucionId: comprobante.id,
+          numeroComprobante: comprobante.numero_comprobante
+        },
+        client
+      );
+    }
 
     await client.query("COMMIT");
 
-    return mapDispositivo(actualizado);
+    return {
+      dispositivo: mapDispositivo(actualizado),
+      comprobante: {
+        id: comprobante.id,
+        numeroComprobante: comprobante.numero_comprobante,
+        fecha: toIsoDateTime(comprobante.fecha),
+        resultado: comprobante.resultado
+      }
+    };
   } catch (error) {
     await client.query("ROLLBACK");
     return normalizarErrorDispositivo(error);
@@ -764,14 +867,22 @@ export const devolverDispositivoExistente = async (
 export const registrarResultadoOffboarding = async (
   codigoInventario: number,
   input: RegistrarResultadoOffboardingInput
-): Promise<DispositivoResumen> => {
+): Promise<DispositivoResumen | ResultadoDevolucion> => {
   const esRecepcion = input.resultado === "DEVUELTO" || input.resultado === "DANADO";
   const esPerdida = input.resultado === "EXTRAVIADO" || input.resultado === "ROBADO_HURTADO";
-  const estadoDestino = esRecepcion
-    ? await obtenerEstadoObligatorio("RETENIDO_REVISION")
-    : esPerdida
-      ? await obtenerEstadoObligatorio("EXTRAVIADO")
-      : null;
+  if (esRecepcion) {
+    return registrarDevolucionCentral(
+      codigoInventario,
+      {
+        responsable: input.responsable,
+        observaciones: input.observaciones,
+        condicion: input.condicion,
+        resultado: input.resultado as "DEVUELTO" | "DANADO"
+      },
+      "OFFBOARDING"
+    );
+  }
+  const estadoDestino = esPerdida ? await obtenerEstadoObligatorio("EXTRAVIADO") : null;
   const client = await pool.connect();
 
   try {
@@ -781,20 +892,18 @@ export const registrarResultadoOffboarding = async (
     if (!anterior.colaborador_id) {
       throw new ConflictError("El dispositivo no estÃ¡ bajo custodia directa de un colaborador.");
     }
-    if (esRecepcion || esPerdida) {
+    if (esPerdida) {
       await assertSinOrdenServicioAbierta(anterior.dispositivo_id, client);
     }
 
     let actualizado = anterior;
-    if (esRecepcion) {
-      actualizado = await devolverDispositivo(codigoInventario, estadoDestino!.id, client) ?? anterior;
-    } else if (esPerdida) {
+    if (esPerdida) {
       actualizado = await cambiarEstadoDispositivo(codigoInventario, Number(estadoDestino!.id), client) ?? anterior;
     }
 
     await insertarHistorialDispositivo(
       anterior.dispositivo_id,
-      esRecepcion ? "DEVOLVER_DISPOSITIVO" : "RESULTADO_OFFBOARDING",
+      "RESULTADO_OFFBOARDING",
       anterior.estado_id,
       estadoDestino?.id ?? anterior.estado_id,
       input.responsable,

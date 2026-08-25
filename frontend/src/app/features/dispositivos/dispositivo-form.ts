@@ -1,10 +1,11 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { LucideMapPin, LucidePackagePlus, LucideSave } from '@lucide/angular';
-import { forkJoin, of } from 'rxjs';
-import { CampoEspecificoFormulario, Dispositivo, TipoDispositivo } from '../../core/models/itam.models';
+import { LucideDownload, LucideExternalLink, LucideFileText, LucideMapPin, LucidePackagePlus, LucideSave, LucideTrash2 } from '@lucide/angular';
+import { forkJoin, map, of, switchMap } from 'rxjs';
+import { CampoEspecificoFormulario, Dispositivo, FacturaDocumento, TipoDispositivo } from '../../core/models/itam.models';
 import { DispositivosService } from '../../core/services/dispositivos.service';
+import { FacturasAdquisicionService } from '../../core/services/facturas-adquisicion.service';
 import { TiposDispositivoService } from '../../core/services/tipos-dispositivo.service';
 import { AssetCreatedDialog } from '../../shared/components/asset-created-dialog/asset-created-dialog';
 import { PageHeader } from '../../shared/components/page-header/page-header';
@@ -53,7 +54,8 @@ export const typesForOperationalGroup = (
 @Component({
   selector: 'app-dispositivo-form',
   imports: [ReactiveFormsModule, RouterLink, PageHeader, ViewState,
-    AssetCreatedDialog, LucideMapPin, LucidePackagePlus, LucideSave],
+    AssetCreatedDialog, LucideDownload, LucideExternalLink, LucideFileText,
+    LucideMapPin, LucidePackagePlus, LucideSave, LucideTrash2],
   template: `
     <app-page-header [title]="codigo ? 'Editar Equipo' : 'Registrar Nuevo Equipo'"
       subtitle="Seleccione el activo y complete solamente sus datos técnicos disponibles."
@@ -106,6 +108,31 @@ export const typesForOperationalGroup = (
             <div class="selection-hint span-2">Seleccione el tipo específico para continuar.</div>
           }
         </div>
+        <header class="form-section-heading form-section-heading--secondary"><span><svg lucidePackagePlus></svg></span><div>
+          <h2>Antecedentes de adquisición</h2><p>Metadatos opcionales. ITAM no gestiona el proceso de compra.</p>
+        </div></header>
+        <div class="form-grid">
+          <div class="field"><label for="invoice-number">Número de factura</label><input id="invoice-number" maxlength="80" formControlName="numeroFactura" /></div>
+          <div class="field"><label for="invoice-date">Fecha</label><input id="invoice-date" type="date" formControlName="fechaFactura" /></div>
+          <div class="field"><label for="supplier">Proveedor</label><input id="supplier" maxlength="180" formControlName="proveedorFactura" /></div>
+          <div class="field"><label for="invoice-total">Monto total (CLP)</label><input id="invoice-total" type="number" min="0" step="1" formControlName="montoFactura" /></div>
+          <div class="field span-2 invoice-document-field">
+            <label for="invoice-document">Documento de factura (opcional)</label>
+            <p class="hint">Adjunte una copia digital de la factura en formato PDF o imagen (JPG, JPEG o PNG).</p>
+            <input #invoiceFileInput class="file-input" id="invoice-document" type="file"
+              accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+              (change)="onInvoiceFileSelected($event)" />
+            <div class="file-actions">
+              <label class="btn btn--secondary btn--small" for="invoice-document"><svg lucideFileText></svg>Seleccionar archivo</label>
+              @if(invoiceFile();as file){<span class="selected-file">{{file.name}}</span><button class="btn btn--ghost btn--small" type="button" (click)="removeInvoiceFile(invoiceFileInput)"><svg lucideTrash2></svg>Quitar selección</button>}
+            </div>
+            @if(existingInvoiceDocument();as document){<div class="existing-document"><span>Documento actual: <strong>{{document.nombreOriginal}}</strong></span><a class="btn btn--ghost btn--small" [href]="facturas.documentoUrl(existingInvoiceId(),false)" target="_blank" rel="noopener"><svg lucideExternalLink></svg>Ver documento</a><a class="btn btn--ghost btn--small" [href]="facturas.documentoUrl(existingInvoiceId(),true)"><svg lucideDownload></svg>Descargar</a></div>}
+            @if(invoiceFile()&&existingInvoiceDocument()){<p class="hint">El archivo seleccionado reemplazará al documento actual al guardar correctamente.</p>}
+            @if(invoiceFileError()){<p class="field-error">{{invoiceFileError()}}</p>}
+            <p class="hint">Formatos permitidos: PDF, JPG, JPEG, PNG. Tamaño máximo: 10 MB.</p>
+          </div>
+          <div class="field span-2"><label for="invoice-notes">Observaciones de adquisición</label><textarea id="invoice-notes" formControlName="observacionesFactura"></textarea></div>
+        </div>
 
         <header class="form-section-heading form-section-heading--secondary"><span><svg lucideMapPin></svg></span><div>
           <h2>Ubicación y contexto</h2><p>El alta no asigna custodia.</p>
@@ -121,11 +148,12 @@ export const typesForOperationalGroup = (
     }
     @if (created(); as device) { <app-asset-created-dialog [code]="device.codigoInventario" [assetType]="device.tipo.nombre" [detailLink]="['/dispositivos', device.codigoInventario]" [canAssign]="true" (close)="finish(device)" /> }
   `,
-  styles: [`.equipment-form{max-width:62rem;padding:0 1.5rem 1.5rem}.form-section-heading{align-items:center;background:linear-gradient(135deg,var(--navy),#07147c);color:#fff;display:flex;gap:.8rem;margin:0 -1.5rem 1.4rem;padding:1.15rem 1.5rem}.form-section-heading>span{align-items:center;background:rgba(0,180,216,.2);border-radius:.7rem;color:var(--cyan);display:flex;height:2.5rem;justify-content:center;width:2.5rem}.form-section-heading svg{height:1.15rem}.form-section-heading h2{font-size:1rem;margin:0}.form-section-heading p{color:#cbd5e1;font-size:.7rem;margin:.2rem 0 0}.form-section-heading--secondary{background:var(--gray-50);border-block:1px solid var(--gray-200);color:var(--navy);margin-top:1.4rem}.form-section-heading--secondary p{color:var(--slate-500)}.form-section-heading--secondary>span{background:var(--cyan-soft);color:var(--blue)}.selection-hint{background:var(--gray-50);border:1px dashed var(--gray-200);border-radius:.75rem;color:var(--slate-500);font-size:.78rem;padding:.9rem}`]
+  styles: [`.equipment-form{max-width:62rem;padding:0 1.5rem 1.5rem}.form-section-heading{align-items:center;background:linear-gradient(135deg,var(--navy),#07147c);color:#fff;display:flex;gap:.8rem;margin:0 -1.5rem 1.4rem;padding:1.15rem 1.5rem}.form-section-heading>span{align-items:center;background:rgba(0,180,216,.2);border-radius:.7rem;color:var(--cyan);display:flex;height:2.5rem;justify-content:center;width:2.5rem}.form-section-heading svg{height:1.15rem}.form-section-heading h2{font-size:1rem;margin:0}.form-section-heading p{color:#cbd5e1;font-size:.7rem;margin:.2rem 0 0}.form-section-heading--secondary{background:var(--gray-50);border-block:1px solid var(--gray-200);color:var(--navy);margin-top:1.4rem}.form-section-heading--secondary p{color:var(--slate-500)}.form-section-heading--secondary>span{background:var(--cyan-soft);color:var(--blue)}.selection-hint{background:var(--gray-50);border:1px dashed var(--gray-200);border-radius:.75rem;color:var(--slate-500);font-size:.78rem;padding:.9rem}.file-input{clip:rect(0 0 0 0);clip-path:inset(50%);height:1px;overflow:hidden;position:absolute;white-space:nowrap;width:1px}.file-actions,.existing-document{align-items:center;display:flex;flex-wrap:wrap;gap:.6rem}.selected-file{color:var(--slate-700);font-size:.78rem;font-weight:700;overflow-wrap:anywhere}.existing-document{background:var(--gray-50);border:1px solid var(--gray-200);border-radius:.7rem;margin-top:.7rem;padding:.7rem}.existing-document span{font-size:.74rem;margin-right:auto}.invoice-document-field .hint{margin:.25rem 0 .65rem}`]
 })
 export class DispositivoForm implements OnInit {
   private readonly fb = inject(FormBuilder);
   private readonly service = inject(DispositivosService);
+  protected readonly facturas = inject(FacturasAdquisicionService);
   private readonly typeService = inject(TiposDispositivoService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
@@ -136,11 +164,16 @@ export class DispositivoForm implements OnInit {
   protected readonly types = signal<TipoDispositivo[]>([]);
   protected readonly editingTypeId = signal('');
   protected readonly created = signal<Dispositivo | null>(null);
+  protected readonly invoiceFile = signal<File | null>(null);
+  protected readonly invoiceFileError = signal('');
+  protected readonly existingInvoiceDocument = signal<FacturaDocumento | null>(null);
+  protected readonly existingInvoiceId = signal('');
   protected readonly attributesForm = this.fb.group({ partNumber: [''], tipoCable: [''], longitud: [''], potencia: [''], tipoAdaptador: [''], cantidadPuertos: [''], nombrePeriferico: [''] });
   protected readonly form = this.fb.nonNullable.group({
     tipoPrincipal: ['', Validators.required], tipoDispositivoId: [''], marca: ['', Validators.maxLength(100)], modelo: ['', Validators.maxLength(150)],
     numeroSerie: ['', Validators.maxLength(150)], imei: ['', Validators.maxLength(30)], valorComercial: [0, [Validators.required,Validators.min(0),Validators.pattern(COMMERCIAL_VALUE_PATTERN)]], localidad: ['', Validators.maxLength(120)], ubicacionDetalle: ['', Validators.maxLength(250)],
-    observaciones: [''], responsable: ['', [Validators.required, Validators.maxLength(150)]], atributosEspecificos: this.attributesForm
+    observaciones: [''], responsable: ['', [Validators.required, Validators.maxLength(150)]], atributosEspecificos: this.attributesForm,
+    numeroFactura:['',Validators.maxLength(80)],fechaFactura:[''],proveedorFactura:['',Validators.maxLength(180)],montoFactura:[0,Validators.min(0)],observacionesFactura:['']
   });
   protected selectedGroupFamilyId(): string {
     const value = this.form.controls.tipoPrincipal.value;
@@ -164,9 +197,12 @@ export class DispositivoForm implements OnInit {
   private patchDevice(device: Dispositivo): void {
     this.editingTypeId.set(device.tipo.id);
     const grouped = device.tipo.familiaCodigoInventario?.agrupaTipos;
+    this.existingInvoiceDocument.set(device.facturaAdquisicion?.documento ?? null);
+    this.existingInvoiceId.set(device.facturaAdquisicion?.id ?? '');
     this.form.patchValue({ tipoPrincipal: grouped ? `group:${device.tipo.familiaCodigoInventario!.id}` : device.tipo.id, tipoDispositivoId: device.tipo.id,
       marca: device.marca || '', modelo: device.modelo || '', numeroSerie: device.numeroSerie || '', imei: device.imei || '', localidad: device.localidad || '',
-      ubicacionDetalle: device.ubicacionDetalle || '', valorComercial:device.valorComercial, observaciones: device.observaciones || '', atributosEspecificos: Object.fromEntries(Object.entries(device.atributosEspecificos).map(([key, value]) => [key, value === null ? '' : String(value)])) });
+      ubicacionDetalle: device.ubicacionDetalle || '', valorComercial:device.valorComercial, observaciones: device.observaciones || '', atributosEspecificos: Object.fromEntries(Object.entries(device.atributosEspecificos).map(([key, value]) => [key, value === null ? '' : String(value)])),
+      numeroFactura:device.facturaAdquisicion?.numeroFactura||'',fechaFactura:device.facturaAdquisicion?.fechaFactura||'',proveedorFactura:device.facturaAdquisicion?.proveedor||'',montoFactura:device.facturaAdquisicion?.montoTotal||0,observacionesFactura:device.facturaAdquisicion?.observaciones||'' });
     this.configureSpecificValidators();
   }
   protected onPrimarySelection(): void { const value = this.form.controls.tipoPrincipal.value; this.form.controls.tipoDispositivoId.setValue(value.startsWith('group:') ? '' : value); this.clearTechnicalFields(); this.configureSpecificValidators(); }
@@ -187,14 +223,55 @@ export class DispositivoForm implements OnInit {
     for (const field of this.visibility().camposEspecificos) { const value = raw[field.clave as keyof typeof raw]; if (value === null || value === undefined || String(value).trim() === '') continue; result[field.clave] = field.tipo === 'number' ? Number(value) : String(value).trim(); }
     return result;
   }
+  protected onInvoiceFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0] ?? null;
+    this.invoiceFileError.set('');
+    if (!file) { this.invoiceFile.set(null); return; }
+    const extension = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
+    const validMime = ['application/pdf', 'image/jpeg', 'image/png'].includes(file.type);
+    const validExtension = ['.pdf', '.jpg', '.jpeg', '.png'].includes(extension);
+    if (!validMime || !validExtension) {
+      this.invoiceFile.set(null); input.value = '';
+      this.invoiceFileError.set('Formato no permitido. Adjunte un archivo PDF, JPG, JPEG o PNG.');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      this.invoiceFile.set(null); input.value = '';
+      this.invoiceFileError.set('El archivo supera el tamaño máximo permitido de 10 MB.');
+      return;
+    }
+    if (file.size === 0) {
+      this.invoiceFile.set(null); input.value = '';
+      this.invoiceFileError.set('El archivo seleccionado está vacío.');
+      return;
+    }
+    this.invoiceFile.set(file);
+  }
+  protected removeInvoiceFile(input: HTMLInputElement): void {
+    input.value = '';
+    this.invoiceFile.set(null);
+    this.invoiceFileError.set('');
+  }
   protected submit(): void {
     const selected = this.selectedType(); if (this.form.invalid || !selected || (!this.codigo && !allowsDeviceCreation(selected))) { this.form.markAllAsTouched(); this.form.controls.tipoDispositivoId.markAsTouched(); this.apiError.set(!selected ? 'Seleccione un tipo de activo válido.' : ''); return; }
-    this.submitting.set(true); this.apiError.set(''); const value = this.form.getRawValue(); const visible = this.visibility();
+    const value = this.form.getRawValue();
+    if (this.invoiceFile() && !value.numeroFactura.trim()) {
+      this.invoiceFileError.set('Ingrese el número de factura para asociar el documento.');
+      return;
+    }
+    this.submitting.set(true); this.apiError.set(''); const visible = this.visibility();
     const base = { tipoDispositivoId: Number(selected.id), marca: visible.marca ? value.marca.trim() || null : null, modelo: visible.modelo ? value.modelo.trim() || null : null,
       numeroSerie: visible.numeroSerie ? value.numeroSerie.trim() || null : null, imei: visible.imei ? value.imei.trim() || null : null,
       valorComercial:Number(value.valorComercial),
       atributosEspecificos: this.specificAttributes(), localidad: value.localidad.trim() || null, ubicacionDetalle: value.ubicacionDetalle.trim() || null, observaciones: value.observaciones.trim() || null };
-    const request = this.codigo ? this.service.actualizar(this.codigo, base) : this.service.crear({ ...base, responsable: value.responsable.trim() });
+    const deviceRequest = this.codigo ? this.service.actualizar(this.codigo, base) : this.service.crear({ ...base, responsable: value.responsable.trim() });
+    const request=deviceRequest.pipe(switchMap((item)=>{
+      const numero=value.numeroFactura.trim();if(!numero)return of(item);
+      const factura={numeroFactura:numero,fechaFactura:value.fechaFactura||null,proveedor:value.proveedorFactura.trim()||null,montoTotal:Number(value.montoFactura)||null,observaciones:value.observacionesFactura.trim()||null,referenciaDocumental:null,dispositivosCodigos:[item.codigoInventario]};
+      const existing=item.facturaAdquisicion;
+      return(existing?this.facturas.actualizar(existing.id,factura,this.invoiceFile()??undefined):this.facturas.crear(factura,this.invoiceFile()??undefined)).pipe(map(()=>item));
+    }));
     request.subscribe({ next: (item) => { this.submitting.set(false); if (this.codigo) void this.router.navigate(['/dispositivos', item.codigoInventario]); else this.created.set(item); }, error: (error) => { this.apiError.set(errorMessage(error)); this.submitting.set(false); } });
   }
   protected finish(device: Dispositivo): void { void this.router.navigate(['/dispositivos', device.codigoInventario]); }

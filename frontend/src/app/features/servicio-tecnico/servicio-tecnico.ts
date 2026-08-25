@@ -179,6 +179,14 @@ interface FlowStage {
                 <p>Comparación informativa; la decisión continúa bajo responsabilidad de TI.</p>
               }
             </section>
+            <section class="temporary-panel">
+              <header><div><span>CUSTODIA Y CONTINUIDAD</span><h3>Equipo temporal</h3></div></header>
+              <p>Custodio al ingreso: <strong>{{ order.custodiaAlIngreso?.colaborador?.nombre || order.custodiaAlIngreso?.departamento?.nombre || 'Sin custodia' }}</strong>. La recepción física por TI no crea una segunda custodia.</p>
+              @if(order.entregasTemporales.length){@for(delivery of order.entregasTemporales;track delivery.id){<article class="temporary-item"><div><strong>{{delivery.dispositivo.tipo}} {{delivery.dispositivo.codigoInventario}}</strong><small>{{delivery.colaborador.nombre}} · {{delivery.fechaEntrega|date:'dd/MM/yyyy HH:mm'}}</small></div><span class="state-pill">{{delivery.estado==='ABIERTA'?'En uso':'Devuelto'}}</span></article>@if(delivery.estado==='ABIERTA'){<form [formGroup]="temporaryCloseForm" (ngSubmit)="closeTemporary(order,delivery.id)"><div class="field"><label>Responsable TI *</label><input formControlName="responsable" /></div><div class="field"><label>Observaciones de devolución</label><textarea formControlName="observaciones"></textarea></div><button class="btn btn--secondary" [disabled]="submitting()">Registrar devolución temporal</button></form>}}}
+              @if(!openTemporary(order) && order.custodiaAlIngreso?.colaborador && technicalStage(order.estado)!=='READ_ONLY'){
+                <form [formGroup]="temporaryForm" (ngSubmit)="deliverTemporary(order)"><div class="notice notice--info">Acción contextual: el activo temporal conserva su propio código y debe estar Disponible.</div><div class="field"><label>Código ITAM del equipo temporal *</label><input type="number" min="1" formControlName="dispositivoCodigo" /></div><div class="field"><label>Responsable TI *</label><input formControlName="responsable" /></div><div class="field"><label>Observaciones</label><textarea formControlName="observaciones"></textarea></div><button class="btn btn--secondary" [disabled]="submitting()">Entregar equipo temporal</button></form>
+              }
+            </section>
             @if (order.estado === 'PENDIENTE_DIAGNOSTICO') {
               <form [formGroup]="quoteForm" (ngSubmit)="quote(order)">
                 <h3>Registrar cotización</h3>
@@ -559,6 +567,7 @@ interface FlowStage {
         color: var(--slate-500);
         margin: 0.35rem 0 0;
       }
+      .temporary-panel{background:var(--gray-50);border:1px solid var(--gray-200);border-radius:.9rem;margin:1rem 1.2rem;padding:1rem}.temporary-panel>header span{color:var(--blue);font-size:.6rem;font-weight:850;letter-spacing:.1em}.temporary-panel h3{margin:.2rem 0}.temporary-panel>p{color:var(--slate-600);font-size:.75rem}.temporary-item{align-items:center;background:#fff;border:1px solid var(--gray-200);border-radius:.7rem;display:flex;justify-content:space-between;margin:.7rem 0;padding:.75rem}.temporary-item small{color:var(--slate-500);display:block;margin-top:.2rem}.temporary-panel form{border-top:1px solid var(--gray-200);margin-top:.8rem;padding-top:.8rem}
       @media (max-width: 900px) {
         .technical-layout {
           grid-template-columns: 1fr;
@@ -610,6 +619,8 @@ export class ServicioTecnico implements OnInit {
     resultado: ['', Validators.required],
     responsable: ['', Validators.required],
   });
+  protected readonly temporaryForm=this.fb.nonNullable.group({dispositivoCodigo:[0,[Validators.required,Validators.min(1)]],responsable:['',Validators.required],observaciones:['']});
+  protected readonly temporaryCloseForm=this.fb.nonNullable.group({responsable:['',Validators.required],observaciones:['']});
   ngOnInit(): void {
     this.load();
   }
@@ -646,7 +657,13 @@ export class ServicioTecnico implements OnInit {
       responsable: '',
     });
     this.closeForm.reset({ costoFinal: 0, fechaRetorno: '', resultado: '', responsable: '' });
+    this.temporaryForm.reset({dispositivoCodigo:0,responsable:'',observaciones:''});
+    this.temporaryCloseForm.reset({responsable:'',observaciones:''});
   }
+
+  protected openTemporary(order:OrdenServicio){return order.entregasTemporales.find(item=>item.estado==='ABIERTA')??null;}
+  protected deliverTemporary(order:OrdenServicio){if(this.temporaryForm.invalid){this.temporaryForm.markAllAsTouched();return;}const value=this.temporaryForm.getRawValue();this.perform(this.service.entregarTemporal(order.id,{...value,observaciones:value.observaciones.trim()||null}));}
+  protected closeTemporary(order:OrdenServicio,deliveryId:string){if(this.temporaryCloseForm.invalid){this.temporaryCloseForm.markAllAsTouched();return;}const value=this.temporaryCloseForm.getRawValue();this.perform(this.service.cerrarTemporal(order.id,deliveryId,{...value,observaciones:value.observaciones.trim()||null}));}
 
   protected statusLabel(state: EstadoOrdenServicio): string {
     const labels: Record<EstadoOrdenServicio, string> = {

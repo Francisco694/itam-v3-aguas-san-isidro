@@ -1,7 +1,7 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { LucideCamera, LucidePlus, LucideScanBarcode, LucideSearch, LucideSlidersHorizontal } from '@lucide/angular';
+import { LucideCamera, LucideDownload, LucidePlus, LucideScanBarcode, LucideSearch, LucideSlidersHorizontal } from '@lucide/angular';
 import { Departamento, Dispositivo, Estado, TipoDispositivo } from '../../core/models/itam.models';
 import { DepartamentosService } from '../../core/services/departamentos.service';
 import { DispositivosService } from '../../core/services/dispositivos.service';
@@ -9,6 +9,7 @@ import { EstadosService } from '../../core/services/estados.service';
 import { ToastService } from '../../core/services/toast.service';
 import { TiposDispositivoService } from '../../core/services/tipos-dispositivo.service';
 import { PageHeader } from '../../shared/components/page-header/page-header';
+import { QrScanner } from '../../shared/components/qr-scanner/qr-scanner';
 import { StatusBadge } from '../../shared/components/status-badge/status-badge';
 import { ViewState } from '../../shared/components/view-state/view-state';
 import { errorMessage } from '../../shared/utils/error-message';
@@ -26,9 +27,10 @@ export const inventoryStateCount = (
 
 @Component({
   selector: 'app-dispositivos-list',
-  imports: [FormsModule, RouterLink, PageHeader, StatusBadge, ViewState, LucideCamera, LucidePlus, LucideScanBarcode, LucideSearch, LucideSlidersHorizontal],
+  imports: [FormsModule, RouterLink, PageHeader, QrScanner, StatusBadge, ViewState, LucideCamera, LucideDownload, LucidePlus, LucideScanBarcode, LucideSearch, LucideSlidersHorizontal],
   template: `
     <app-page-header title="Inventario de Equipos" subtitle="Control físico, custodias y condición operativa de los activos.">
+      <button class="btn btn--secondary" type="button" [disabled]="!items().length" (click)="exportCsv()"><svg lucideDownload></svg> Exportar CSV</button>
       <a class="btn btn--primary" routerLink="nuevo"><svg lucidePlus></svg> Nuevo Equipo</a>
     </app-page-header>
     <section class="scan-card" aria-labelledby="scan-title">
@@ -38,8 +40,14 @@ export const inventoryStateCount = (
         <div class="scan-input"><svg lucideSearch aria-hidden="true"></svg><input id="asset-search" name="assetSearch" [(ngModel)]="quickQuery" (keydown.enter)="$event.preventDefault(); quickSearch()" autocomplete="off" inputmode="search" placeholder="Código de inventario, serie, marca o modelo..." /><button class="btn btn--primary" type="submit" [disabled]="quickLoading()">{{ quickLoading() ? 'Buscando…' : 'Buscar' }}</button></div>
         <p>Los lectores USB funcionan como teclado: escanee el activo y presione Enter.</p>
       </form>
-      <button class="camera-button" type="button" disabled title="Lectura mediante cámara pendiente de implementación real"><svg lucideCamera></svg><span>Cámara<small>Próximamente</small></span></button>
+      <button class="camera-button" type="button" (click)="scannerOpen.set(true)"><svg lucideCamera></svg><span>Escanear QR<small>Usar camara</small></span></button>
     </section>
+    @if (scannerOpen()) {
+      <app-qr-scanner
+        (scanned)="openScannedAsset($event)"
+        (cancelled)="scannerOpen.set(false)"
+      />
+    }
     <nav class="state-shortcuts" aria-label="Filtros rápidos por estado">
       @for(shortcut of shortcuts;track shortcut.code){<button type="button" [class.active]="filters.estado===shortcut.code" (click)="selectState(shortcut.code)"><span>{{shortcut.label}}</span><strong>{{stateCount(shortcut.code)}}</strong></button>}
     </nav>
@@ -82,6 +90,7 @@ export class DispositivosList implements OnInit {
   protected readonly shortcuts=[{code:'',label:'Todos'},{code:'DISPONIBLE',label:'Disponibles'},{code:'ASIGNADO',label:'Asignados'},{code:'SERVICIO_TECNICO',label:'Servicio Técnico'},{code:'EXTRAVIADO',label:'Extraviados'},{code:'DADO_BAJA',label:'Dados de Baja'}];
   protected readonly loading = signal(true);
   protected readonly quickLoading = signal(false);
+  protected readonly scannerOpen = signal(false);
   protected readonly error = signal('');
   protected quickQuery = '';
   protected filters = { q: '', tipoDispositivoId: '', estado: '', departamentoId: '', localidad: '' };
@@ -108,12 +117,38 @@ export class DispositivosList implements OnInit {
     this.filters.q = query;
     this.load();
   }
+  protected openScannedAsset(code: number): void {
+    this.scannerOpen.set(false);
+    this.quickLoading.set(true);
+    this.service.obtener(code).subscribe({
+      next: (item) => {
+        this.quickLoading.set(false);
+        void this.router.navigate(['/dispositivos', item.codigoInventario]);
+      },
+      error: (requestError) => {
+        this.quickLoading.set(false);
+        this.toast.error('Activo no encontrado', errorMessage(requestError));
+      }
+    });
+  }
   protected load(): void {
     this.loading.set(true); this.error.set('');
     this.service.listar({ q: this.filters.q || undefined, tipoDispositivoId: this.filters.tipoDispositivoId ? Number(this.filters.tipoDispositivoId) : undefined, estado: this.filters.estado || undefined, departamentoId: this.filters.departamentoId ? Number(this.filters.departamentoId) : undefined, localidad: this.filters.localidad || undefined }).subscribe({ next: (items) => { this.items.set(items); this.loading.set(false); }, error: (error) => { this.error.set(errorMessage(error)); this.loading.set(false); } });
   }
   protected clear(): void { this.filters = { q: '', tipoDispositivoId: '', estado: '', departamentoId: '', localidad: '' }; this.load(); }
   protected custody(item: Dispositivo): string { return item.colaborador?.nombre || item.departamento?.nombre || 'Sin responsable'; }
+  protected exportCsv():void {
+    const headers=['Código ITAM','Tipo','Marca','Modelo','Número de serie','IMEI','Estado','Custodio','Departamento','Dependencia','Ubicación','Valor comercial','Fecha registro'];
+    const rows=this.items().map((item)=>{
+      const departmentId=item.departamento?.id||item.colaborador?.departamento?.id;
+      const department=departmentId?this.departments().find((candidate)=>candidate.id===departmentId):undefined;
+      return [item.codigoInventario,item.tipo.nombre,item.marca,item.modelo,item.numeroSerie,item.imei,item.estado.nombre,this.custody(item),department?.nombre,department?.dependencia_nombre,item.localidad||item.ubicacionDetalle,item.valorComercial,item.fechaRegistro];
+    });
+    const escape=(value:unknown):string=>'"'+String(value??'').replace(/"/g,'""')+'"';
+    const csv='\uFEFF'+[headers,...rows].map((row)=>row.map(escape).join(';')).join('\r\n');
+    const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+    const link=document.createElement('a');link.href=url;link.download='inventario-itam-'+new Date().toISOString().slice(0,10)+'.csv';link.click();URL.revokeObjectURL(url);
+  }
   protected emptyTitle():string {
     if(!this.allItems().length)return 'No hay dispositivos registrados';
     if(this.hasCombinedFilters())return 'Sin resultados para los filtros aplicados';

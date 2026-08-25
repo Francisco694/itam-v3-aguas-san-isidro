@@ -8,16 +8,16 @@ const startServer = async (): Promise<void> => {
 
     console.log("PostgreSQL conectado correctamente");
 
-    app.listen(env.port, () => {
+    app.listen(env.port, env.host, () => {
       console.log("========================================");
       console.log(" ITAM v3.0 - Aguas San Isidro");
       console.log(" Backend iniciado correctamente");
-      console.log(` API: http://localhost:${env.port}`);
+      console.log(` API: http://${env.host}:${env.port}`);
       console.log(
-        ` Health: http://localhost:${env.port}/api/v1/health`
+        ` Health: http://${env.host}:${env.port}/api/v1/health`
       );
       console.log(
-        ` Database: http://localhost:${env.port}/api/v1/health/database`
+        ` Database: http://${env.host}:${env.port}/api/v1/health/database`
       );
       console.log("========================================");
     });

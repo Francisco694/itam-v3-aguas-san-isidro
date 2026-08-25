@@ -78,6 +78,28 @@ export const obtenerDepartamentoPorNombre = async (
   return result.rows[0] ?? null;
 };
 
+export const dependenciaGeneraCiclo = async (
+  departamentoId: number,
+  dependenciaId: number
+): Promise<boolean> => {
+  const result = await pool.query<{ genera_ciclo: boolean }>(
+    `
+      WITH RECURSIVE ascendencia AS (
+        SELECT id, dependencia_id
+        FROM itam.departamentos
+        WHERE id = $2
+        UNION ALL
+        SELECT padre.id, padre.dependencia_id
+        FROM itam.departamentos padre
+        INNER JOIN ascendencia actual ON padre.id = actual.dependencia_id
+      )
+      SELECT EXISTS (SELECT 1 FROM ascendencia WHERE id = $1) AS genera_ciclo
+    `,
+    [departamentoId, dependenciaId]
+  );
+  return result.rows[0]?.genera_ciclo ?? false;
+};
+
 export const crearDepartamento = async (
   input: CrearDepartamentoInput
 ): Promise<DepartamentoRow> => {

@@ -46,3 +46,10 @@ La familia y su prefijo son configuración técnica interna: no se solicitan dur
 La vista Angular genera Code 128 real con el valor numérico del código ITAM. La etiqueta mide `50mm × 25mm` y contiene únicamente empresa, sistema, código y tipo de activo. La impresión actual utiliza el diálogo del navegador sobre A4 a escala 100%.
 
 La impresora productiva prevista es Zebra ZD421. Una fase posterior podrá generar ZPL en backend usando los mismos datos de etiqueta; no se implementa comunicación directa con la impresora en esta etapa.
+## Etiqueta QR de activos
+
+La identidad del activo continúa siendo su codigo_inventario; el QR no crea ni reemplaza códigos ITAM. La etiqueta principal mide 50 × 30 mm e incluye únicamente empresa, QR, código visible y tipo de dispositivo.
+
+El contenido del QR es la ruta estable /dispositivos/:codigoInventario resuelta contra assetDetailBaseUrl del environment Angular. Si la base está vacía se utiliza el origen actual de la aplicación. No se almacena un dominio productivo ficticio.
+
+La impresión usa window.print() y CSS de impresión, sin acoplamiento a un fabricante específico.

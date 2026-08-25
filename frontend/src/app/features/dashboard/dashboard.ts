@@ -6,6 +6,7 @@ import {
   LucideCardSim,
   LucideCircleAlert,
   LucideCircleCheck,
+  LucideChartNoAxesCombined,
   LucideDynamicIcon,
   LucideFileText,
   LucidePackage,
@@ -379,6 +380,14 @@ export class Dashboard implements OnInit {
             route: '/offboarding',
             tone: 'offboarding',
             icon: LucideUserMinus,
+          },
+          {
+            title: 'Reportes',
+            value: 'Por período',
+            meta: 'Movimientos, valorización y distribución organizacional',
+            route: '/reportes',
+            tone: 'documents',
+            icon: LucideChartNoAxesCombined,
           },
         ]);
         const counts = new Map<string, number>();

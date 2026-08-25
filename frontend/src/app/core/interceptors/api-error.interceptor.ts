@@ -8,7 +8,7 @@ const isApiErrorBody = (value: unknown): value is ApiErrorBody => {
   return !!apiError && typeof apiError === 'object' && 'code' in apiError && 'message' in apiError;
 };
 
-export const apiErrorInterceptor: HttpInterceptorFn = (request, next) => next(request).pipe(
+export const apiErrorInterceptor: HttpInterceptorFn = (request, next) => next(request.clone({withCredentials:true})).pipe(
   catchError((error: HttpErrorResponse) => {
     if (isApiErrorBody(error.error)) {
       return throwError(() => new ApiError(error.error.error.code, error.error.error.message, error.status));

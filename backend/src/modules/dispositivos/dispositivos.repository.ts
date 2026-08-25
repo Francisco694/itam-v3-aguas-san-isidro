@@ -1,5 +1,6 @@
 import type { Pool, PoolClient } from "pg";
 import { pool } from "../../config/database";
+import { currentUserId } from "../../shared/auth-context";
 import type {
   ActualizarDispositivoInput,
   CrearDispositivoInput,
@@ -41,6 +42,16 @@ const dispositivoSelect = `
     d.observaciones,
     d.atributos_especificos,
     d.valor_comercial,
+    factura.id AS factura_adquisicion_id,
+    factura.numero_factura,
+    factura.fecha_factura,
+    factura.proveedor AS factura_proveedor,
+    factura.monto_total AS factura_monto_total,
+    factura.observaciones AS factura_observaciones,
+    factura.referencia_documental AS factura_referencia_documental,
+    factura.documento_nombre_original AS factura_documento_nombre_original,
+    factura.documento_mime_type AS factura_documento_mime_type,
+    factura.documento_tamano_bytes AS factura_documento_tamano_bytes,
     d.fecha_registro,
     d.creado_en,
     d.actualizado_en,
@@ -89,6 +100,8 @@ const dispositivoSelect = `
     ON s.dispositivo_id = d.id
   LEFT JOIN itam.estados sim_estado
     ON sim_estado.id = s.estado_id
+  LEFT JOIN itam.facturas_adquisicion factura
+    ON factura.id = d.factura_adquisicion_id
   LEFT JOIN LATERAL (
     SELECT h.detalle->>'resultado' AS resultado
     FROM itam.historial_eventos h
@@ -552,7 +565,8 @@ export const insertarHistorialDispositivo = async (
         estado_nuevo_id,
         responsable,
         observaciones,
-        detalle
+        detalle,
+        usuario_ejecutor_id
       )
       VALUES (
         'DISPOSITIVO',
@@ -562,7 +576,8 @@ export const insertarHistorialDispositivo = async (
         $4,
         $5,
         $6,
-        $7::jsonb
+        $7::jsonb,
+        $8
       )
     `,
     [
@@ -572,7 +587,8 @@ export const insertarHistorialDispositivo = async (
       estadoNuevoId,
       responsable,
       observaciones ?? null,
-      JSON.stringify(detalle)
+      JSON.stringify(detalle),
+      currentUserId()
     ]
   );
 };
@@ -596,7 +612,10 @@ export const listarHistorialDispositivo = async (
         h.responsable,
         h.observaciones,
         h.detalle,
-        h.fecha_evento
+        h.fecha_evento,
+        h.usuario_ejecutor_id,
+        ejecutor.nombre AS usuario_ejecutor_nombre,
+        ejecutor.email AS usuario_ejecutor_email
       FROM itam.historial_eventos h
       INNER JOIN itam.dispositivos d
         ON d.id = h.dispositivo_id
@@ -604,6 +623,8 @@ export const listarHistorialDispositivo = async (
         ON anterior.id = h.estado_anterior_id
       LEFT JOIN itam.estados nuevo
         ON nuevo.id = h.estado_nuevo_id
+      LEFT JOIN itam.usuarios ejecutor
+        ON ejecutor.id = h.usuario_ejecutor_id
       WHERE d.codigo_inventario = $1
         AND h.tipo_entidad = 'DISPOSITIVO'
       ORDER BY h.fecha_evento DESC

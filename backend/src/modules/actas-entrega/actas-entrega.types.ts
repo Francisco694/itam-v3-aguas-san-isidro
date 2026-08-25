@@ -15,4 +15,7 @@ export interface ActaDetalleRow {
   id:string;dispositivo_id:string;codigo_inventario:number;tipo_dispositivo:string;
   marca:string|null;modelo:string|null;numero_serie:string|null;imei:string|null;
   valor_comercial:string|number;
+  comprobante_id:string|null;numero_comprobante:string|null;
+  fecha_devolucion:Date|string|null;resultado_devolucion:string|null;
+  devuelto_historico:boolean;
 }

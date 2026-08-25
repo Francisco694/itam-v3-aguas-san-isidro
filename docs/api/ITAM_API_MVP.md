@@ -854,3 +854,186 @@ La numeraciÃ³n persistente usa el formato `AE-AAAA-000001`. El endpoint PDF
 entrega un documento A4 real (`application/pdf`). El envÃ­o por correo no forma
 parte de esta API mientras no exista infraestructura SMTP y un correo de
 colaborador definido en el modelo.
+
+## Custodia, devoluciones y continuidad técnica (migraciones 009–011)
+
+### Regla única de custodia
+
+Un dispositivo puede tener como máximo un custodio vigente: colaborador,
+departamento o ninguno. Las operaciones de asignación rechazan con `409
+CONFLICT` un activo que ya tenga custodio; el cambio válido exige registrar
+primero su devolución. Un colaborador sí puede custodiar varios dispositivos.
+Los códigos ITAM permanecen inmutables durante todo el ciclo operacional.
+
+### POST /dispositivos/:codigo/devolver
+
+Registra una devolución definitiva mediante el servicio central de devolución.
+Libera la custodia, deja el activo en `RETENIDO_REVISION`, crea un comprobante
+persistente `CD-AAAA-000001` y agrega un evento append-only al historial. Si
+existe un detalle vigente de Acta de Entrega, queda relacionado al comprobante.
+
+Body:
+
+```json
+{
+  "responsable": "Responsable TI",
+  "condicion": "Operativo con desgaste normal",
+  "resultado": "DEVUELTO",
+  "observaciones": "Recepción en oficina TI"
+}
+```
+
+La respuesta contiene `dispositivo` y `comprobante`. `resultado` admite
+`DEVUELTO` o `DANADO`. Un activo sin custodia, con orden técnica abierta o en
+estado terminal responde `409`.
+
+`POST /dispositivos/:codigo/resultado-offboarding` reutiliza esta misma
+operación cuando el resultado es `DEVUELTO` o `DANADO`; resultados pendientes
+no crean comprobantes ni cierran la custodia.
+
+### Comprobantes de devolución
+
+- `GET /comprobantes-devolucion`
+- `GET /comprobantes-devolucion/:id`
+- `GET /comprobantes-devolucion/:id/pdf`
+
+El PDF es A4 y contiene fecha, persona que devuelve, activo, código ITAM,
+serie/IMEI, condición, observaciones, responsable TI y Acta de Entrega de
+origen cuando existe.
+
+### Estado documental de Actas de Entrega
+
+`GET /actas-entrega` y `GET /actas-entrega/:id` incorporan
+`estadoDocumental`, calculado desde los detalles:
+
+- `VIGENTE`: ningún activo devuelto.
+- `DEVOLUCION_PARCIAL`: algunos activos devueltos.
+- `CERRADA`: todos los activos devueltos.
+- `ANULADA`: el acta fue anulada.
+
+Cada dispositivo del acta incluye `devolucion` solo cuando existe un
+comprobante real. Las actas destinadas a trabajadores almacenan siempre la
+declaración corporativa obligatoria completa y su PDF permite paginación A4.
+
+### Equipo temporal dentro de Servicio Técnico
+
+- `POST /servicio-tecnico/:id/equipo-temporal`
+- `POST /servicio-tecnico/:id/equipo-temporal/:entregaId/cerrar`
+
+La entrega temporal es contextual a una orden abierta y al colaborador que era
+custodio del activo original. El activo temporal debe estar `DISPONIBLE`, sin
+custodio y sin otra orden abierta. Al cerrar, queda sin custodia y en
+`RETENIDO_REVISION`. No genera por sí sola una asignación definitiva ni un
+Acta de Entrega definitiva.
+
+La orden conserva un snapshot de la custodia al ingreso. Recibir físicamente
+el equipo en TI no crea una segunda custodia. El cierre técnico exige que no
+quede una entrega temporal abierta; si el custodio original continúa vigente,
+el activo vuelve a `ASIGNADO` y se registra
+`RETORNO_POST_SERVICIO_TECNICO`, sin generar un comprobante de devolución.
+## Extensiones previas a producción (migración 013)
+
+### Organización
+
+La dependencia de departamentos admite varios niveles y rechaza ciclos directos e indirectos tanto en servicio backend como mediante restricción de base de datos. La jerarquía organizacional no modifica ni hereda custodia.
+
+### Reportes
+
+- GET /api/v1/reportes/inventario?desde=YYYY-MM-DD&hasta=YYYY-MM-DD
+- GET /api/v1/reportes/inventario/pdf?desde=YYYY-MM-DD&hasta=YYYY-MM-DD
+
+El reporte separa el estado actual de los movimientos históricos del período, incluye valorización y consolida descendientes por departamento.
+
+### Antecedentes de adquisición
+
+- GET /api/v1/facturas-adquisicion
+- GET /api/v1/facturas-adquisicion/:id
+- GET /api/v1/facturas-adquisicion/:id/documento
+- POST /api/v1/facturas-adquisicion
+- PATCH /api/v1/facturas-adquisicion/:id
+
+Una factura puede relacionarse con varios dispositivos y conserva un único
+documento principal compartido por todos ellos. Tanto la factura como su
+documento son opcionales; un dispositivo puede registrarse sin antecedentes de
+adquisición y continuar con la generación normal de su código ITAM.
+
+POST y PATCH mantienen compatibilidad con JSON cuando no se adjunta archivo.
+Para crear o reemplazar un documento aceptan multipart/form-data con:
+
+- metadata: objeto JSON serializado con los mismos campos de la operación;
+- documento: archivo opcional.
+
+Los únicos formatos admitidos son PDF, JPG, JPEG y PNG. El backend valida
+conjuntamente extensión y MIME (application/pdf, image/jpeg o image/png) y
+aplica un máximo de 10 MB. PostgreSQL almacena nombre original, nombre interno,
+MIME, tamaño y ruta relativa; el binario permanece en storage privado
+configurable mediante DOCUMENT_STORAGE_PATH.
+
+GET /api/v1/facturas-adquisicion/:id/documento requiere la sesión general de
+la API y entrega el archivo en modo inline. El parámetro download=true solicita
+Content-Disposition: attachment. La ruta física y el nombre interno no se
+exponen en respuestas, la carpeta no se publica como contenido estático y los
+nombres físicos se generan con UUID. La migración 015 agrega los campos
+nullable de documento sin modificar la relación factura-dispositivos.
+
+### Servicio Técnico
+
+- GET /api/v1/servicio-tecnico/:id/envio/pdf
+
+El alta de la orden recibe activo, falla, fecha, proveedor/destino, responsable TI y observaciones. La orden continúa siendo un activo por documento y no altera la custodia patrimonial.
+
+### Autenticación y perfiles
+
+- POST /api/v1/auth/login
+- POST /api/v1/auth/login-pin
+- GET /api/v1/auth/me
+- POST /api/v1/auth/change-pin
+- POST /api/v1/auth/logout
+- GET /api/v1/usuarios
+- POST /api/v1/usuarios
+- PATCH /api/v1/usuarios/:id
+
+La sesión utiliza cookie HttpOnly, SameSite=Lax y Secure en producción. Solo existen SUPER_USUARIO y USUARIO. La administración de usuarios exige SUPER_USUARIO; el resto de módulos exige sesión válida. Los hashes de contraseña y PIN nunca se incluyen en respuestas.
+
+La contraseña continúa siendo el método principal y de respaldo. El acceso
+rápido recibe correo y un PIN de exactamente seis dígitos mediante
+`POST /api/v1/auth/login-pin`, y crea la misma clase de sesión que el login
+por contraseña. El PIN se almacena con scrypt y salt aleatorio. Cinco intentos
+fallidos consecutivos bloquean solamente el PIN durante quince minutos; la
+contraseña permanece disponible. Se auditan `LOGIN_PIN_OK`,
+`LOGIN_PIN_FALLIDO` y `LOGIN_PIN_BLOQUEADO` sin persistir el PIN.
+
+Un SUPER_USUARIO define manualmente contraseña inicial y PIN al crear una
+cuenta, o puede restablecer cualquiera de ellos mediante
+`PATCH /api/v1/usuarios/:id`. No se generan PIN automáticos. El usuario puede
+personalizar un PIN ya configurado mediante `POST /api/v1/auth/change-pin`
+informando `currentPin` y `newPin`.
+
+Las operaciones de escritura se registran en auditoria_operaciones. Los eventos nuevos de dispositivos también conservan usuario_ejecutor_id; los históricos previos permanecen con valor NULL.
+
+### Estructura organizacional oficial
+
+La migración 016 agrega `departamentos.codigo_organizacional` como
+identificador externo nullable y único, separado del ID PostgreSQL. La fuente
+oficial de importación es `1.-ESTRUCTURA ESSSI.xlsx`, hoja `RESUMEN`, con
+las cabeceras exactas `ID UNIDAD ORGANIZACIONAL`,
+`NOMBRE UNIDAD ORGANIZACIONAL` y `Dependecia Unidad`. El script
+`npm run import:organization` valida las 98 unidades antes de abrir una
+transacción, inserta primero las unidades y luego resuelve dependencias. La
+dependencia externa 1000 de GERENCIA GENERAL (1001) se representa como NULL;
+no se crea un departamento artificial. La importación es idempotente por
+`codigo_organizacional`.
+
+### Lectura QR en Inventario
+
+El frontend usa `@zxing/browser` exclusivamente para decodificar el QR de la
+etiqueta. Solo acepta la ruta interna `/dispositivos/:codigoInventario` o una
+URL HTTP(S) cuya ruta coincida exactamente; extrae el código y navega con
+Angular Router, sin seguir dominios externos. La captura se detiene al leer,
+cancelar o destruir el modal. No se almacenan ni transmiten fotografías,
+frames o video.
+
+`getUserMedia` requiere un contexto seguro. En la LAN servida por HTTP desde
+una IP, el lector muestra la limitación y mantiene disponible la búsqueda
+manual; bajo HTTPS solicita permiso y prefiere la cámara trasera. No se
+deshabilitan controles de seguridad del navegador.

@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import test, { after } from "node:test";
 import { pool } from "../../config/database";
 import { ConflictError } from "../../shared/errors";
-import { asignarAColaborador } from "../dispositivos/dispositivos.service";
+import { assertSinOrdenServicioAbierta } from "../dispositivos/dispositivos.service";
+import { DECLARACION_OBLIGATORIA_TRABAJADOR } from "../actas-entrega/actas-entrega.service";
 
 after(async()=>{await pool.end()});
 
@@ -40,11 +41,29 @@ test("un acta admite varios equipos sin duplicar el mismo activo",async()=>{
 });
 
 test("una orden tecnica abierta bloquea la asignacion del dispositivo",async()=>{
- const open=await pool.query<{codigo_inventario:number}>("SELECT d.codigo_inventario FROM itam.dispositivos d JOIN itam.ordenes_servicio_tecnico o ON o.dispositivo_id=d.id WHERE o.estado NOT IN ('CERRADA','BAJA','REPARACION_RECHAZADA') LIMIT 1");
- const person=await pool.query<{id:string}>("SELECT id FROM itam.colaboradores WHERE activo=true LIMIT 1");
- assert.ok(open.rows[0]);assert.ok(person.rows[0]);
- await assert.rejects(
-  asignarAColaborador(open.rows[0]!.codigo_inventario,{colaboradorId:Number(person.rows[0]!.id),responsable:"TEST",observaciones:"TEST bloqueo"}),
-  (error:unknown)=>error instanceof ConflictError&&error.message.includes("orden de servicio")
- );
+ const client=await pool.connect();try{await client.query("BEGIN");
+  const device=await client.query<{id:string}>("SELECT d.id FROM itam.dispositivos d WHERE NOT EXISTS(SELECT 1 FROM itam.ordenes_servicio_tecnico o WHERE o.dispositivo_id=d.id AND o.estado NOT IN ('CERRADA','BAJA','REPARACION_RECHAZADA')) LIMIT 1");assert.ok(device.rows[0]);
+  await client.query("INSERT INTO itam.ordenes_servicio_tecnico(dispositivo_id,falla_reportada,responsable_envio) VALUES($1,'TEST bloqueo','TEST')",[device.rows[0]!.id]);
+  await assert.rejects(assertSinOrdenServicioAbierta(device.rows[0]!.id,client),(error:unknown)=>error instanceof ConflictError&&error.message.includes("orden de servicio"));
+ }finally{await client.query("ROLLBACK");client.release()}
+});
+
+test("las migraciones 009 a 012 están registradas y completas",async()=>{
+ const migrations=await pool.query<{version:string}>("SELECT version FROM itam.schema_migrations WHERE version IN ('009','010','011','012') ORDER BY version");
+ assert.deepEqual(migrations.rows.map(row=>row.version),['009','010','011','012']);
+ const tables=await pool.query<{table_name:string}>("SELECT table_name FROM information_schema.tables WHERE table_schema='itam' AND table_name IN ('entregas_temporales_servicio','comprobantes_devolucion','secuencias_comprobante_devolucion') ORDER BY table_name");
+ assert.equal(tables.rowCount,3);
+});
+
+test("todas las actas vigentes de trabajadores conservan la declaración obligatoria completa",async()=>{
+ const result=await pool.query<{declaracion:string}>("SELECT declaracion FROM itam.actas_entrega WHERE colaborador_id IS NOT NULL");
+ assert.ok(result.rows.length>0);for(const row of result.rows)assert.equal(row.declaracion,DECLARACION_OBLIGATORIA_TRABAJADOR);
+});
+
+test("el correlativo CD es anual y transaccional",async()=>{
+ const client=await pool.connect();try{await client.query("BEGIN");const year=2198;
+  const first=await client.query<{ultimo_numero:number}>("INSERT INTO itam.secuencias_comprobante_devolucion(anio,ultimo_numero) VALUES($1,1) ON CONFLICT(anio) DO UPDATE SET ultimo_numero=itam.secuencias_comprobante_devolucion.ultimo_numero+1 RETURNING ultimo_numero",[year]);
+  const second=await client.query<{ultimo_numero:number}>("INSERT INTO itam.secuencias_comprobante_devolucion(anio,ultimo_numero) VALUES($1,1) ON CONFLICT(anio) DO UPDATE SET ultimo_numero=itam.secuencias_comprobante_devolucion.ultimo_numero+1 RETURNING ultimo_numero",[year]);
+  assert.equal(second.rows[0]!.ultimo_numero,first.rows[0]!.ultimo_numero+1);
+ }finally{await client.query("ROLLBACK");client.release()}
 });
