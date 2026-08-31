@@ -1,4 +1,5 @@
 import { pool } from "../../config/database";
+import type { PoolClient } from "pg";
 import type {
   ActualizarColaboradorInput,
   ColaboradorFilters,
@@ -8,6 +9,8 @@ import type {
   HistorialActivoColaboradorRow,
   PendienteOffboardingRow
 } from "./colaboradores.types";
+
+const getDb = (client?: PoolClient) => client ?? pool;
 
 const colaboradorSelect = `
   SELECT
@@ -66,9 +69,10 @@ export const listarColaboradores = async (
 };
 
 export const obtenerColaboradorPorId = async (
-  id: number
+  id: number,
+  client?: PoolClient
 ): Promise<ColaboradorRow | null> => {
-  const result = await pool.query<ColaboradorRow>(
+  const result = await getDb(client).query<ColaboradorRow>(
     `
       ${colaboradorSelect}
       WHERE c.id = $1
@@ -217,29 +221,41 @@ export const listarActivosActualesColaborador = async (
   ORDER BY d.codigo_inventario`,[colaboradorId])).rows;
 
 export const listarHistorialActivosColaborador = async (
-  colaboradorId:number
-):Promise<HistorialActivoColaboradorRow[]> => (await pool.query<HistorialActivoColaboradorRow>(`
+  colaboradorId:number,
+  client?:PoolClient
+):Promise<HistorialActivoColaboradorRow[]> => (await getDb(client).query<HistorialActivoColaboradorRow>(`
   WITH asignaciones AS (
-    SELECT h.dispositivo_id,h.fecha_evento fecha_asignacion
+    SELECT h.id evento_asignacion_id,h.dispositivo_id,h.fecha_evento fecha_asignacion
     FROM itam.historial_eventos h
-    WHERE h.tipo_entidad='DISPOSITIVO' AND h.tipo_evento='ASIGNAR_COLABORADOR'
-      AND COALESCE(h.detalle#>>'{custodiaNueva,id}',h.detalle->>'colaboradorId')=$1::text
+    WHERE h.tipo_entidad='DISPOSITIVO'
+      AND h.tipo_evento IN ('ASIGNAR_COLABORADOR','IMPORTAR_CUSTODIA_HISTORICA')
+      AND COALESCE(h.detalle#>>'{custodiaNueva,id}',h.detalle->>'collaboratorId',
+        h.detalle->>'colaboradorId')=$1::text
   )
   SELECT d.id dispositivo_id,d.codigo_inventario,t.nombre tipo_dispositivo,
     d.marca,d.modelo,d.numero_serie,d.imei,d.valor_comercial,
     e.codigo estado_codigo,e.nombre estado_nombre,a.fecha_asignacion,
     siguiente.fecha_evento fecha_devolucion,
+    siguiente.tipo_evento tipo_cierre,
     CASE WHEN siguiente.fecha_evento IS NULL AND d.colaborador_id=$1::bigint THEN 'ASIGNADO'
          WHEN siguiente.tipo_evento='DEVOLVER_DISPOSITIVO' THEN 'DEVUELTO'
+         WHEN siguiente.tipo_evento='CIERRE_CUSTODIA_CONCILIACION' THEN 'CONCILIADO'
+         WHEN siguiente.tipo_evento IN ('DAR_BAJA','DAR_BAJA_DESDE_SERVICIO') THEN 'DADO_BAJA'
+         WHEN siguiente.tipo_evento IN ('ASIGNAR_COLABORADOR','ASIGNAR_DEPARTAMENTO',
+           'IMPORTAR_CUSTODIA_HISTORICA') THEN 'REASIGNADO'
          ELSE 'FINALIZADO' END resultado
   FROM asignaciones a JOIN itam.dispositivos d ON d.id=a.dispositivo_id
   JOIN itam.tipos_dispositivo t ON t.id=d.tipo_dispositivo_id
   JOIN itam.estados e ON e.id=d.estado_id
   LEFT JOIN LATERAL (
     SELECT h2.fecha_evento,h2.tipo_evento FROM itam.historial_eventos h2
-    WHERE h2.dispositivo_id=a.dispositivo_id AND h2.fecha_evento>a.fecha_asignacion
-      AND h2.tipo_evento IN ('DEVOLVER_DISPOSITIVO','ASIGNAR_COLABORADOR','ASIGNAR_DEPARTAMENTO')
-    ORDER BY h2.fecha_evento LIMIT 1
+    WHERE h2.dispositivo_id=a.dispositivo_id
+      AND (h2.fecha_evento,h2.id)>(a.fecha_asignacion,a.evento_asignacion_id)
+      AND h2.tipo_evento IN ('DEVOLVER_DISPOSITIVO','ASIGNAR_COLABORADOR',
+        'ASIGNAR_DEPARTAMENTO','IMPORTAR_CUSTODIA_HISTORICA',
+        'CIERRE_CUSTODIA_CONCILIACION','DAR_BAJA',
+        'DAR_BAJA_DESDE_SERVICIO')
+    ORDER BY h2.fecha_evento,h2.id LIMIT 1
   ) siguiente ON TRUE ORDER BY a.fecha_asignacion DESC`,[colaboradorId])).rows;
 
 export const listarPendientesOffboarding = async ():Promise<PendienteOffboardingRow[]> =>

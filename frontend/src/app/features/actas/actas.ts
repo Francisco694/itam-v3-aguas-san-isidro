@@ -37,7 +37,7 @@ import { errorMessage } from '../../shared/utils/error-message';
       </section>
     } @else {
       <section class="card">
-        <div class="table-wrap">
+        <div class="table-wrap desktop-table">
           <table class="data-table">
             <thead>
               <tr>
@@ -75,6 +75,30 @@ import { errorMessage } from '../../shared/utils/error-message';
               }
             </tbody>
           </table>
+        </div>
+        <div class="mobile-record-list acta-mobile-list">
+          @for (acta of items(); track acta.id) {
+            <article class="mobile-record-card">
+              <header class="mobile-record-card__top">
+                <div><strong class="mobile-record-card__title code">{{ acta.numeroActa }}</strong><span class="mobile-record-card__subtitle">{{ acta.fecha | date:'dd/MM/yyyy HH:mm' }}</span></div>
+                <span class="state-pill">{{ statusLabel(acta.estadoDocumental) }}</span>
+              </header>
+              <dl class="mobile-record-card__details">
+                <div><dt>Destinatario</dt><dd>{{ acta.colaborador?.nombre || acta.departamento?.nombre }}</dd></div>
+                <div><dt>Equipos</dt><dd>{{ acta.dispositivos.length }}</dd></div>
+                <div><dt>Valor total</dt><dd>{{ clp(acta.valorTotal) }}</dd></div>
+                <div><dt>Devolucion</dt><dd>{{ returnedCount(acta) }} de {{ acta.dispositivos.length }}</dd></div>
+              </dl>
+              <footer class="mobile-record-card__actions">
+                <button class="btn btn--primary" type="button" (click)="selected.set(acta)">Ver acta</button>
+                @for(device of acta.dispositivos;track device.id){
+                  @if(device.devolucion){
+                    <button class="btn btn--secondary" type="button" (click)="openReturn(device.devolucion.id)">Ver {{device.devolucion.numeroComprobante}}</button>
+                  }
+                }
+              </footer>
+            </article>
+          }
         </div>
       </section>
     }

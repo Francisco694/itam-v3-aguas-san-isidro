@@ -31,3 +31,8 @@ temp/
 
 # Documentos privados cargados localmente
 backend/storage/
+
+# Fuentes locales con inventario real
+/Inventario.xlsx
+/conciliacion_rrhh_inventario_sql.xlsx
+/Personal_Activo_Empresa.xlsx

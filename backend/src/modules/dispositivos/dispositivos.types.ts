@@ -21,7 +21,7 @@ export interface DepartamentoResumen {
 export interface SimAsociadaResumen {
   id: string;
   codigoInventario: number;
-  iccidCodigoFabrica: string;
+  iccidCodigoFabrica: string | null;
   numeroAsociado: string | null;
   compania: string | null;
   estado: EstadoResumen | null;
@@ -176,15 +176,18 @@ export interface ActualizarDispositivoInput {
   observaciones?: string | null;
   atributosEspecificos?: Record<string, string | number | null>;
   valorComercial?: number;
+  responsable: string;
 }
 
 export interface ResumenGerencialRow {
-  total_cantidad: string | number;
-  total_valor: string | number;
+  inventario_operacional_cantidad: string | number;
+  inventario_operacional_valor: string | number;
   disponibles_cantidad: string | number;
   disponibles_valor: string | number;
   asignados_cantidad: string | number;
   asignados_valor: string | number;
+  servicio_tecnico_cantidad: string | number;
+  servicio_tecnico_valor: string | number;
   extraviados_cantidad: string | number;
   extraviados_valor: string | number;
   bajas_cantidad: string | number;
@@ -192,9 +195,10 @@ export interface ResumenGerencialRow {
 }
 
 export interface ResumenGerencial {
-  inventario: { cantidad: number; valor: number };
+  inventarioOperacional: { cantidad: number; valor: number };
   disponibles: { cantidad: number; valor: number };
   asignados: { cantidad: number; valor: number };
+  servicioTecnico: { cantidad: number; valor: number };
   extraviados: { cantidad: number; valor: number };
   bajas: { cantidad: number; valor: number };
 }
@@ -293,6 +297,9 @@ export interface HistorialDispositivoRow {
   usuario_ejecutor_id:string|null;
   usuario_ejecutor_nombre:string|null;
   usuario_ejecutor_email:string|null;
+  colaborador_historico_id:string|null;
+  colaborador_historico_nombre:string|null;
+  colaborador_historico_rut:string|null;
 }
 
 export interface HistorialDispositivo {
@@ -307,4 +314,5 @@ export interface HistorialDispositivo {
   detalle: Record<string, unknown>;
   fechaEvento: string;
   usuarioEjecutor:{id:string;nombre:string;email:string}|null;
+  colaboradorHistorico:{id:string;nombre:string;rut:string}|null;
 }

@@ -19,7 +19,7 @@ export interface DispositivoResumen {
 export interface SimRow {
   sim_id: string;
   sim_codigo_inventario: number;
-  iccid_codigo_fabrica: string;
+  iccid_codigo_fabrica: string | null;
   numero_asociado: string | null;
   compania: string | null;
   observaciones: string | null;
@@ -46,7 +46,7 @@ export interface SimRow {
 export interface SimResumen {
   id: string;
   codigoInventario: number;
-  iccidCodigoFabrica: string;
+  iccidCodigoFabrica: string | null;
   numeroAsociado: string | null;
   compania: string | null;
   estado: EstadoResumen;

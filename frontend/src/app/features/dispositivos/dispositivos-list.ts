@@ -2,16 +2,19 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { LucideCamera, LucideDownload, LucidePlus, LucideScanBarcode, LucideSearch, LucideSlidersHorizontal } from '@lucide/angular';
+import { catchError, forkJoin, of } from 'rxjs';
 import { Departamento, Dispositivo, Estado, TipoDispositivo } from '../../core/models/itam.models';
 import { DepartamentosService } from '../../core/services/departamentos.service';
 import { DispositivosService } from '../../core/services/dispositivos.service';
 import { EstadosService } from '../../core/services/estados.service';
+import { SimService } from '../../core/services/sim.service';
 import { ToastService } from '../../core/services/toast.service';
 import { TiposDispositivoService } from '../../core/services/tipos-dispositivo.service';
 import { PageHeader } from '../../shared/components/page-header/page-header';
 import { QrScanner } from '../../shared/components/qr-scanner/qr-scanner';
 import { StatusBadge } from '../../shared/components/status-badge/status-badge';
 import { ViewState } from '../../shared/components/view-state/view-state';
+import type { ItamQrTarget } from '../../shared/utils/itam-qr';
 import { errorMessage } from '../../shared/utils/error-message';
 
 export const quickSearchMode = (query: string): 'DEVICE_CODE' | 'FILTER' | 'EMPTY' => {
@@ -30,15 +33,16 @@ export const inventoryStateCount = (
   imports: [FormsModule, RouterLink, PageHeader, QrScanner, StatusBadge, ViewState, LucideCamera, LucideDownload, LucidePlus, LucideScanBarcode, LucideSearch, LucideSlidersHorizontal],
   template: `
     <app-page-header title="Inventario de Equipos" subtitle="Control físico, custodias y condición operativa de los activos.">
-      <button class="btn btn--secondary" type="button" [disabled]="!items().length" (click)="exportCsv()"><svg lucideDownload></svg> Exportar CSV</button>
-      <a class="btn btn--primary" routerLink="nuevo"><svg lucidePlus></svg> Nuevo Equipo</a>
+      <button class="btn btn--navy mobile-qr-action" type="button" (click)="scannerOpen.set(true)"><svg lucideCamera></svg> Escanear QR</button>
+      <a class="btn btn--primary inventory-new-action" routerLink="nuevo"><svg lucidePlus></svg> Nuevo activo</a>
+      <button class="btn btn--secondary inventory-export-action" type="button" [disabled]="!items().length" (click)="exportCsv()"><svg lucideDownload></svg> Exportar CSV</button>
     </app-page-header>
     <section class="scan-card" aria-labelledby="scan-title">
       <div class="scan-card__icon"><svg lucideScanBarcode></svg></div>
       <form class="scan-card__form" (ngSubmit)="quickSearch()">
-        <label id="scan-title" for="asset-search">Escanear con Pistola USB o Digitar Código</label>
+        <label id="scan-title" for="asset-search"><span class="desktop-copy">Escanear con Pistola USB o Digitar Código</span><span class="mobile-copy">Buscar activo</span></label>
         <div class="scan-input"><svg lucideSearch aria-hidden="true"></svg><input id="asset-search" name="assetSearch" [(ngModel)]="quickQuery" (keydown.enter)="$event.preventDefault(); quickSearch()" autocomplete="off" inputmode="search" placeholder="Código de inventario, serie, marca o modelo..." /><button class="btn btn--primary" type="submit" [disabled]="quickLoading()">{{ quickLoading() ? 'Buscando…' : 'Buscar' }}</button></div>
-        <p>Los lectores USB funcionan como teclado: escanee el activo y presione Enter.</p>
+        <p><span class="desktop-copy">Los lectores USB funcionan como teclado: escanee el activo y presione Enter.</span><span class="mobile-copy">También puede utilizar un lector USB como teclado.</span></p>
       </form>
       <button class="camera-button" type="button" (click)="scannerOpen.set(true)"><svg lucideCamera></svg><span>Escanear QR<small>Usar camara</small></span></button>
     </section>
@@ -51,10 +55,20 @@ export const inventoryStateCount = (
     <nav class="state-shortcuts" aria-label="Filtros rápidos por estado">
       @for(shortcut of shortcuts;track shortcut.code){<button type="button" [class.active]="filters.estado===shortcut.code" (click)="selectState(shortcut.code)"><span>{{shortcut.label}}</span><strong>{{stateCount(shortcut.code)}}</strong></button>}
     </nav>
+    <button
+      class="advanced-filter-toggle"
+      type="button"
+      aria-controls="inventory-filters"
+      [attr.aria-expanded]="filtersOpen()"
+      (click)="filtersOpen.update((open) => !open)"
+    >
+      <svg lucideSlidersHorizontal></svg>
+      {{ filtersOpen() ? 'Ocultar filtros' : 'Filtros avanzados' }}
+    </button>
     <section class="card inventory-card">
-      <form class="filter-panel" (ngSubmit)="load()">
+      <form id="inventory-filters" class="filter-panel" [class.filter-panel--open]="filtersOpen()" (ngSubmit)="load()">
         <div class="filter-panel__title"><svg lucideSlidersHorizontal></svg><strong>Filtros del inventario</strong></div>
-        <div class="field"><label for="q">Búsqueda general</label><input id="q" name="q" [(ngModel)]="filters.q" placeholder="Código, serie, marca o modelo" /></div>
+        <div class="field filter-search"><label for="q">Búsqueda general</label><input id="q" name="q" [(ngModel)]="filters.q" placeholder="Código, serie, marca o modelo" /></div>
         <div class="field"><label for="tipo">Tipo</label><select id="tipo" name="tipo" [(ngModel)]="filters.tipoDispositivoId"><option value="">Todos</option>@for(type of types(); track type.id){<option [value]="type.id">{{ type.nombre }}</option>}</select></div>
         <div class="field"><label for="estado">Estado</label><select id="estado" name="estado" [(ngModel)]="filters.estado"><option value="">Todos</option>@for(e of states(); track e.id){<option [value]="e.codigo">{{ e.nombre }}</option>}</select></div>
         <div class="field"><label for="department">Departamento</label><select id="department" name="department" [(ngModel)]="filters.departamentoId"><option value="">Todos</option>@for(d of departments(); track d.id){<option [value]="d.id">{{ d.nombre }}</option>}</select></div>
@@ -66,9 +80,31 @@ export const inventoryStateCount = (
       @else if (!items().length) { <div class="empty-with-action"><app-view-state kind="empty" [title]="emptyTitle()" [message]="emptyMessage()" />@if(!allItems().length){<a class="btn btn--primary" routerLink="nuevo"><svg lucidePlus></svg> Registrar dispositivo</a>}</div> }
       @else {
         <div class="table-heading"><div><strong>{{ items().length }}</strong><span>{{ items().length === 1 ? 'activo encontrado' : 'activos encontrados' }}</span></div></div>
-        <div class="table-wrap"><table class="data-table inventory-table"><thead><tr><th>ID / Código</th><th>Equipo</th><th>Estado</th><th>Responsable</th><th>Ubicación</th><th><span class="sr-only">Acciones</span></th></tr></thead><tbody>
+        <div class="table-wrap desktop-table"><table class="data-table inventory-table"><thead><tr><th>ID / Código</th><th>Equipo</th><th>Estado</th><th>Responsable</th><th>Ubicación</th><th><span class="sr-only">Acciones</span></th></tr></thead><tbody>
           @for(item of items(); track item.id){<tr><td><a class="asset-code-link" [routerLink]="[item.codigoInventario]">{{ item.codigoInventario }}</a><span class="cell-secondary mono">{{ item.numeroSerie ? 'SN: ' + item.numeroSerie : 'Sin serie' }}</span></td><td><span class="cell-primary">{{ item.marca || item.tipo.nombre }} {{ item.modelo || '' }}</span><span class="cell-secondary">{{ item.tipo.nombre }}</span></td><td><app-status-badge [code]="item.estado.codigo" [label]="item.estado.nombre" /></td><td><span class="cell-primary">{{ custody(item) }}</span><span class="cell-secondary">{{ item.colaborador?.rut || item.departamento?.nombre || 'Sin custodia vigente' }}</span></td><td>{{ item.localidad || '—' }}<span class="cell-secondary">{{ item.ubicacionDetalle || '' }}</span></td><td><div class="actions"><a class="btn btn--secondary btn--small" [routerLink]="[item.codigoInventario]">Gestionar ficha</a><a class="btn btn--ghost btn--small" [routerLink]="[item.codigoInventario,'editar']">Editar</a></div></td></tr>}
         </tbody></table></div>
+        <div class="mobile-record-list inventory-mobile-list">
+          @for(item of items(); track item.id) {
+            <article class="mobile-record-card">
+              <header class="mobile-record-card__top">
+                <div>
+                  <a class="mobile-record-card__title code" [routerLink]="[item.codigoInventario]">ITAM {{ item.codigoInventario }}</a>
+                  <span class="mobile-record-card__subtitle">{{ item.marca || item.tipo.nombre }} {{ item.modelo || '' }}</span>
+                  <span class="mobile-record-card__subtitle">{{ item.tipo.nombre }} &middot; {{ item.numeroSerie ? 'SN: ' + item.numeroSerie : 'Sin serie' }}</span>
+                </div>
+                <app-status-badge [code]="item.estado.codigo" [label]="item.estado.nombre" />
+              </header>
+              <dl class="mobile-record-card__details">
+                <div><dt>Responsable</dt><dd>{{ custody(item) }}</dd></div>
+                <div><dt>Ubicaci&oacute;n</dt><dd>{{ item.localidad || item.ubicacionDetalle || 'Sin ubicaci&oacute;n' }}</dd></div>
+              </dl>
+              <footer class="mobile-record-card__actions">
+                <a class="btn btn--primary" [routerLink]="[item.codigoInventario]">Gestionar</a>
+                <a class="btn btn--secondary" [routerLink]="[item.codigoInventario,'editar']">Editar</a>
+              </footer>
+            </article>
+          }
+        </div>
       }
     </section>
   `,
@@ -76,6 +112,7 @@ export const inventoryStateCount = (
 })
 export class DispositivosList implements OnInit {
   private readonly service = inject(DispositivosService);
+  private readonly simService = inject(SimService);
   private readonly estados = inject(EstadosService);
   private readonly deptService = inject(DepartamentosService);
   private readonly router = inject(Router);
@@ -91,6 +128,7 @@ export class DispositivosList implements OnInit {
   protected readonly loading = signal(true);
   protected readonly quickLoading = signal(false);
   protected readonly scannerOpen = signal(false);
+  protected readonly filtersOpen = signal(false);
   protected readonly error = signal('');
   protected quickQuery = '';
   protected filters = { q: '', tipoDispositivoId: '', estado: '', departamentoId: '', localidad: '' };
@@ -117,25 +155,57 @@ export class DispositivosList implements OnInit {
     this.filters.q = query;
     this.load();
   }
-  protected openScannedAsset(code: number): void {
+  protected openScannedAsset(target: ItamQrTarget): void {
     this.scannerOpen.set(false);
     this.quickLoading.set(true);
-    this.service.obtener(code).subscribe({
-      next: (item) => {
-        this.quickLoading.set(false);
-        void this.router.navigate(['/dispositivos', item.codigoInventario]);
-      },
-      error: (requestError) => {
-        this.quickLoading.set(false);
-        this.toast.error('Activo no encontrado', errorMessage(requestError));
+    const notFound = () => {
+      this.quickLoading.set(false);
+      this.toast.error(
+        'Código ITAM no encontrado',
+        'El código ITAM leído no corresponde a un registro existente.'
+      );
+    };
+    if (target.entity === 'SIM') {
+      this.simService.obtener(target.code).subscribe({
+        next: (item) => {
+          this.quickLoading.set(false);
+          void this.router.navigate(['/sim', item.codigoInventario]);
+        },
+        error: notFound
+      });
+      return;
+    }
+    if (target.entity === 'DISPOSITIVO') {
+      this.service.obtener(target.code).subscribe({
+        next: (item) => {
+          this.quickLoading.set(false);
+          void this.router.navigate(['/dispositivos', item.codigoInventario]);
+        },
+        error: notFound
+      });
+      return;
+    }
+    forkJoin({
+      device: this.service.obtener(target.code).pipe(catchError(() => of(null))),
+      sim: this.simService.obtener(target.code).pipe(catchError(() => of(null)))
+    }).subscribe(({ device, sim }) => {
+      this.quickLoading.set(false);
+      if (device && !sim) {
+        void this.router.navigate(['/dispositivos', device.codigoInventario]);
+        return;
       }
+      if (sim && !device) {
+        void this.router.navigate(['/sim', sim.codigoInventario]);
+        return;
+      }
+      notFound();
     });
   }
   protected load(): void {
     this.loading.set(true); this.error.set('');
     this.service.listar({ q: this.filters.q || undefined, tipoDispositivoId: this.filters.tipoDispositivoId ? Number(this.filters.tipoDispositivoId) : undefined, estado: this.filters.estado || undefined, departamentoId: this.filters.departamentoId ? Number(this.filters.departamentoId) : undefined, localidad: this.filters.localidad || undefined }).subscribe({ next: (items) => { this.items.set(items); this.loading.set(false); }, error: (error) => { this.error.set(errorMessage(error)); this.loading.set(false); } });
   }
-  protected clear(): void { this.filters = { q: '', tipoDispositivoId: '', estado: '', departamentoId: '', localidad: '' }; this.load(); }
+  protected clear(): void { this.quickQuery = ''; this.filters = { q: '', tipoDispositivoId: '', estado: '', departamentoId: '', localidad: '' }; this.load(); }
   protected custody(item: Dispositivo): string { return item.colaborador?.nombre || item.departamento?.nombre || 'Sin responsable'; }
   protected exportCsv():void {
     const headers=['Código ITAM','Tipo','Marca','Modelo','Número de serie','IMEI','Estado','Custodio','Departamento','Dependencia','Ubicación','Valor comercial','Fecha registro'];

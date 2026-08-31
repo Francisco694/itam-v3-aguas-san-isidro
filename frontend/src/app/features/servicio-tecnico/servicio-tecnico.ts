@@ -5,6 +5,7 @@ import { RouterLink } from '@angular/router';
 import { LucideTriangleAlert } from '@lucide/angular';
 import { EstadoOrdenServicio, OrdenServicio } from '../../core/models/itam.models';
 import { ServicioTecnicoService } from '../../core/services/servicio-tecnico.service';
+import { AuthService } from '../../core/services/auth.service';
 import { ToastService } from '../../core/services/toast.service';
 import { PageHeader } from '../../shared/components/page-header/page-header';
 import { ViewState } from '../../shared/components/view-state/view-state';
@@ -182,9 +183,9 @@ interface FlowStage {
             <section class="temporary-panel">
               <header><div><span>CUSTODIA Y CONTINUIDAD</span><h3>Equipo temporal</h3></div></header>
               <p>Custodio al ingreso: <strong>{{ order.custodiaAlIngreso?.colaborador?.nombre || order.custodiaAlIngreso?.departamento?.nombre || 'Sin custodia' }}</strong>. La recepción física por TI no crea una segunda custodia.</p>
-              @if(order.entregasTemporales.length){@for(delivery of order.entregasTemporales;track delivery.id){<article class="temporary-item"><div><strong>{{delivery.dispositivo.tipo}} {{delivery.dispositivo.codigoInventario}}</strong><small>{{delivery.colaborador.nombre}} · {{delivery.fechaEntrega|date:'dd/MM/yyyy HH:mm'}}</small></div><span class="state-pill">{{delivery.estado==='ABIERTA'?'En uso':'Devuelto'}}</span></article>@if(delivery.estado==='ABIERTA'){<form [formGroup]="temporaryCloseForm" (ngSubmit)="closeTemporary(order,delivery.id)"><div class="field"><label>Responsable TI *</label><input formControlName="responsable" /></div><div class="field"><label>Observaciones de devolución</label><textarea formControlName="observaciones"></textarea></div><button class="btn btn--secondary" [disabled]="submitting()">Registrar devolución temporal</button></form>}}}
+              @if(order.entregasTemporales.length){@for(delivery of order.entregasTemporales;track delivery.id){<article class="temporary-item"><div><strong>{{delivery.dispositivo.tipo}} {{delivery.dispositivo.codigoInventario}}</strong><small>{{delivery.colaborador.nombre}} · {{delivery.fechaEntrega|date:'dd/MM/yyyy HH:mm'}}</small></div><span class="state-pill">{{delivery.estado==='ABIERTA'?'En uso':'Devuelto'}}</span></article>@if(delivery.estado==='ABIERTA'){<form [formGroup]="temporaryCloseForm" (ngSubmit)="closeTemporary(order,delivery.id)"><div class="field"><label>Responsable TI *</label><input formControlName="responsable" readonly /></div><div class="field"><label>Observaciones de devolución</label><textarea formControlName="observaciones"></textarea></div><button class="btn btn--secondary" [disabled]="submitting()">Registrar devolución temporal</button></form>}}}
               @if(!openTemporary(order) && order.custodiaAlIngreso?.colaborador && technicalStage(order.estado)!=='READ_ONLY'){
-                <form [formGroup]="temporaryForm" (ngSubmit)="deliverTemporary(order)"><div class="notice notice--info">Acción contextual: el activo temporal conserva su propio código y debe estar Disponible.</div><div class="field"><label>Código ITAM del equipo temporal *</label><input type="number" min="1" formControlName="dispositivoCodigo" /></div><div class="field"><label>Responsable TI *</label><input formControlName="responsable" /></div><div class="field"><label>Observaciones</label><textarea formControlName="observaciones"></textarea></div><button class="btn btn--secondary" [disabled]="submitting()">Entregar equipo temporal</button></form>
+                <form [formGroup]="temporaryForm" (ngSubmit)="deliverTemporary(order)"><div class="notice notice--info">Acción contextual: el activo temporal conserva su propio código y debe estar Disponible.</div><div class="field"><label>Código ITAM del equipo temporal *</label><input type="number" min="1" formControlName="dispositivoCodigo" /></div><div class="field"><label>Responsable TI *</label><input formControlName="responsable" readonly /></div><div class="field"><label>Observaciones</label><textarea formControlName="observaciones"></textarea></div><button class="btn btn--secondary" [disabled]="submitting()">Entregar equipo temporal</button></form>
               }
             </section>
             @if (order.estado === 'PENDIENTE_DIAGNOSTICO') {
@@ -205,7 +206,7 @@ interface FlowStage {
                   ><input type="number" min="0" formControlName="montoCotizacion" />
                 </div>
                 <div class="field">
-                  <label>Responsable TI *</label><input formControlName="responsable" />
+                  <label>Responsable TI *</label><input formControlName="responsable" readonly />
                 </div>
                 <button class="btn btn--primary" [disabled]="submitting()">
                   Guardar cotización
@@ -256,7 +257,7 @@ interface FlowStage {
                   <label>Observaciones</label><textarea formControlName="observaciones"></textarea>
                 </div>
                 <div class="field">
-                  <label>Responsable TI *</label><input formControlName="responsable" />
+                  <label>Responsable TI *</label><input formControlName="responsable" readonly />
                 </div>
                 <button class="btn btn--primary" [disabled]="submitting()">
                   Registrar decisión
@@ -282,7 +283,7 @@ interface FlowStage {
                   <label>Resultado *</label><textarea formControlName="resultado"></textarea>
                 </div>
                 <div class="field">
-                  <label>Responsable TI *</label><input formControlName="responsable" />
+                  <label>Responsable TI *</label><input formControlName="responsable" readonly />
                 </div>
                 <button class="btn btn--primary" [disabled]="submitting()">Cerrar y recibir</button>
               </form>
@@ -590,6 +591,7 @@ interface FlowStage {
 })
 export class ServicioTecnico implements OnInit {
   private readonly service = inject(ServicioTecnicoService);
+  private readonly auth = inject(AuthService);
   private readonly toast = inject(ToastService);
   private readonly fb = inject(FormBuilder);
   protected readonly orders = signal<OrdenServicio[]>([]);
@@ -641,6 +643,7 @@ export class ServicioTecnico implements OnInit {
     });
   }
   protected select(order: OrdenServicio): void {
+    const actor = this.auth.user()?.nombre || '';
     this.selected.set(order);
     this.actionError.set('');
     this.quoteForm.reset({
@@ -648,17 +651,17 @@ export class ServicioTecnico implements OnInit {
       diagnostico: '',
       descripcionReparacion: '',
       montoCotizacion: order.montoCotizacion ?? 0,
-      responsable: '',
+      responsable: actor,
     });
     this.decisionForm.reset({
       decision: 'APROBAR',
       motivo: '',
       observaciones: '',
-      responsable: '',
+      responsable: actor,
     });
-    this.closeForm.reset({ costoFinal: 0, fechaRetorno: '', resultado: '', responsable: '' });
-    this.temporaryForm.reset({dispositivoCodigo:0,responsable:'',observaciones:''});
-    this.temporaryCloseForm.reset({responsable:'',observaciones:''});
+    this.closeForm.reset({ costoFinal: 0, fechaRetorno: '', resultado: '', responsable: actor });
+    this.temporaryForm.reset({dispositivoCodigo:0,responsable:actor,observaciones:''});
+    this.temporaryCloseForm.reset({responsable:actor,observaciones:''});
   }
 
   protected openTemporary(order:OrdenServicio){return order.entregasTemporales.find(item=>item.estado==='ABIERTA')??null;}

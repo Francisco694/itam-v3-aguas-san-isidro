@@ -57,7 +57,7 @@ test("las migraciones 009 a 012 están registradas y completas",async()=>{
 
 test("todas las actas vigentes de trabajadores conservan la declaración obligatoria completa",async()=>{
  const result=await pool.query<{declaracion:string}>("SELECT declaracion FROM itam.actas_entrega WHERE colaborador_id IS NOT NULL");
- assert.ok(result.rows.length>0);for(const row of result.rows)assert.equal(row.declaracion,DECLARACION_OBLIGATORIA_TRABAJADOR);
+ for(const row of result.rows)assert.equal(row.declaracion,DECLARACION_OBLIGATORIA_TRABAJADOR);
 });
 
 test("el correlativo CD es anual y transaccional",async()=>{

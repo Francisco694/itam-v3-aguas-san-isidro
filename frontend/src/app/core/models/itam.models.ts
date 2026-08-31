@@ -31,7 +31,7 @@ export interface Colaborador {
 export interface ColaboradorFilters { nombre?: string; rut?: string; departamentoId?: number; activo?: boolean; }
 export interface ColaboradorInput { rut: string; nombre: string; cargo?: string | null; departamentoId?: number | null; localidad?: string | null; activo?: boolean; observaciones?: string | null; }
 
-export interface SimAsociadaResumen { id: string; codigoInventario: number; iccidCodigoFabrica: string; numeroAsociado: string | null; compania: string | null; estado: EstadoResumen | null; }
+export interface SimAsociadaResumen { id: string; codigoInventario: number; iccidCodigoFabrica: string | null; numeroAsociado: string | null; compania: string | null; estado: EstadoResumen | null; }
 export interface Dispositivo {
   id: string; codigoInventario: number; tipoDispositivo: string; marca: string | null; modelo: string | null;
   tipo: TipoDispositivo;
@@ -45,7 +45,7 @@ export interface Dispositivo {
 }
 export interface DispositivoFilters { q?: string; tipo?: string; tipoDispositivoId?: number; familiaCodigoInventarioId?: number; estado?: string; colaboradorId?: number; departamentoId?: number; localidad?: string; }
 export interface IndicadorEconomico { cantidad:number;valor:number; }
-export interface ResumenGerencial {inventario:IndicadorEconomico;disponibles:IndicadorEconomico;asignados:IndicadorEconomico;extraviados:IndicadorEconomico;bajas:IndicadorEconomico;}
+export interface ResumenGerencial {inventarioOperacional:IndicadorEconomico;disponibles:IndicadorEconomico;asignados:IndicadorEconomico;servicioTecnico:IndicadorEconomico;extraviados:IndicadorEconomico;bajas:IndicadorEconomico;}
 export interface ReporteInventario {
   periodo:{desde:string;hasta:string};generadoEn:string;
   resumen:{total:IndicadorEconomico;disponibles:IndicadorEconomico;asignados:IndicadorEconomico;asignadosColaboradores:IndicadorEconomico;asignadosDepartamentos:IndicadorEconomico;servicioTecnico:IndicadorEconomico;extraviados:IndicadorEconomico;bajas:IndicadorEconomico};
@@ -70,7 +70,7 @@ export interface FacturaAdquisicion{ id:string;numeroFactura:string;fechaFactura
 
 export interface SimDispositivoResumen { id: string; codigoInventario: number; tipoDispositivo: string; marca: string | null; modelo: string | null; estado: EstadoResumen | null; }
 export interface Sim {
-  id: string; codigoInventario: number; iccidCodigoFabrica: string; numeroAsociado: string | null; compania: string | null;
+  id: string; codigoInventario: number; iccidCodigoFabrica: string | null; numeroAsociado: string | null; compania: string | null;
   estado: EstadoResumen; colaborador: ColaboradorResumen | null; dispositivo: SimDispositivoResumen | null;
   observaciones: string | null; fechaRegistro: string; creadoEn: string; actualizadoEn: string;
 }
@@ -83,12 +83,13 @@ export interface HistorialEvento {
   estadoAnterior: EstadoResumen | null; estadoNuevo: EstadoResumen | null; responsable: string;
   observaciones: string | null; detalle: Record<string, unknown>; fechaEvento: string;
   usuarioEjecutor?:{id:string;nombre:string;email:string}|null;
+  colaboradorHistorico?:{id:string;nombre:string;rut:string}|null;
 }
 
 export interface InventarioDepartamento { departamento: Departamento; resumen: { custodiaDirecta: number; conColaboradores: number; totalRelacionado: number }; custodiaDirecta: Dispositivo[]; activosColaboradores: Dispositivo[]; }
 
 export interface ActivoColaborador {id:string;codigoInventario:number;tipo:string;marca:string|null;modelo:string|null;numeroSerie:string|null;imei:string|null;valorComercial:number;estado:{codigo:string;nombre:string};}
-export interface HistorialActivoColaborador extends ActivoColaborador {fechaAsignacion:string;fechaDevolucion:string|null;resultado:string;}
+export interface HistorialActivoColaborador extends ActivoColaborador {fechaAsignacion:string;fechaDevolucion:string|null;tipoCierre:string|null;resultado:string;}
 export interface InventarioColaborador {colaborador:Colaborador;valorTotalCustodia:number;equiposActuales:ActivoColaborador[];historialEquipos:HistorialActivoColaborador[];}
 export interface PendienteOffboarding {colaborador:Colaborador;activosPendientes:number;valorPendiente:number;estado:'PENDIENTE';}
 

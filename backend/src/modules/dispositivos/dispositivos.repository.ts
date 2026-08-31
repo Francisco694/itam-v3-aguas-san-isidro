@@ -187,13 +187,15 @@ export const listarDispositivos = async (
 
 export const obtenerDispositivoPorCodigo = async (
   codigoInventario: number,
-  client?: PoolClient
+  client?: PoolClient,
+  forUpdate = false
 ): Promise<DispositivoRow | null> => {
   const result = await getDb(client).query<DispositivoRow>(
     `
       ${dispositivoSelect}
       WHERE d.codigo_inventario = $1
       LIMIT 1
+      ${forUpdate ? "FOR UPDATE OF d" : ""}
     `,
     [codigoInventario]
   );
@@ -366,14 +368,18 @@ export const actualizarDispositivo = async (
 export const obtenerResumenGerencial = async (): Promise<ResumenGerencialRow> => {
   const result = await pool.query<ResumenGerencialRow>(`
     SELECT
-      COUNT(*) AS total_cantidad,
-      COALESCE(SUM(d.valor_comercial), 0) AS total_valor,
+      COUNT(*) FILTER (
+        WHERE e.codigo IN ('ASIGNADO', 'DISPONIBLE', 'SERVICIO_TECNICO')
+      ) AS inventario_operacional_cantidad,
+      COALESCE(SUM(d.valor_comercial) FILTER (
+        WHERE e.codigo IN ('ASIGNADO', 'DISPONIBLE', 'SERVICIO_TECNICO')
+      ), 0) AS inventario_operacional_valor,
       COUNT(*) FILTER (WHERE e.codigo = 'DISPONIBLE') AS disponibles_cantidad,
       COALESCE(SUM(d.valor_comercial) FILTER (WHERE e.codigo = 'DISPONIBLE'), 0) AS disponibles_valor,
-      COUNT(*) FILTER (WHERE d.colaborador_id IS NOT NULL OR d.departamento_id IS NOT NULL) AS asignados_cantidad,
-      COALESCE(SUM(d.valor_comercial) FILTER (
-        WHERE d.colaborador_id IS NOT NULL OR d.departamento_id IS NOT NULL
-      ), 0) AS asignados_valor,
+      COUNT(*) FILTER (WHERE e.codigo = 'ASIGNADO') AS asignados_cantidad,
+      COALESCE(SUM(d.valor_comercial) FILTER (WHERE e.codigo = 'ASIGNADO'), 0) AS asignados_valor,
+      COUNT(*) FILTER (WHERE e.codigo = 'SERVICIO_TECNICO') AS servicio_tecnico_cantidad,
+      COALESCE(SUM(d.valor_comercial) FILTER (WHERE e.codigo = 'SERVICIO_TECNICO'), 0) AS servicio_tecnico_valor,
       COUNT(*) FILTER (WHERE e.codigo = 'EXTRAVIADO') AS extraviados_cantidad,
       COALESCE(SUM(d.valor_comercial) FILTER (WHERE e.codigo = 'EXTRAVIADO'), 0) AS extraviados_valor,
       COUNT(*) FILTER (WHERE e.codigo = 'DADO_BAJA') AS bajas_cantidad,
@@ -408,6 +414,8 @@ export const asignarDispositivoAColaborador = async (
         recibido_por_id = NULL,
         estado_id = $3
       WHERE codigo_inventario = $1
+        AND colaborador_id IS NULL
+        AND departamento_id IS NULL
       RETURNING codigo_inventario
     `,
     [codigoInventario, colaboradorId, estadoId]
@@ -449,6 +457,8 @@ export const asignarDispositivoADepartamento = async (
           ELSE ubicacion_detalle
         END
       WHERE codigo_inventario = $1
+        AND colaborador_id IS NULL
+        AND departamento_id IS NULL
       RETURNING codigo_inventario
     `,
     [
@@ -545,6 +555,35 @@ export const cambiarEstadoDispositivo = async (
   );
 };
 
+export const darDeBajaYLiberarCustodia = async (
+  codigoInventario: number,
+  estadoId: number,
+  client: PoolClient
+): Promise<DispositivoRow | null> => {
+  const result = await client.query<{ codigo_inventario: number }>(
+    `
+      UPDATE itam.dispositivos
+      SET
+        estado_id = $2,
+        colaborador_id = NULL,
+        departamento_id = NULL,
+        recibido_por_id = NULL
+      WHERE codigo_inventario = $1
+      RETURNING codigo_inventario
+    `,
+    [codigoInventario, estadoId]
+  );
+
+  if (!result.rows[0]) {
+    return null;
+  }
+
+  return obtenerDispositivoPorCodigo(
+    result.rows[0].codigo_inventario,
+    client
+  );
+};
+
 export const insertarHistorialDispositivo = async (
   dispositivoId: string,
   tipoEvento: string,
@@ -615,7 +654,10 @@ export const listarHistorialDispositivo = async (
         h.fecha_evento,
         h.usuario_ejecutor_id,
         ejecutor.nombre AS usuario_ejecutor_nombre,
-        ejecutor.email AS usuario_ejecutor_email
+        ejecutor.email AS usuario_ejecutor_email,
+        historico.id AS colaborador_historico_id,
+        historico.nombre AS colaborador_historico_nombre,
+        historico.rut AS colaborador_historico_rut
       FROM itam.historial_eventos h
       INNER JOIN itam.dispositivos d
         ON d.id = h.dispositivo_id
@@ -625,6 +667,21 @@ export const listarHistorialDispositivo = async (
         ON nuevo.id = h.estado_nuevo_id
       LEFT JOIN itam.usuarios ejecutor
         ON ejecutor.id = h.usuario_ejecutor_id
+      LEFT JOIN itam.colaboradores historico
+        ON historico.id = CASE
+          WHEN COALESCE(
+            h.detalle->>'collaboratorId',
+            h.detalle#>>'{custodiaNueva,id}'
+          ) <> '' AND COALESCE(
+            h.detalle->>'collaboratorId',
+            h.detalle#>>'{custodiaNueva,id}'
+          ) !~ '[^0-9]'
+          THEN COALESCE(
+            h.detalle->>'collaboratorId',
+            h.detalle#>>'{custodiaNueva,id}'
+          )::BIGINT
+          ELSE NULL
+        END
       WHERE d.codigo_inventario = $1
         AND h.tipo_entidad = 'DISPOSITIVO'
       ORDER BY h.fecha_evento DESC

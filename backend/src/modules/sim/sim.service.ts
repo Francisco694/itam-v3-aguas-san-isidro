@@ -470,18 +470,16 @@ export const asignarColaboradorSim = async (
   codigoInventario: number,
   input: AsignarColaboradorSimInput
 ): Promise<SimResumen> => {
-  const colaborador = await obtenerColaboradorPorId(
-    input.colaboradorId
-  );
-
-  if (!colaborador) {
-    throw new NotFoundError("Colaborador no encontrado.");
-  }
-
   const client = await pool.connect();
 
   try {
     await client.query("BEGIN");
+
+    const colaborador = await obtenerColaboradorPorId(input.colaboradorId, client);
+    if (!colaborador) throw new NotFoundError("Colaborador no encontrado.");
+    if (!colaborador.activo) {
+      throw new ConflictError("No se puede asignar una SIM a un colaborador inactivo.");
+    }
 
     const sim = await obtenerSimPorCodigo(codigoInventario, client);
 

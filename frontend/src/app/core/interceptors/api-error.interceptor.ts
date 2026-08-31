@@ -8,10 +8,33 @@ const isApiErrorBody = (value: unknown): value is ApiErrorBody => {
   return !!apiError && typeof apiError === 'object' && 'code' in apiError && 'message' in apiError;
 };
 
+const sessionErrorCodes = new Set([
+  'AUTH_REQUIRED',
+  'INVALID_SESSION',
+  'SESSION_EXPIRED_IDLE'
+]);
+
 export const apiErrorInterceptor: HttpInterceptorFn = (request, next) => next(request.clone({withCredentials:true})).pipe(
   catchError((error: HttpErrorResponse) => {
     if (isApiErrorBody(error.error)) {
-      return throwError(() => new ApiError(error.error.error.code, error.error.error.message, error.status));
+      const apiError = new ApiError(
+        error.error.error.code,
+        error.error.error.message,
+        error.status
+      );
+      if (
+        error.status === 401 &&
+        sessionErrorCodes.has(apiError.code) &&
+        !request.url.endsWith('/auth/login') &&
+        !request.url.endsWith('/auth/login-pin')
+      ) {
+        window.dispatchEvent(
+          new CustomEvent('itam:session-unauthorized', {
+            detail: { code: apiError.code }
+          })
+        );
+      }
+      return throwError(() => apiError);
     }
     const message = error.status === 0
       ? 'No fue posible conectar con la API. Verifica que el backend esté disponible.'

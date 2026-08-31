@@ -22,6 +22,7 @@ import reportesRoutes from "./modules/reportes/reportes.routes";
 import facturasAdquisicionRoutes from "./modules/facturas-adquisicion/facturas-adquisicion.routes";
 import authRoutes from "./modules/auth/auth.routes";
 import usuariosRoutes from "./modules/usuarios/usuarios.routes";
+import offboardingRoutes from "./modules/offboarding/offboarding.routes";
 import { auditMutations, requireAuth } from "./shared/auth.middleware";
 
 const app = express();
@@ -66,6 +67,7 @@ app.use("/api/v1/comprobantes-devolucion", comprobantesDevolucionRoutes);
 app.use("/api/v1/reportes",reportesRoutes);
 app.use("/api/v1/facturas-adquisicion",facturasAdquisicionRoutes);
 app.use("/api/v1/usuarios",usuariosRoutes);
+app.use("/api/v1/offboarding",offboardingRoutes);
 
 
 // ============================================================

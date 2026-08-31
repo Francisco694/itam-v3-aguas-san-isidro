@@ -10,27 +10,11 @@ import {
 } from '@angular/core';
 import { BrowserQRCodeReader, IScannerControls } from '@zxing/browser';
 import { LucideCamera, LucideRefreshCw, LucideX } from '@lucide/angular';
-
-export const parseItamQrValue = (rawValue: string): number | null => {
-  const value = rawValue.trim();
-  if (!value) return null;
-  let path = value;
-  if (!value.startsWith('/')) {
-    try {
-      const url = new URL(value);
-      if (!['http:', 'https:'].includes(url.protocol) || url.search || url.hash) {
-        return null;
-      }
-      path = url.pathname;
-    } catch {
-      return null;
-    }
-  }
-  const match = /^\/dispositivos\/([1-9]\d*)\/?$/.exec(path);
-  if (!match) return null;
-  const code = Number(match[1]);
-  return Number.isSafeInteger(code) ? code : null;
-};
+import type { ItamQrTarget } from '../../utils/itam-qr';
+import {
+  itamQrAllowedOrigins,
+  parseItamQrValue
+} from '../../utils/itam-qr';
 
 @Component({
   selector: 'app-qr-scanner',
@@ -98,7 +82,7 @@ export const parseItamQrValue = (rawValue: string): number | null => {
 })
 export class QrScanner implements AfterViewInit, OnDestroy {
   @ViewChild('video') private video?: ElementRef<HTMLVideoElement>;
-  readonly scanned = output<number>();
+  readonly scanned = output<ItamQrTarget>();
   readonly cancelled = output<void>();
   protected readonly error = signal('');
   protected readonly secureContext = window.isSecureContext;
@@ -142,16 +126,19 @@ export class QrScanner implements AfterViewInit, OnDestroy {
         video,
         (result, _decodeError, controls) => {
           if (!result) return;
-          const code = parseItamQrValue(result.getText());
+          const target = parseItamQrValue(
+            result.getText(),
+            itamQrAllowedOrigins()
+          );
           controls.stop();
           this.controls = undefined;
-          if (code === null) {
+          if (target === null) {
             this.error.set(
-              'El codigo QR leido no corresponde a un activo ITAM valido.'
+              'El código QR leído no corresponde a un registro ITAM válido.'
             );
             return;
           }
-          this.scanned.emit(code);
+          this.scanned.emit(target);
         }
       );
     } catch (accessError) {

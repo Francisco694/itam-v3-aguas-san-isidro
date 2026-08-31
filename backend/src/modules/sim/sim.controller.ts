@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { asyncHandler } from "../../shared/async-handler";
+import { authenticatedActorName } from "../../shared/authenticated-actor";
 import { ValidationError } from "../../shared/errors";
 import { sendCollection, sendItem } from "../../shared/responses";
 import {
@@ -57,13 +58,10 @@ const assertNoProtectedPatchFields = (
 };
 
 const parseResponsableInput = (
+  req: Request,
   body: Record<string, unknown>
 ): ResponsableInput => ({
-  responsable: parseRequiredString(
-    body.responsable,
-    "responsable",
-    150
-  ),
+  responsable: authenticatedActorName(req),
   observaciones: parseOptionalString(
     body.observaciones,
     "observaciones"
@@ -112,11 +110,7 @@ export const crearSimController = asyncHandler(
         body.observaciones,
         "observaciones"
       ),
-      responsable: parseRequiredString(
-        body.responsable,
-        "responsable",
-        150
-      )
+      responsable: authenticatedActorName(req)
     };
 
     const sim = await crearNuevaSim(input);
@@ -175,7 +169,7 @@ export const asociarDispositivoController = asyncHandler(
         body.dispositivoCodigoInventario,
         "dispositivoCodigoInventario"
       ),
-      ...parseResponsableInput(body)
+      ...parseResponsableInput(req, body)
     };
 
     const sim = await asociarDispositivo(codigo, input);
@@ -188,7 +182,7 @@ export const desasociarDispositivoController = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
     const codigo = parsePositiveInteger(req.params.codigo, "codigo");
     const body = parseBodyObject(req.body);
-    const input = parseResponsableInput(body);
+    const input = parseResponsableInput(req, body);
 
     const sim = await desasociarDispositivo(codigo, input);
 
@@ -206,7 +200,7 @@ export const asignarColaboradorController = asyncHandler(
         body.colaboradorId,
         "colaboradorId"
       ),
-      ...parseResponsableInput(body)
+      ...parseResponsableInput(req, body)
     };
 
     const sim = await asignarColaboradorSim(codigo, input);
@@ -219,7 +213,7 @@ export const desasignarColaboradorController = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
     const codigo = parsePositiveInteger(req.params.codigo, "codigo");
     const body = parseBodyObject(req.body);
-    const input = parseResponsableInput(body);
+    const input = parseResponsableInput(req, body);
 
     const sim = await desasignarColaboradorSim(codigo, input);
 
@@ -234,7 +228,7 @@ export const cambiarEstadoSimController = asyncHandler(
 
     const input: CambiarEstadoSimInput = {
       estadoId: parsePositiveInteger(body.estadoId, "estadoId"),
-      ...parseResponsableInput(body)
+      ...parseResponsableInput(req, body)
     };
 
     const sim = await cambiarEstadoSimExistente(codigo, input);

@@ -1,6 +1,6 @@
 import { Routes } from '@angular/router';
 import { MainLayout } from './layout/main-layout/main-layout';
-import { authGuard } from './core/guards/auth.guard';
+import { authGuard, credentialChangeGuard } from './core/guards/auth.guard';
 
 export const routes: Routes = [
   {path:'login',loadComponent:()=>import('./features/login/login').then(m=>m.Login)},
@@ -8,6 +8,7 @@ export const routes: Routes = [
     path: '',
     component: MainLayout,
     canActivate:[authGuard],
+    canActivateChild:[credentialChangeGuard],
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
       { path: 'dashboard', loadComponent: () => import('./features/dashboard/dashboard').then((m) => m.Dashboard) },
@@ -18,7 +19,7 @@ export const routes: Routes = [
       { path: 'estados', loadComponent: () => import('./features/estados/estados-list').then((m) => m.EstadosList) },
       { path: 'tipos-dispositivo', loadComponent: () => import('./features/tipos-dispositivo/tipos-dispositivo-list').then((m) => m.TiposDispositivoList) },
       { path: 'familias-codigo', loadComponent: () => import('./features/familias-codigo/familias-codigo-list').then((m) => m.FamiliasCodigoList) },
-      { path: 'offboarding', loadComponent: () => import('./features/offboarding/offboarding').then((m) => m.Offboarding) },
+      { path: 'offboarding', loadComponent: () => import('./features/offboarding/offboarding-page').then((m) => m.OffboardingPage) },
       { path: 'servicio-tecnico', loadComponent: () => import('./features/servicio-tecnico/servicio-tecnico').then((m) => m.ServicioTecnico) },
       { path: 'actas', loadComponent: () => import('./features/actas/actas').then((m) => m.Actas) },
       { path: 'reportes', loadComponent: () => import('./features/reportes/reportes').then((m) => m.Reportes) },

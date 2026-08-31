@@ -3,6 +3,7 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Sim } from '../../core/models/itam.models';
 import { SimService } from '../../core/services/sim.service';
+import { AuthService } from '../../core/services/auth.service';
 import { AssetCreatedDialog } from '../../shared/components/asset-created-dialog/asset-created-dialog';
 import { PageHeader } from '../../shared/components/page-header/page-header';
 import { ViewState } from '../../shared/components/view-state/view-state';
@@ -64,6 +65,7 @@ import { errorMessage } from '../../shared/utils/error-message';
                 id="responsible"
                 maxlength="150"
                 formControlName="responsable"
+                readonly
                 [class.invalid]="invalid('responsable')"
               />
               @if (invalid('responsable')) {
@@ -103,6 +105,7 @@ import { errorMessage } from '../../shared/utils/error-message';
 export class SimForm implements OnInit {
   private readonly fb = inject(FormBuilder);
   private readonly service = inject(SimService);
+  private readonly auth = inject(AuthService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   protected codigo = 0;
@@ -118,6 +121,7 @@ export class SimForm implements OnInit {
     responsable: ['', [Validators.required, Validators.maxLength(150)]],
   });
   ngOnInit() {
+    this.form.controls.responsable.setValue(this.auth.user()?.nombre ?? '');
     this.codigo = Number(this.route.snapshot.paramMap.get('codigo') || 0);
     if (this.codigo) {
       this.form.controls.responsable.clearValidators();
@@ -125,7 +129,7 @@ export class SimForm implements OnInit {
       this.service.obtener(this.codigo).subscribe({
         next: (i) => {
           this.form.patchValue({
-            iccidCodigoFabrica: i.iccidCodigoFabrica,
+            iccidCodigoFabrica: i.iccidCodigoFabrica ?? '',
             numeroAsociado: i.numeroAsociado || '',
             compania: i.compania || '',
             observaciones: i.observaciones || '',

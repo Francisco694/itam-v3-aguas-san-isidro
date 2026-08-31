@@ -119,10 +119,26 @@ interface EmployeeResult {
         @if (!pendingRows().length) {
           <app-view-state kind="empty" title="Sin custodias pendientes" message="No hay activos pendientes de recuperación actualmente." />
         } @else {
-          <div class="table-wrap"><table class="data-table pending-table">
+          <div class="table-wrap desktop-table"><table class="data-table pending-table">
             <thead><tr><th>Colaborador</th><th>RUT</th><th>Departamento</th><th>Activos pendientes</th><th>Valor pendiente</th><th>Estado</th><th>Acción</th></tr></thead>
             <tbody>@for (row of pendingRows(); track row.colaborador.id) {<tr><td><strong>{{ row.colaborador.nombre }}</strong></td><td>{{ row.colaborador.rut }}</td><td>{{ row.colaborador.departamento?.nombre || 'Sin departamento' }}</td><td>{{ row.activosPendientes }}</td><td>{{ clp(row.valorPendiente) }}</td><td><app-status-badge code="PENDIENTE" label="Pendiente" /></td><td><button class="btn btn--secondary btn--small" type="button" (click)="manage(row)">Gestionar</button></td></tr>}</tbody>
           </table></div>
+          <div class="mobile-record-list pending-mobile-list">
+            @for (row of pendingRows(); track row.colaborador.id) {
+              <article class="mobile-record-card">
+                <header class="mobile-record-card__top">
+                  <div><strong class="mobile-record-card__title">{{ row.colaborador.nombre }}</strong><span class="mobile-record-card__subtitle">{{ row.colaborador.rut }}</span></div>
+                  <app-status-badge code="PENDIENTE" label="Pendiente" />
+                </header>
+                <dl class="mobile-record-card__details">
+                  <div><dt>Departamento</dt><dd>{{ row.colaborador.departamento?.nombre || 'Sin departamento' }}</dd></div>
+                  <div><dt>Activos pendientes</dt><dd>{{ row.activosPendientes }}</dd></div>
+                  <div><dt>Valor pendiente</dt><dd>{{ clp(row.valorPendiente) }}</dd></div>
+                </dl>
+                <footer class="mobile-record-card__actions"><button class="btn btn--primary" type="button" (click)="manage(row)">Gestionar recuperacion</button></footer>
+              </article>
+            }
+          </div>
         }
       }
     </section>

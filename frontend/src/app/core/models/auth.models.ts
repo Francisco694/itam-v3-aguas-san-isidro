@@ -10,6 +10,13 @@ export interface AuthUser {
   debeCambiarPin: boolean;
 }
 
+export interface SessionPolicy {
+  idleTimeoutMinutes: number;
+  idleWarningMinutes: number;
+}
+
+export type SessionEndReason = 'idle' | 'logout' | 'invalid';
+
 export interface ManagedUser extends AuthUser {
   activo: boolean;
   pinConfigurado: boolean;

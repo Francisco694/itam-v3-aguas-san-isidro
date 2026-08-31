@@ -6,10 +6,12 @@ import { ValidationError } from "../../shared/errors";
 import { sendItem } from "../../shared/responses";
 import { parseBodyObject, parseRequiredString } from "../../shared/validation";
 import {
+  changeOwnPassword,
   changeOwnPin,
   login,
   loginWithPin,
-  logout
+  logout,
+  refreshSession
 } from "./auth.service";
 
 const cookieOptions = {
@@ -25,6 +27,14 @@ const parsePin = (value: unknown, field: string): string => {
     throw new ValidationError(`${field} debe contener exactamente 6 digitos.`);
   }
   return value;
+};
+
+const parsePassword = (value: unknown, field: string): string => {
+  const password = parseRequiredString(value, field, 200);
+  if (password.length < 12) {
+    throw new ValidationError(`${field} debe contener al menos 12 caracteres.`);
+  }
+  return password;
 };
 
 const setSession = (res: Response, token: string): void => {
@@ -59,6 +69,16 @@ export const meController = asyncHandler(
   async (req: Request, res: Response) => sendItem(res, req.authUser!)
 );
 
+export const refreshSessionController = asyncHandler(
+  async (req: Request, res: Response) => {
+    await refreshSession(cookieValue(req.headers.cookie, SESSION_COOKIE));
+    sendItem(res, {
+      idleTimeoutMinutes: env.session.idleTimeoutMinutes,
+      idleWarningMinutes: env.session.idleWarningMinutes
+    });
+  }
+);
+
 export const changePinController = asyncHandler(
   async (req: Request, res: Response) => {
     const body = parseBodyObject(req.body);
@@ -66,6 +86,18 @@ export const changePinController = asyncHandler(
       req.authUser!.id,
       parsePin(body.currentPin, "currentPin"),
       parsePin(body.newPin, "newPin")
+    );
+    res.status(204).send();
+  }
+);
+
+export const changePasswordController = asyncHandler(
+  async (req: Request, res: Response) => {
+    const body = parseBodyObject(req.body);
+    await changeOwnPassword(
+      req.authUser!.id,
+      parseRequiredString(body.currentPassword,"currentPassword",200),
+      parsePassword(body.newPassword,"newPassword")
     );
     res.status(204).send();
   }

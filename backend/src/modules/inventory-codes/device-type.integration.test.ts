@@ -259,7 +259,7 @@ test("PostgreSQL conserva nombres UTF-8 del catálogo", async () => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    for (const nombre of ["PC Escritorio", "Teléfono", "Impresora", "Cámara"]) {
+    for (const nombre of ["TEST PC Escritorio", "TEST Teléfono", "TEST Impresora", "TEST Cámara"]) {
       const creado = await crearTipoDispositivo({ nombre }, client);
       assert.equal(creado.nombre, nombre);
     }

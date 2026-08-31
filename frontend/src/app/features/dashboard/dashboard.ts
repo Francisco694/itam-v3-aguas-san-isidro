@@ -21,6 +21,7 @@ import { ActasEntregaService } from '../../core/services/actas-entrega.service';
 import { DepartamentosService } from '../../core/services/departamentos.service';
 import { DispositivosService } from '../../core/services/dispositivos.service';
 import { HealthService } from '../../core/services/health.service';
+import { OffboardingService } from '../../core/services/offboarding.service';
 import { ServicioTecnicoService } from '../../core/services/servicio-tecnico.service';
 import { SimService } from '../../core/services/sim.service';
 import { PageHeader } from '../../shared/components/page-header/page-header';
@@ -153,7 +154,7 @@ interface OperationalMetric {
             <span>Reparaciones acumuladas</span><strong>{{ repairCosts() }}</strong>
           </div>
           <div>
-            <span>Valor del inventario registrado</span><strong>{{ inventoryValue() }}</strong>
+            <span>Valor de equipos activos</span><strong>{{ inventoryValue() }}</strong>
           </div>
         </div>
       </section>
@@ -257,6 +258,7 @@ export class Dashboard implements OnInit {
   private readonly health = inject(HealthService);
   private readonly technical = inject(ServicioTecnicoService);
   private readonly actas = inject(ActasEntregaService);
+  private readonly offboarding = inject(OffboardingService);
   protected readonly loading = signal(true);
   protected readonly error = signal('');
   protected readonly metrics = signal<Metric[]>([]);
@@ -296,17 +298,24 @@ export class Dashboard implements OnInit {
       orders: this.technical.listar(),
       acts: this.actas.listar(),
       summary: this.dispositivos.resumenGerencial(),
+      offboarding: this.offboarding.listarAbiertos(),
     }).subscribe({
       next: (r) => {
         const lostItems = r.devices.filter((i) => i.estado.codigo.includes('EXTRAVIAD'));
         const retiredItems = r.devices.filter((i) => i.estado.codigo.includes('BAJA'));
-        const custodyAssets = r.devices.filter((i) => i.colaborador !== null);
-        const custodyPeople = new Set(custodyAssets.map((i) => i.colaborador!.id)).size;
+        const pendingOffboardingAssets = r.offboarding.reduce(
+          (total, process) => total + process.equiposPendientes,
+          0,
+        );
+        const pendingOffboardingValue = r.offboarding.reduce(
+          (total, process) => total + process.valorPendiente,
+          0,
+        );
         this.metrics.set([
           {
             label: 'Inventario',
-            value: r.summary.inventario.cantidad,
-            meta: `Valor total: ${formatClp(r.summary.inventario.valor)}`,
+            value: r.summary.inventarioOperacional.cantidad,
+            meta: `Valor de equipos activos: ${formatClp(r.summary.inventarioOperacional.valor)}`,
             tone: 'blue',
             icon: LucidePackage,
           },
@@ -345,12 +354,10 @@ export class Dashboard implements OnInit {
         ]);
         this.lostValue.set(formatClp(lostItems.reduce((s, i) => s + i.valorComercial, 0)));
         this.retiredValue.set(formatClp(retiredItems.reduce((s, i) => s + i.valorComercial, 0)));
-        this.inventoryValue.set(formatClp(r.devices.reduce((s, i) => s + i.valorComercial, 0)));
+        this.inventoryValue.set(formatClp(r.summary.inventarioOperacional.valor));
         this.lostDevices.set(lostItems.length);
         this.retiredDevices.set(retiredItems.length);
-        this.serviceDevices.set(
-          r.devices.filter((i) => i.estado.codigo === 'SERVICIO_TECNICO').length,
-        );
+        this.serviceDevices.set(r.summary.servicioTecnico.cantidad);
         this.pendingDiagnostics.set(
           r.orders.filter((o) => o.estado === 'PENDIENTE_DIAGNOSTICO').length,
         );
@@ -375,8 +382,10 @@ export class Dashboard implements OnInit {
           },
           {
             title: 'Offboarding',
-            value: `${custodyPeople} colaboradores`,
-            meta: `${custodyAssets.length} activos · ${formatClp(custodyAssets.reduce((s, i) => s + i.valorComercial, 0))}`,
+            value: r.offboarding.length
+              ? `${r.offboarding.length} ${r.offboarding.length === 1 ? 'persona' : 'personas'} en proceso`
+              : 'Sin procesos pendientes',
+            meta: `${pendingOffboardingAssets} ${pendingOffboardingAssets === 1 ? 'equipo' : 'equipos'} por recuperar \u00b7 ${formatClp(pendingOffboardingValue)}`,
             route: '/offboarding',
             tone: 'offboarding',
             icon: LucideUserMinus,

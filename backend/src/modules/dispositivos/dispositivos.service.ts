@@ -25,6 +25,7 @@ import {
   asignarDispositivoADepartamento,
   cambiarEstadoDispositivo,
   crearDispositivo,
+  darDeBajaYLiberarCustodia,
   devolverDispositivo,
   insertarHistorialDispositivo,
   listarDispositivos,
@@ -64,9 +65,16 @@ export const obtenerIndicadoresGerenciales = async (): Promise<ResumenGerencial>
     valor: Number(valor) || 0
   });
   return {
-    inventario: metric(row.total_cantidad, row.total_valor),
+    inventarioOperacional: metric(
+      row.inventario_operacional_cantidad,
+      row.inventario_operacional_valor
+    ),
     disponibles: metric(row.disponibles_cantidad, row.disponibles_valor),
     asignados: metric(row.asignados_cantidad, row.asignados_valor),
+    servicioTecnico: metric(
+      row.servicio_tecnico_cantidad,
+      row.servicio_tecnico_valor
+    ),
     extraviados: metric(row.extraviados_cantidad, row.extraviados_valor),
     bajas: metric(row.bajas_cantidad, row.bajas_valor)
   };
@@ -180,8 +188,7 @@ const mapSimAsociada = (
 ): SimAsociadaResumen | null => {
   if (
     !row.sim_id ||
-    row.sim_codigo_inventario === null ||
-    !row.iccid_codigo_fabrica
+    row.sim_codigo_inventario === null
   ) {
     return null;
   }
@@ -296,7 +303,15 @@ const custodySnapshot = (row: DispositivoRow) => {
     return {
       tipo: "DEPARTAMENTO",
       id: row.departamento_id,
-      nombre: row.departamento_nombre
+      nombre: row.departamento_nombre,
+      recibidoPor: row.recibido_por_id
+        ? {
+            id: row.recibido_por_id,
+            nombre: row.recibido_por_nombre,
+            rut: row.recibido_por_rut,
+            cargo: row.recibido_por_cargo
+          }
+        : null
     };
   }
 
@@ -334,7 +349,8 @@ const mapHistorial = (
   observaciones: row.observaciones,
   detalle: row.detalle,
   fechaEvento: toIsoDateTime(row.fecha_evento),
-  usuarioEjecutor:row.usuario_ejecutor_id&&row.usuario_ejecutor_nombre&&row.usuario_ejecutor_email?{id:row.usuario_ejecutor_id,nombre:row.usuario_ejecutor_nombre,email:row.usuario_ejecutor_email}:null
+  usuarioEjecutor:row.usuario_ejecutor_id&&row.usuario_ejecutor_nombre&&row.usuario_ejecutor_email?{id:row.usuario_ejecutor_id,nombre:row.usuario_ejecutor_nombre,email:row.usuario_ejecutor_email}:null,
+  colaboradorHistorico:row.colaborador_historico_id&&row.colaborador_historico_nombre&&row.colaborador_historico_rut?{id:row.colaborador_historico_id,nombre:row.colaborador_historico_nombre,rut:row.colaborador_historico_rut}:null
 });
 
 const normalizarErrorDispositivo = (error: unknown): never => {
@@ -461,6 +477,51 @@ export const crearNuevoDispositivo = async (
   }
 };
 
+export interface CambioCampoDispositivo {
+  campo: string;
+  valorAnterior: unknown;
+  valorNuevo: unknown;
+}
+
+const canonicalValue = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(canonicalValue);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, item]) => [key, canonicalValue(item)])
+    );
+  }
+  return value;
+};
+
+export const detectarCambiosDispositivo = (
+  anterior: DispositivoRow,
+  nuevo: DispositivoRow,
+  input: ActualizarDispositivoInput
+): CambioCampoDispositivo[] => {
+  const cambios: CambioCampoDispositivo[] = [];
+  const add = (campo: string, valorAnterior: unknown, valorNuevo: unknown) => {
+    if (JSON.stringify(canonicalValue(valorAnterior)) !== JSON.stringify(canonicalValue(valorNuevo))) {
+      cambios.push({ campo, valorAnterior, valorNuevo });
+    }
+  };
+  if (input.marca !== undefined) add("marca", anterior.marca, nuevo.marca);
+  if (input.modelo !== undefined) add("modelo", anterior.modelo, nuevo.modelo);
+  if (input.numeroSerie !== undefined) add("numeroSerie", anterior.numero_serie, nuevo.numero_serie);
+  if (input.imei !== undefined) add("imei", anterior.imei, nuevo.imei);
+  if (input.localidad !== undefined) add("localidad", anterior.localidad, nuevo.localidad);
+  if (input.ubicacionDetalle !== undefined) add("ubicacionDetalle", anterior.ubicacion_detalle, nuevo.ubicacion_detalle);
+  if (input.observaciones !== undefined) add("observaciones", anterior.observaciones, nuevo.observaciones);
+  if (input.atributosEspecificos !== undefined) add(
+    "atributosEspecificos", anterior.atributos_especificos, nuevo.atributos_especificos
+  );
+  if (input.valorComercial !== undefined) add(
+    "valorComercial", Number(anterior.valor_comercial), Number(nuevo.valor_comercial)
+  );
+  return cambios;
+};
+
 export const actualizarDispositivoExistente = async (
   codigoInventario: number,
   input: ActualizarDispositivoInput
@@ -468,7 +529,7 @@ export const actualizarDispositivoExistente = async (
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const anterior = await obtenerDispositivoPorCodigo(codigoInventario, client);
+    const anterior = await obtenerDispositivoPorCodigo(codigoInventario, client, true);
     if (!anterior) {
       throw new NotFoundError("Dispositivo no encontrado.");
     }
@@ -507,7 +568,7 @@ export const actualizarDispositivoExistente = async (
         "CAMBIAR_TIPO_DISPOSITIVO",
         anterior.estado_id,
         anterior.estado_id,
-        "Sistema ITAM",
+        input.responsable,
         null,
         {
           tipoAnterior: {
@@ -521,6 +582,20 @@ export const actualizarDispositivoExistente = async (
             familiaCodigoInventarioId: nuevoTipo.familia_codigo_inventario_id
           }
         },
+        client
+      );
+    }
+
+    const cambios = detectarCambiosDispositivo(anterior, dispositivo, input);
+    if (cambios.length > 0) {
+      await insertarHistorialDispositivo(
+        anterior.dispositivo_id,
+        "ACTUALIZAR_DISPOSITIVO",
+        anterior.estado_id,
+        dispositivo.estado_id,
+        input.responsable,
+        null,
+        { cambios },
         client
       );
     }
@@ -571,27 +646,62 @@ const assertNoTerminal = async (dispositivo: DispositivoRow): Promise<void> => {
   }
 };
 
+export const assertColaboradorActivo = (
+  colaborador: { activo: boolean } | null
+): void => {
+  if (!colaborador) throw new NotFoundError("Colaborador no encontrado.");
+  if (!colaborador.activo) {
+    throw new ConflictError("No se puede asignar custodia a un colaborador inactivo.");
+  }
+};
+
+export const assertAsignadoConCustodioUnico = (
+  colaboradorId: string | null,
+  departamentoId: string | null
+): void => {
+  if (Number(Boolean(colaboradorId)) + Number(Boolean(departamentoId)) !== 1) {
+    throw new ConflictError(
+      "El estado ASIGNADO requiere exactamente un custodio: colaborador o departamento."
+    );
+  }
+};
+
+export const assertCambioEstadoGenericoPermitido = (
+  estadoActual: string,
+  estadoNuevo: string,
+  colaboradorId: string | null,
+  departamentoId: string | null
+): void => {
+  if (estadoActual === "DADO_BAJA") {
+    throw new ConflictError(
+      "DADO_BAJA es terminal. Se requiere un flujo explicito de anulacion de baja."
+    );
+  }
+  if (estadoNuevo === "DADO_BAJA") {
+    throw new ConflictError("Utilice la operacion de baja con motivo obligatorio.");
+  }
+  if (estadoNuevo === "ASIGNADO") {
+    assertAsignadoConCustodioUnico(colaboradorId, departamentoId);
+  }
+};
+
 export const asignarAColaborador = async (
   codigoInventario: number,
   input: AsignarColaboradorInput
 ): Promise<DispositivoResumen> => {
-  const colaborador = await obtenerColaboradorPorId(
-    input.colaboradorId
-  );
-
-  if (!colaborador) {
-    throw new NotFoundError("Colaborador no encontrado.");
-  }
-
   const estadoAsignado = await obtenerEstadoObligatorio("ASIGNADO");
   const client = await pool.connect();
 
   try {
     await client.query("BEGIN");
 
+    const colaborador = await obtenerColaboradorPorId(input.colaboradorId, client);
+    assertColaboradorActivo(colaborador);
+
     const anterior = await obtenerDispositivoPorCodigo(
       codigoInventario,
-      client
+      client,
+      true
     );
 
     if (!anterior) {
@@ -609,9 +719,9 @@ export const asignarAColaborador = async (
       client
     );
 
-    if (!actualizado) {
-      throw new NotFoundError("Dispositivo no encontrado.");
-    }
+    if (!actualizado) throw new ConflictError(
+      "El dispositivo dejo de estar disponible para asignacion."
+    );
 
     await insertarHistorialDispositivo(
       actualizado.dispositivo_id,
@@ -668,7 +778,8 @@ export const asignarADepartamento = async (
 
     const anterior = await obtenerDispositivoPorCodigo(
       codigoInventario,
-      client
+      client,
+      true
     );
 
     if (!anterior) {
@@ -689,9 +800,9 @@ export const asignarADepartamento = async (
       client
     );
 
-    if (!actualizado) {
-      throw new NotFoundError("Dispositivo no encontrado.");
-    }
+    if (!actualizado) throw new ConflictError(
+      "El dispositivo dejo de estar disponible para asignacion."
+    );
 
     await insertarHistorialDispositivo(
       actualizado.dispositivo_id,
@@ -748,7 +859,8 @@ const registrarDevolucionCentral = async (
 
     const anterior = await obtenerDispositivoPorCodigo(
       codigoInventario,
-      client
+      client,
+      true
     );
 
     if (!anterior) {
@@ -946,7 +1058,8 @@ export const cambiarEstadoDispositivoExistente = async (
 
     const anterior = await obtenerDispositivoPorCodigo(
       codigoInventario,
-      client
+      client,
+      true
     );
 
     if (!anterior) {
@@ -955,6 +1068,17 @@ export const cambiarEstadoDispositivoExistente = async (
 
 
     await assertSinOrdenServicioAbierta(anterior.dispositivo_id, client);
+    if (anterior.estado_codigo === "DADO_BAJA") {
+      throw new ConflictError(
+        "DADO_BAJA es terminal. Se requiere un flujo explicito de anulacion de baja."
+      );
+    }
+    if (estado.codigo === "ASIGNADO") {
+      assertAsignadoConCustodioUnico(
+        anterior.colaborador_id,
+        anterior.departamento_id
+      );
+    }
     if (estado.codigo === "DADO_BAJA") {
       throw new ConflictError(
         "Utilice la operación de baja con motivo obligatorio."
@@ -997,14 +1121,34 @@ export const cambiarEstadoDispositivoExistente = async (
 
 export const darDeBajaDispositivo = async (
   codigoInventario: number,
-  input: DarBajaDispositivoInput
+  input: DarBajaDispositivoInput,
+  providedClient?: import("pg").PoolClient,
+  options: { ordenServicioMotivo?: string } = {}
 ): Promise<DispositivoResumen> => {
   const estadoBaja = await obtenerEstadoObligatorio("DADO_BAJA");
-  const client = await pool.connect();
+  const client = providedClient ?? (await pool.connect());
+  const ownsTransaction = !providedClient;
   try {
-    await client.query("BEGIN");
-    const anterior = await obtenerDispositivoPorCodigo(codigoInventario, client);
+    if (ownsTransaction) await client.query("BEGIN");
+    const anterior = await obtenerDispositivoPorCodigo(codigoInventario, client, true);
     if (!anterior) throw new NotFoundError("Dispositivo no encontrado.");
+    if (anterior.estado_codigo === "DADO_BAJA") {
+      throw new ConflictError("El dispositivo ya se encuentra dado de baja.");
+    }
+    if (anterior.sim_id) {
+      throw new ConflictError(
+        "El dispositivo tiene una SIM asociada. Desasocie la SIM antes de darlo de baja."
+      );
+    }
+    const bajaActiva = await client.query<{ id: string }>(
+      `SELECT id FROM itam.bajas_dispositivo
+       WHERE dispositivo_id=$1 AND anulada=FALSE
+       ORDER BY id DESC LIMIT 1`,
+      [anterior.dispositivo_id]
+    );
+    if (bajaActiva.rows[0]) {
+      throw new ConflictError("El dispositivo ya tiene una baja patrimonial activa.");
+    }
     const orden = await client.query<{id:string}>(
       `SELECT id FROM itam.ordenes_servicio_tecnico
        WHERE dispositivo_id=$1 AND estado NOT IN ('CERRADA','BAJA','REPARACION_RECHAZADA')
@@ -1015,12 +1159,13 @@ export const darDeBajaDispositivo = async (
       await client.query(
         `UPDATE itam.ordenes_servicio_tecnico
          SET estado='BAJA',decision='DAR_BAJA',motivo_decision=$2,
-             fecha_decision=NOW(),responsable_decision=$3
+             observacion_decision=$4,fecha_decision=NOW(),responsable_decision=$3
          WHERE id=$1`,
-        [orden.rows[0].id,input.motivo,input.responsable]
+        [orden.rows[0].id,options.ordenServicioMotivo ?? input.motivo,
+          input.responsable,input.observaciones ?? null]
       );
     }
-    const actualizado = await cambiarEstadoDispositivo(
+    const actualizado = await darDeBajaYLiberarCustodia(
       codigoInventario,Number(estadoBaja.id),client
     );
     if (!actualizado) throw new NotFoundError("Dispositivo no encontrado.");
@@ -1032,15 +1177,21 @@ export const darDeBajaDispositivo = async (
     await insertarHistorialDispositivo(
       anterior.dispositivo_id,"DAR_BAJA",anterior.estado_id,estadoBaja.id,
       input.responsable,input.observaciones,
-      {motivo:input.motivo,valorComercial:Number(anterior.valor_comercial)},client
+      {
+        motivo: input.motivo,
+        ordenServicioId: orden.rows[0]?.id ?? null,
+        valorComercial: Number(anterior.valor_comercial),
+        custodiaAnterior: custodySnapshot(anterior),
+        custodiaNueva: custodySnapshot(actualizado)
+      },client
     );
-    await client.query("COMMIT");
+    if (ownsTransaction) await client.query("COMMIT");
     return mapDispositivo(actualizado);
   } catch (error) {
-    await client.query("ROLLBACK");
+    if (ownsTransaction) await client.query("ROLLBACK");
     return normalizarErrorDispositivo(error);
   } finally {
-    client.release();
+    if (ownsTransaction) client.release();
   }
 };
 

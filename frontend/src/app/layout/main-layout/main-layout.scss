@@ -1,14 +1,17 @@
 .app-shell {
   background: var(--gray-50);
   min-height: 100vh;
+  min-height: 100dvh;
 }
 .shell {
   display: grid;
   grid-template-columns: 15rem minmax(0, 1fr);
   min-height: calc(100vh - 5rem);
+  min-height: calc(100dvh - 5rem);
 }
 aside {
   height: calc(100vh - 5rem);
+  height: calc(100dvh - 5rem);
   left: 0;
   position: sticky;
   top: 5rem;
@@ -42,14 +45,16 @@ main {
 .backdrop {
   display: none;
 }
-@media (max-width: 900px) {
+@media (max-width: 1024px) {
   .shell {
     display: block;
   }
   aside {
     box-shadow: 0 18px 50px rgba(3, 4, 94, 0.28);
-    height: calc(100vh - 5rem);
+    bottom: 0;
+    height: auto;
     overflow-y: auto;
+    overscroll-behavior: contain;
     position: fixed;
     top: 5rem;
     transform: translateX(-105%);
@@ -73,4 +78,24 @@ main {
   }
   .app-footer { flex-direction: column; gap: .75rem; }
   .app-footer div:last-child { text-align: left; }
+}
+@media (max-width: 767px) {
+  .shell {
+    min-height: calc(100vh - 3.75rem);
+    min-height: calc(100dvh - 3.75rem);
+  }
+  aside {
+    top: 3.75rem;
+  }
+  .backdrop {
+    inset: 3.75rem 0 0;
+  }
+  main {
+    padding: .8rem .75rem 2rem;
+  }
+  .app-footer {
+    font-size: .68rem;
+    margin-inline: .85rem;
+    padding: 1rem 0 max(1rem, env(safe-area-inset-bottom));
+  }
 }

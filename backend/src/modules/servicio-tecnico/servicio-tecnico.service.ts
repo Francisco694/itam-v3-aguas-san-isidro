@@ -2,7 +2,10 @@ import { pool } from "../../config/database";
 import PDFDocument from "pdfkit";
 import { ConflictError, NotFoundError, ValidationError, isUniqueViolation } from "../../shared/errors";
 import { toIsoDateTime } from "../../shared/dates";
-import { asignarDispositivoAColaborador, cambiarEstadoDispositivo, devolverDispositivo, insertarHistorialDispositivo, obtenerDispositivoPorCodigo, obtenerEstadoDispositivoPorCodigo, registrarBajaDispositivo } from "../dispositivos/dispositivos.repository";
+import { asignarDispositivoAColaborador, cambiarEstadoDispositivo, devolverDispositivo, insertarHistorialDispositivo, obtenerDispositivoPorCodigo, obtenerEstadoDispositivoPorCodigo } from "../dispositivos/dispositivos.repository";
+import { assertAsignadoConCustodioUnico, assertColaboradorActivo, darDeBajaDispositivo } from "../dispositivos/dispositivos.service";
+import { obtenerColaboradorPorId } from "../colaboradores/colaboradores.repository";
+import type { MotivoBaja } from "../dispositivos/dispositivos.types";
 import { listarEntregasTemporales, listarOrdenes, obtenerEntregaTemporal, obtenerOrden, obtenerOrdenAbiertaPorDispositivo } from "./servicio-tecnico.repository";
 import type { CerrarOrdenInput, CerrarTemporalInput, CotizacionInput, CrearOrdenServicioInput, DecisionServicioInput, EntregaTemporalRow, EntregarTemporalInput, OrdenServicioRow } from "./servicio-tecnico.types";
 
@@ -78,23 +81,31 @@ export const registrarCotizacion=async(id:number,input:CotizacionInput)=>{
 };
 
 const motivosRechazo=["REPARACION_DEMASIADO_COSTOSA","MULTIPLES_REPARACIONES","EQUIPO_OBSOLETO","SIN_REPUESTOS","OTRO"];
+const motivoBajaDesdeServicio:Record<string,MotivoBaja>={
+  REPARACION_DEMASIADO_COSTOSA:"REPARACION_NO_CONVENIENTE",
+  MULTIPLES_REPARACIONES:"MULTIPLES_REPARACIONES",
+  EQUIPO_OBSOLETO:"OBSOLESCENCIA",
+  SIN_REPUESTOS:"SIN_REPUESTOS",
+  OTRO:"OTRO"
+};
 export const decidirOrdenServicio=async(id:number,input:DecisionServicioInput)=>{
  const client=await pool.connect();try{await client.query("BEGIN");const current=await obtenerOrden(id,client);
   if(!current)throw new NotFoundError("Orden de servicio no encontrada.");
   if(current.estado!=="COTIZACION_RECIBIDA")throw new ConflictError("La orden no está pendiente de decisión.");
   if(input.decision!=="APROBAR"&&!input.motivo)throw new ValidationError("El motivo es obligatorio al rechazar o dar de baja.");
   if(input.decision==="RECHAZAR"&&input.motivo&&!motivosRechazo.includes(input.motivo))throw new ValidationError("Motivo de rechazo no válido.");
-  const target=input.decision==="APROBAR"?"REPARACION_APROBADA":input.decision==="RECHAZAR"?"REPARACION_RECHAZADA":"BAJA";
-  await client.query(`UPDATE itam.ordenes_servicio_tecnico SET decision=$2,motivo_decision=$3,
-    observacion_decision=$4,fecha_decision=NOW(),responsable_decision=$5,estado=$6 WHERE id=$1`,
-    [id,input.decision,input.motivo??null,input.observaciones??null,input.responsable,target]);
   if(input.decision==="DAR_BAJA"){
-    const baja=await obtenerEstadoDispositivoPorCodigo("DADO_BAJA",client);if(!baja)throw new ConflictError("No existe el estado DADO_BAJA.");
-    await cambiarEstadoDispositivo(current.codigo_inventario,Number(baja.id),client);
-    await registrarBajaDispositivo(current.dispositivo_id,input.motivo!,input.observaciones,Number(current.valor_comercial),input.responsable,String(id),client);
-    await insertarHistorialDispositivo(current.dispositivo_id,"DAR_BAJA_DESDE_SERVICIO",null,baja.id,input.responsable,input.observaciones,
-      {ordenServicioId:id,motivo:input.motivo,valorComercial:Number(current.valor_comercial)},client);
+    const motivoBaja=motivoBajaDesdeServicio[input.motivo!];
+    if(!motivoBaja)throw new ValidationError("Motivo de baja no valido.");
+    await darDeBajaDispositivo(current.codigo_inventario,{
+      motivo:motivoBaja,responsable:input.responsable,
+      observaciones:input.observaciones
+    },client,{ordenServicioMotivo:input.motivo!});
   }else{
+    const target=input.decision==="APROBAR"?"REPARACION_APROBADA":"REPARACION_RECHAZADA";
+    await client.query(`UPDATE itam.ordenes_servicio_tecnico SET decision=$2,motivo_decision=$3,
+      observacion_decision=$4,fecha_decision=NOW(),responsable_decision=$5,estado=$6 WHERE id=$1`,
+      [id,input.decision,input.motivo??null,input.observaciones??null,input.responsable,target]);
     await insertarHistorialDispositivo(current.dispositivo_id,input.decision==="APROBAR"?"APROBAR_REPARACION":"RECHAZAR_REPARACION",null,null,
       input.responsable,input.observaciones,{ordenServicioId:id,motivo:input.motivo??null,montoCotizacion:Number(current.monto_cotizacion)},client);
   }
@@ -112,6 +123,7 @@ export const cerrarOrdenServicio=async(id:number,input:CerrarOrdenInput)=>{
     resultado=$4,estado='CERRADA' WHERE id=$1`,[id,input.costoFinal,input.fechaRetorno??null,input.resultado]);
   const device=await obtenerDispositivoPorCodigo(current.codigo_inventario,client);if(!device)throw new NotFoundError("Dispositivo no encontrado.");
   const targetCode=device.colaborador_id||device.departamento_id?"ASIGNADO":"RETENIDO_REVISION";
+  if(targetCode==="ASIGNADO")assertAsignadoConCustodioUnico(device.colaborador_id,device.departamento_id);
   const target=await obtenerEstadoDispositivoPorCodigo(targetCode,client);if(!target)throw new ConflictError(`No existe el estado ${targetCode}.`);
   await cambiarEstadoDispositivo(current.codigo_inventario,Number(target.id),client);
   await insertarHistorialDispositivo(current.dispositivo_id,"RETORNO_POST_SERVICIO_TECNICO",device.estado_id,target.id,input.responsable,input.resultado,
@@ -127,7 +139,9 @@ export const entregarEquipoTemporal=async(id:number,input:EntregarTemporalInput)
   const orden=await obtenerOrden(id,client);if(!orden)throw new NotFoundError("Orden de servicio no encontrada.");
   if(["CERRADA","BAJA","REPARACION_RECHAZADA"].includes(orden.estado))throw new ConflictError("La orden no admite una entrega temporal.");
   if(!orden.colaborador_id_al_ingreso)throw new ConflictError("La entrega temporal requiere que el activo original tuviera custodia de un colaborador.");
-  const temporal=await obtenerDispositivoPorCodigo(input.dispositivoCodigo,client);if(!temporal)throw new NotFoundError("Equipo temporal no encontrado.");
+  const colaborador=await obtenerColaboradorPorId(Number(orden.colaborador_id_al_ingreso),client);
+  assertColaboradorActivo(colaborador);
+  const temporal=await obtenerDispositivoPorCodigo(input.dispositivoCodigo,client,true);if(!temporal)throw new NotFoundError("Equipo temporal no encontrado.");
   if(temporal.dispositivo_id===orden.dispositivo_id)throw new ValidationError("El activo original no puede utilizarse como equipo temporal.");
   if(temporal.colaborador_id||temporal.departamento_id)throw new ConflictError("El equipo temporal ya tiene un custodio vigente.");
   if(temporal.estado_codigo!=="DISPONIBLE")throw new ConflictError("Solo un equipo disponible puede entregarse temporalmente.");
@@ -138,7 +152,8 @@ export const entregarEquipoTemporal=async(id:number,input:EntregarTemporalInput)
     orden_servicio_id,dispositivo_temporal_id,colaborador_id,responsable_entrega,observaciones_entrega)
     VALUES($1,$2,$3,$4,$5) RETURNING id`,[id,temporal.dispositivo_id,orden.colaborador_id_al_ingreso,input.responsable,input.observaciones??null]);
   const asignado=await obtenerEstadoDispositivoPorCodigo("ASIGNADO",client);if(!asignado)throw new ConflictError("No existe el estado ASIGNADO.");
-  await asignarDispositivoAColaborador(input.dispositivoCodigo,Number(orden.colaborador_id_al_ingreso),asignado.id,client);
+  const asignadoTemporal=await asignarDispositivoAColaborador(input.dispositivoCodigo,Number(orden.colaborador_id_al_ingreso),asignado.id,client);
+  if(!asignadoTemporal)throw new ConflictError("El equipo temporal dejo de estar disponible para asignacion.");
   const detalle={ordenServicioId:id,entregaTemporalId:inserted.rows[0]!.id,activoOriginalCodigo:orden.codigo_inventario,
     activoTemporalCodigo:input.dispositivoCodigo,colaboradorId:orden.colaborador_id_al_ingreso};
   await insertarHistorialDispositivo(temporal.dispositivo_id,"ENTREGAR_EQUIPO_TEMPORAL",temporal.estado_id,asignado.id,input.responsable,input.observaciones,detalle,client);

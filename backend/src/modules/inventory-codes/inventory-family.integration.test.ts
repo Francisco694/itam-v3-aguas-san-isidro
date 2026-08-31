@@ -13,12 +13,20 @@ test("una familia se puede crear, consultar, editar y desactivar sin borrarla", 
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    const availablePrefix = await client.query<{ prefijo: string }>(`
+      SELECT candidate::text prefijo FROM generate_series(1,9) candidate
+      WHERE NOT EXISTS(
+        SELECT 1 FROM itam.familias_codigo_inventario f
+        WHERE f.prefijo=candidate::text
+      ) ORDER BY candidate DESC LIMIT 1`);
+    assert.ok(availablePrefix.rows[0], "Se requiere un prefijo libre para la prueba");
+    const prefijo = availablePrefix.rows[0]!.prefijo;
     const family = await createInventoryCodeFamily({
-      nombreFamilia: "TEST Audio", prefijo: "7",
+      nombreFamilia: "TEST Audio", prefijo,
       estrategiaCodigo: "REPEAT_PREFIX", activo: true,
       tipoActivoNormalizado: "TEST_AUDIO"
     }, client);
-    assert.equal(family.prefijo, "7");
+    assert.equal(family.prefijo, prefijo);
     assert.equal(family.tiene_codigos_emitidos, false);
     const updated = await updateInventoryCodeFamily(Number(family.id), {
       nombreFamilia: "TEST Audio Corporativo",

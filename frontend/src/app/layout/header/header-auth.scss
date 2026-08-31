@@ -1,1 +1,17 @@
-.user-actions{align-items:center;display:flex;gap:.35rem;margin-left:1rem}.user-actions .avatar{margin-left:0}.logout{align-items:center;background:transparent;border:0;border-radius:.5rem;color:#dbeafe;cursor:pointer;display:flex;height:2.3rem;justify-content:center;width:2.3rem}.logout:hover{background:rgba(255,255,255,.1);color:#fff}.logout svg{height:1rem}@media(max-width:900px){.user-actions{margin-left:auto}}
+.user-actions{align-items:center;display:flex;gap:.35rem;margin-left:1rem}
+.user-actions .avatar{margin-left:0;text-decoration:none}
+.logout{align-items:center;background:transparent;border:0;border-radius:.5rem;color:#dbeafe;cursor:pointer;display:flex;height:2.3rem;justify-content:center;width:2.3rem}
+.logout:hover{background:rgba(255,255,255,.1);color:#fff}
+.logout svg{height:1rem}
+@media(max-width:1024px){
+  .user-actions{margin-left:auto}
+  .logout,.avatar{height:2.75rem;width:2.75rem}
+}
+@media(max-width:480px){
+  .user-actions{gap:.1rem}
+  .pin-access{display:none}
+}
+@media(max-width:767px){
+  .user-actions{gap:.15rem}
+  .logout,.avatar{height:2.5rem;width:2.5rem}
+}

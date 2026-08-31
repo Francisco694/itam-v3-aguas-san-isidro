@@ -5,6 +5,7 @@ import { LucideDownload, LucideExternalLink, LucideFileText, LucideMapPin, Lucid
 import { forkJoin, map, of, switchMap } from 'rxjs';
 import { CampoEspecificoFormulario, Dispositivo, FacturaDocumento, TipoDispositivo } from '../../core/models/itam.models';
 import { DispositivosService } from '../../core/services/dispositivos.service';
+import { AuthService } from '../../core/services/auth.service';
 import { FacturasAdquisicionService } from '../../core/services/facturas-adquisicion.service';
 import { TiposDispositivoService } from '../../core/services/tipos-dispositivo.service';
 import { AssetCreatedDialog } from '../../shared/components/asset-created-dialog/asset-created-dialog';
@@ -91,6 +92,7 @@ export const typesForOperationalGroup = (
             @if (visibility().modelo) { <div class="field"><label for="modelo">Modelo</label><input id="modelo" maxlength="150" formControlName="modelo" /></div> }
             @if (visibility().numeroSerie) { <div class="field"><label for="serie">Número de serie</label><input class="code" id="serie" maxlength="150" formControlName="numeroSerie" /></div> }
             @if (visibility().imei) { <div class="field"><label for="imei">IMEI</label><input class="code" id="imei" maxlength="30" formControlName="imei" /></div> }
+            @if (selectedType()?.nombre === 'Impresora') { <div class="field"><label for="printer-state">Estado</label><input id="printer-state" value="Disponible (automático)" disabled /></div> }
             <div class="field"><label for="commercial-value">Valor comercial (CLP)</label><input id="commercial-value" type="number" min="0" step="1" formControlName="valorComercial" /><p class="hint">Ingrese solamente el valor numérico, sin puntos ni signo peso.</p>@if(form.controls.valorComercial.invalid&&form.controls.valorComercial.touched){<p class="field-error">Debe ser un valor entero mayor o igual a cero.</p>}</div>
             <ng-container formGroupName="atributosEspecificos">
               @for (field of visibility().camposEspecificos; track field.clave) {
@@ -141,7 +143,7 @@ export const typesForOperationalGroup = (
           <div class="field"><label for="localidad">Localidad</label><input id="localidad" maxlength="120" formControlName="localidad" /></div>
           <div class="field"><label for="ubicacion">Ubicación detallada</label><input id="ubicacion" maxlength="250" formControlName="ubicacionDetalle" /></div>
           <div class="field span-2"><label for="observaciones">Observaciones</label><textarea id="observaciones" formControlName="observaciones"></textarea></div>
-          @if (!codigo) { <div class="field span-2"><label for="responsable">Responsable del registro *</label><input id="responsable" maxlength="150" formControlName="responsable" [class.invalid]="invalid('responsable')" />@if (invalid('responsable')) { <p class="field-error">El responsable es obligatorio.</p> }</div> }
+          @if (!codigo) { <div class="field span-2"><label for="responsable">Responsable del registro *</label><input id="responsable" maxlength="150" formControlName="responsable" readonly [class.invalid]="invalid('responsable')" />@if (invalid('responsable')) { <p class="field-error">El responsable es obligatorio.</p> }</div> }
         </div>
         <div class="form-actions"><a class="btn btn--secondary" [routerLink]="codigo ? ['/dispositivos', codigo] : ['/dispositivos']">Cancelar</a><button class="btn btn--primary" type="submit" [disabled]="submitting()"><svg lucideSave></svg>{{ submitting() ? 'Guardando…' : 'Guardar Equipo' }}</button></div>
       </form>
@@ -152,6 +154,7 @@ export const typesForOperationalGroup = (
 })
 export class DispositivoForm implements OnInit {
   private readonly fb = inject(FormBuilder);
+  private readonly auth = inject(AuthService);
   private readonly service = inject(DispositivosService);
   protected readonly facturas = inject(FacturasAdquisicionService);
   private readonly typeService = inject(TiposDispositivoService);
@@ -188,7 +191,7 @@ export class DispositivoForm implements OnInit {
   protected selectedType(): TipoDispositivo | null { const id = this.form.controls.tipoDispositivoId.value; return this.types().find((type) => type.id === id) ?? null; }
 
   ngOnInit(): void {
-    this.codigo = Number(this.route.snapshot.paramMap.get('codigo') || 0); if (this.codigo) this.form.controls.responsable.clearValidators(); this.loading.set(true);
+    this.codigo = Number(this.route.snapshot.paramMap.get('codigo') || 0); this.form.controls.responsable.setValue(this.auth.user()?.nombre || ''); if (this.codigo) this.form.controls.responsable.clearValidators(); this.loading.set(true);
     forkJoin({ types: this.typeService.listar(this.codigo ? undefined : true), device: this.codigo ? this.service.obtener(this.codigo) : of(null) }).subscribe({
       next: ({ types, device }) => { this.types.set(types); if (device) this.patchDevice(device); this.loading.set(false); },
       error: (error) => { this.apiError.set(errorMessage(error)); this.loading.set(false); }

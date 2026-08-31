@@ -1,5 +1,6 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { Router } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
 import { PageHeader } from '../../shared/components/page-header/page-header';
 import { errorMessage } from '../../shared/utils/error-message';
@@ -10,9 +11,35 @@ import { errorMessage } from '../../shared/utils/error-message';
   template: `
     <app-page-header
       title="Mi acceso"
-      subtitle="Personalice su PIN de acceso rapido sin reemplazar su contrasena."
+      subtitle="Actualice sus credenciales personales de acceso."
     />
-    <form class="card access-form" [formGroup]="form" (ngSubmit)="save()">
+    <form class="card access-form" [formGroup]="passwordForm" (ngSubmit)="savePassword()">
+      <h2>Cambiar contrase&ntilde;a</h2>
+      @if (passwordNotice()) {
+        <div class="notice notice--success">{{ passwordNotice() }}</div>
+      }
+      @if (passwordError()) {
+        <div class="notice notice--error">{{ passwordError() }}</div>
+      }
+      <div class="field">
+        <label for="current-password">Contrase&ntilde;a actual</label>
+        <input id="current-password" type="password" autocomplete="current-password" formControlName="currentPassword" />
+      </div>
+      <div class="field">
+        <label for="new-password">Nueva contrase&ntilde;a</label>
+        <input id="new-password" type="password" autocomplete="new-password" formControlName="newPassword" />
+      </div>
+      <div class="field">
+        <label for="confirm-password">Confirmar nueva contrase&ntilde;a</label>
+        <input id="confirm-password" type="password" autocomplete="new-password" formControlName="confirmPassword" />
+      </div>
+      <p>La contrase&ntilde;a debe contener al menos 12 caracteres.</p>
+      <button class="btn btn--primary" [disabled]="!canSavePassword() || passwordSaving()">
+        {{ passwordSaving() ? 'Guardando...' : 'Cambiar contrase&ntilde;a' }}
+      </button>
+    </form>
+    <form class="card access-form" [formGroup]="pinForm" (ngSubmit)="savePin()">
+      <h2>Cambiar PIN</h2>
       @if (notice()) {
         <div class="notice notice--success">{{ notice() }}</div>
       }
@@ -55,9 +82,9 @@ import { errorMessage } from '../../shared/utils/error-message';
       <p>El PIN debe contener exactamente 6 digitos.</p>
       <button
         class="btn btn--primary"
-        [disabled]="!canSave() || saving()"
+        [disabled]="!canSavePin() || pinSaving()"
       >
-        {{ saving() ? 'Guardando...' : 'Cambiar PIN' }}
+        {{ pinSaving() ? 'Guardando...' : 'Cambiar PIN' }}
       </button>
     </form>
   `,
@@ -68,36 +95,78 @@ import { errorMessage } from '../../shared/utils/error-message';
 export class MiAcceso {
   private readonly fb = inject(FormBuilder);
   private readonly auth = inject(AuthService);
-  protected readonly saving = signal(false);
+  private readonly router = inject(Router);
+  protected readonly pinSaving = signal(false);
+  protected readonly passwordSaving = signal(false);
   protected readonly error = signal('');
   protected readonly notice = signal('');
-  protected readonly form = this.fb.nonNullable.group({
+  protected readonly passwordError = signal('');
+  protected readonly passwordNotice = signal('');
+  protected readonly passwordForm = this.fb.nonNullable.group({
+    currentPassword: ['', Validators.required],
+    newPassword: ['', [Validators.required, Validators.minLength(12)]],
+    confirmPassword: ['', [Validators.required, Validators.minLength(12)]]
+  });
+  protected readonly pinForm = this.fb.nonNullable.group({
     currentPin: ['', [Validators.required, Validators.pattern(/^\d{6}$/)]],
     newPin: ['', [Validators.required, Validators.pattern(/^\d{6}$/)]],
     confirmPin: ['', [Validators.required, Validators.pattern(/^\d{6}$/)]]
   });
 
-  protected canSave(): boolean {
-    const value = this.form.getRawValue();
-    return this.form.valid && value.newPin === value.confirmPin;
+  protected canSavePin(): boolean {
+    const value = this.pinForm.getRawValue();
+    return this.pinForm.valid && value.newPin === value.confirmPin;
   }
 
-  protected save(): void {
-    if (!this.canSave()) return;
-    this.saving.set(true);
+  protected savePin(): void {
+    if (!this.canSavePin()) return;
+    this.pinSaving.set(true);
     this.error.set('');
     this.notice.set('');
-    const value = this.form.getRawValue();
+    const value = this.pinForm.getRawValue();
     this.auth.changePin(value.currentPin, value.newPin).subscribe({
       next: () => {
-        this.form.reset();
+        this.pinForm.reset();
         this.notice.set('PIN actualizado correctamente.');
-        this.saving.set(false);
+        this.pinSaving.set(false);
+        this.finishIfReady();
       },
       error: (requestError) => {
         this.error.set(errorMessage(requestError));
-        this.saving.set(false);
+        this.pinSaving.set(false);
       }
     });
+  }
+
+  protected canSavePassword(): boolean {
+    const value = this.passwordForm.getRawValue();
+    return this.passwordForm.valid && value.newPassword === value.confirmPassword;
+  }
+
+  protected savePassword(): void {
+    if (!this.canSavePassword()) return;
+    this.passwordSaving.set(true);
+    this.passwordError.set('');
+    this.passwordNotice.set('');
+    const value = this.passwordForm.getRawValue();
+    this.auth.changePassword(value.currentPassword, value.newPassword).subscribe({
+      next: () => {
+        this.passwordForm.reset();
+        this.passwordNotice.set('Contrasena actualizada correctamente.');
+        this.passwordSaving.set(false);
+        this.finishIfReady();
+      },
+      error: (requestError) => {
+        this.passwordError.set(errorMessage(requestError));
+        this.passwordSaving.set(false);
+      }
+    });
+  }
+
+  private finishIfReady(): void {
+    const user = this.auth.user();
+    if (user && !user.debeCambiarPassword && !user.debeCambiarPin) {
+      void this.router.navigate(['/dashboard']);
+    }
   }
 }

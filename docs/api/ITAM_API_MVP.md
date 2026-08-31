@@ -987,6 +987,7 @@ El alta de la orden recibe activo, falla, fecha, proveedor/destino, responsable 
 - POST /api/v1/auth/login
 - POST /api/v1/auth/login-pin
 - GET /api/v1/auth/me
+- POST /api/v1/auth/refresh-session
 - POST /api/v1/auth/change-pin
 - POST /api/v1/auth/logout
 - GET /api/v1/usuarios
@@ -994,6 +995,14 @@ El alta de la orden recibe activo, falla, fecha, proveedor/destino, responsable 
 - PATCH /api/v1/usuarios/:id
 
 La sesión utiliza cookie HttpOnly, SameSite=Lax y Secure en producción. Solo existen SUPER_USUARIO y USUARIO. La administración de usuarios exige SUPER_USUARIO; el resto de módulos exige sesión válida. Los hashes de contraseña y PIN nunca se incluyen en respuestas.
+
+La sesión conserva una expiración absoluta de doce horas y agrega un límite
+configurable de inactividad de sesenta minutos. Cada petición autenticada
+renueva ultima_actividad como máximo una vez por intervalo de cinco minutos.
+POST /api/v1/auth/refresh-session permite renovar explícitamente una sesión
+todavía válida y devuelve los minutos de timeout y aviso que debe usar el
+frontend. Una sesión inactiva se revoca y registra SESSION_EXPIRED_IDLE; el
+logout manual registra LOGOUT.
 
 La contraseña continúa siendo el método principal y de respaldo. El acceso
 rápido recibe correo y un PIN de exactamente seis dígitos mediante
@@ -1037,3 +1046,11 @@ frames o video.
 una IP, el lector muestra la limitación y mantiene disponible la búsqueda
 manual; bajo HTTPS solicita permiso y prefiere la cámara trasera. No se
 deshabilitan controles de seguridad del navegador.
+
+### Interfaz responsive
+
+El frontend utiliza Responsive Web Design con enfoque Mobile First y mantiene
+una sola aplicacion Angular compatible con escritorio, tablet y smartphone.
+Las tablas operacionales principales se presentan como tarjetas en pantallas
+pequenas, mientras que el layout completo de escritorio conserva sus tablas y
+barra lateral.

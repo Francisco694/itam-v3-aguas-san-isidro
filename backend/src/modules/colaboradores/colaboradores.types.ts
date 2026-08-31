@@ -65,7 +65,7 @@ export interface ActivoColaboradorRow {
 
 export interface HistorialActivoColaboradorRow extends ActivoColaboradorRow {
   fecha_asignacion:Date|string;fecha_devolucion:Date|string|null;
-  resultado:string;
+  tipo_cierre:string|null;resultado:string;
 }
 
 export interface PendienteOffboardingRow {

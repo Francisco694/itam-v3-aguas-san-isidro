@@ -19,6 +19,29 @@ for (const variable of requiredVariables) {
   }
 }
 
+const positiveMinutes = (name: string, fallback: number): number => {
+  const value = Number(process.env[name] ?? fallback);
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(`${name} debe ser un numero entero positivo.`);
+  }
+  return value;
+};
+
+const sessionIdleTimeoutMinutes = positiveMinutes(
+  "SESSION_IDLE_TIMEOUT_MINUTES",
+  60
+);
+const sessionIdleWarningMinutes = positiveMinutes(
+  "SESSION_IDLE_WARNING_MINUTES",
+  5
+);
+
+if (sessionIdleWarningMinutes >= sessionIdleTimeoutMinutes) {
+  throw new Error(
+    "SESSION_IDLE_WARNING_MINUTES debe ser menor que SESSION_IDLE_TIMEOUT_MINUTES."
+  );
+}
+
 export const env = {
   nodeEnv: process.env.NODE_ENV ?? "development",
 
@@ -31,6 +54,15 @@ export const env = {
   port: Number(process.env.PORT ?? 3000),
 
   corsOrigin: process.env.CORS_ORIGIN,
+
+  session: {
+    idleTimeoutMinutes: sessionIdleTimeoutMinutes,
+    idleWarningMinutes: sessionIdleWarningMinutes,
+    activityRefreshMinutes: Math.min(
+      sessionIdleWarningMinutes,
+      Math.max(1, Math.floor(sessionIdleTimeoutMinutes / 2))
+    )
+  },
 
   documentStoragePath: process.env.DOCUMENT_STORAGE_PATH
     ? path.resolve(process.env.DOCUMENT_STORAGE_PATH)

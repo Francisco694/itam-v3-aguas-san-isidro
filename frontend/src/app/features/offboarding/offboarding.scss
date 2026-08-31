@@ -446,3 +446,10 @@
 .pending-list > header span { color: var(--cyan-dark); font-size: .72rem; font-weight: 800; letter-spacing: .08em; }
 .pending-list h2 { color: var(--navy); font-size: 1.05rem; margin: .25rem 0 0; }
 .pending-table th,.pending-table td { white-space: nowrap; }
+@media(max-width:767px){
+  .offboarding-hero{padding:1.1rem}
+  .offboarding-hero__copy{gap:.75rem}
+  .offboarding-hero__copy>span{height:2.6rem;width:2.6rem}
+  .pending-mobile-list{padding-inline:0}
+  .recovery-card>.btn{width:100%}
+}

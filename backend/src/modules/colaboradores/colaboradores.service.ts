@@ -14,8 +14,8 @@ import {
   obtenerColaboradorPorRut
   ,listarActivosActualesColaborador
   ,listarHistorialActivosColaborador
-  ,listarPendientesOffboarding
 } from "./colaboradores.repository";
+import { getOpenOffboardingProcesses } from "../offboarding/offboarding.service";
 import type {
   ActualizarColaboradorInput,
   Colaborador,
@@ -178,16 +178,14 @@ export const obtenerInventarioColaborador = async (id:number) => {
     equiposActuales:actuales.map(map),historialEquipos:historial.map(row=>({...map(row),
       fechaAsignacion:toIsoDateTime(row.fecha_asignacion),
       fechaDevolucion:row.fecha_devolucion?toIsoDateTime(row.fecha_devolucion):null,
+      tipoCierre:row.tipo_cierre,
       resultado:row.resultado}))};
 };
 
 export const obtenerPendientesOffboarding = async ():Promise<PendienteOffboarding[]> =>
-  (await listarPendientesOffboarding()).map(row=>({
-    colaborador:mapColaborador({id:row.colaborador_id,rut:row.rut,nombre:row.nombre,cargo:row.cargo,
-      departamento_id:row.departamento_id,departamento_nombre:row.departamento_nombre,
-      localidad:row.localidad,activo:row.activo,observaciones:row.observaciones,
-      creado_en:row.creado_en,actualizado_en:row.actualizado_en}),
-    activosPendientes:Number(row.activos_pendientes)||0,
-    valorPendiente:Number(row.valor_pendiente)||0,
+  (await getOpenOffboardingProcesses()).map(process=>({
+    colaborador:process.colaborador,
+    activosPendientes:process.equiposPendientes,
+    valorPendiente:process.valorPendiente,
     estado:"PENDIENTE"
   }));

@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { asyncHandler } from "../../shared/async-handler";
+import { authenticatedActorName } from "../../shared/authenticated-actor";
 import { ValidationError } from "../../shared/errors";
 import { sendCollection, sendItem } from "../../shared/responses";
 import {
@@ -10,7 +11,6 @@ import {
   parseOptionalPositiveInteger,
   parseOptionalString,
   parsePositiveInteger,
-  parseRequiredString,
   requireAtLeastOneDefined
 } from "../../shared/validation";
 import {
@@ -207,11 +207,7 @@ export const crearDispositivoController = asyncHandler(
       ),
       valorComercial:
         parseOptionalNonNegativeInteger(body.valorComercial, "valorComercial") ?? undefined,
-      responsable: parseRequiredString(
-        body.responsable,
-        "responsable",
-        150
-      )
+      responsable: authenticatedActorName(req)
     };
 
     const dispositivo = await crearNuevoDispositivo(input);
@@ -271,7 +267,8 @@ export const actualizarDispositivoController = asyncHandler(
         body.atributosEspecificos
       ),
       valorComercial:
-        parseOptionalNonNegativeInteger(body.valorComercial, "valorComercial") ?? undefined
+        parseOptionalNonNegativeInteger(body.valorComercial, "valorComercial") ?? undefined,
+      responsable: authenticatedActorName(req)
     };
 
     const dispositivo = await actualizarDispositivoExistente(
@@ -293,11 +290,7 @@ export const asignarColaboradorController = asyncHandler(
         body.colaboradorId,
         "colaboradorId"
       ),
-      responsable: parseRequiredString(
-        body.responsable,
-        "responsable",
-        150
-      ),
+      responsable: authenticatedActorName(req),
       observaciones: parseOptionalString(
         body.observaciones,
         "observaciones"
@@ -334,11 +327,7 @@ export const asignarDepartamentoController = asyncHandler(
         "ubicacionDetalle",
         250
       ),
-      responsable: parseRequiredString(
-        body.responsable,
-        "responsable",
-        150
-      ),
+      responsable: authenticatedActorName(req),
       observaciones: parseOptionalString(
         body.observaciones,
         "observaciones"
@@ -357,11 +346,7 @@ export const devolverDispositivoController = asyncHandler(
     const body = parseBodyObject(req.body);
 
     const input: DevolverDispositivoInput = {
-      responsable: parseRequiredString(
-        body.responsable,
-        "responsable",
-        150
-      ),
+      responsable: authenticatedActorName(req),
       observaciones: parseOptionalString(
         body.observaciones,
         "observaciones"
@@ -393,7 +378,7 @@ export const resultadoOffboardingController = asyncHandler(
     const body = parseBodyObject(req.body);
     const input: RegistrarResultadoOffboardingInput = {
       resultado: parseEnum(body.resultado, "resultado", resultadosOffboarding),
-      responsable: parseRequiredString(body.responsable, "responsable", 150),
+      responsable: authenticatedActorName(req),
       condicion: parseOptionalString(body.condicion, "condicion", 120),
       observaciones: parseOptionalString(body.observaciones, "observaciones")
     };
@@ -412,7 +397,7 @@ export const darBajaDispositivoController = asyncHandler(
     const body = parseBodyObject(req.body);
     const input: DarBajaDispositivoInput = {
       motivo: parseEnum(body.motivo, "motivo", motivosBaja),
-      responsable: parseRequiredString(body.responsable, "responsable", 150),
+      responsable: authenticatedActorName(req),
       observaciones: parseOptionalString(body.observaciones, "observaciones")
     };
     sendItem(res, await darDeBajaDispositivo(codigo, input));
@@ -426,11 +411,7 @@ export const cambiarEstadoDispositivoController = asyncHandler(
 
     const input: CambiarEstadoDispositivoInput = {
       estadoId: parsePositiveInteger(body.estadoId, "estadoId"),
-      responsable: parseRequiredString(
-        body.responsable,
-        "responsable",
-        150
-      ),
+      responsable: authenticatedActorName(req),
       observaciones: parseOptionalString(
         body.observaciones,
         "observaciones"
