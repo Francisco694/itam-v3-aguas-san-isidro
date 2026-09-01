@@ -16,6 +16,7 @@ import { StatusBadge } from '../../shared/components/status-badge/status-badge';
 import { ViewState } from '../../shared/components/view-state/view-state';
 import type { ItamQrTarget } from '../../shared/utils/itam-qr';
 import { errorMessage } from '../../shared/utils/error-message';
+import { formatRut } from '../../shared/utils/rut';
 
 export const quickSearchMode = (query: string): 'DEVICE_CODE' | 'FILTER' | 'EMPTY' => {
   const normalized = query.trim();
@@ -27,6 +28,17 @@ export const inventoryStateCount = (
   items: readonly Pick<Dispositivo, 'estado'>[],
   code: string
 ): number => code ? items.filter((item) => item.estado.codigo === code).length : items.length;
+
+export const inventoryPhysicalIdentifier = (
+  item: Pick<Dispositivo, 'imei' | 'numeroSerie'> & { tipo: Pick<Dispositivo['tipo'], 'nombre'> },
+): string => {
+  if (item.tipo.nombre.trim().toUpperCase().includes('SMARTPHONE')) {
+    return item.imei?.trim() ? `IMEI: ${item.imei.trim()}` : 'Sin IMEI registrado';
+  }
+  return item.numeroSerie?.trim()
+    ? `SN: ${item.numeroSerie.trim()}`
+    : 'Sin N° de serie registrado';
+};
 
 @Component({
   selector: 'app-dispositivos-list',
@@ -81,7 +93,7 @@ export const inventoryStateCount = (
       @else {
         <div class="table-heading"><div><strong>{{ items().length }}</strong><span>{{ items().length === 1 ? 'activo encontrado' : 'activos encontrados' }}</span></div></div>
         <div class="table-wrap desktop-table"><table class="data-table inventory-table"><thead><tr><th>ID / Código</th><th>Equipo</th><th>Estado</th><th>Responsable</th><th>Ubicación</th><th><span class="sr-only">Acciones</span></th></tr></thead><tbody>
-          @for(item of items(); track item.id){<tr><td><a class="asset-code-link" [routerLink]="[item.codigoInventario]">{{ item.codigoInventario }}</a><span class="cell-secondary mono">{{ item.numeroSerie ? 'SN: ' + item.numeroSerie : 'Sin serie' }}</span></td><td><span class="cell-primary">{{ item.marca || item.tipo.nombre }} {{ item.modelo || '' }}</span><span class="cell-secondary">{{ item.tipo.nombre }}</span></td><td><app-status-badge [code]="item.estado.codigo" [label]="item.estado.nombre" /></td><td><span class="cell-primary">{{ custody(item) }}</span><span class="cell-secondary">{{ item.colaborador?.rut || item.departamento?.nombre || 'Sin custodia vigente' }}</span></td><td>{{ item.localidad || '—' }}<span class="cell-secondary">{{ item.ubicacionDetalle || '' }}</span></td><td><div class="actions"><a class="btn btn--secondary btn--small" [routerLink]="[item.codigoInventario]">Gestionar ficha</a><a class="btn btn--ghost btn--small" [routerLink]="[item.codigoInventario,'editar']">Editar</a></div></td></tr>}
+          @for(item of items(); track item.id){<tr><td><a class="asset-code-link" [routerLink]="[item.codigoInventario]">{{ item.codigoInventario }}</a><span class="cell-secondary mono">{{ physicalIdentifier(item) }}</span></td><td><span class="cell-primary">{{ item.marca || item.tipo.nombre }} {{ item.modelo || '' }}</span><span class="cell-secondary">{{ item.tipo.nombre }}</span></td><td><app-status-badge [code]="item.estado.codigo" [label]="item.estado.nombre" /></td><td><span class="cell-primary">{{ custody(item) }}</span><span class="cell-secondary">{{ item.colaborador?.rut ? rut(item.colaborador!.rut) : item.departamento?.nombre || 'Sin custodia vigente' }}</span></td><td>{{ item.localidad || '—' }}<span class="cell-secondary">{{ item.ubicacionDetalle || '' }}</span></td><td><div class="actions"><a class="btn btn--secondary btn--small" [routerLink]="[item.codigoInventario]">Gestionar ficha</a><a class="btn btn--ghost btn--small" [routerLink]="[item.codigoInventario,'editar']">Editar</a></div></td></tr>}
         </tbody></table></div>
         <div class="mobile-record-list inventory-mobile-list">
           @for(item of items(); track item.id) {
@@ -90,7 +102,7 @@ export const inventoryStateCount = (
                 <div>
                   <a class="mobile-record-card__title code" [routerLink]="[item.codigoInventario]">ITAM {{ item.codigoInventario }}</a>
                   <span class="mobile-record-card__subtitle">{{ item.marca || item.tipo.nombre }} {{ item.modelo || '' }}</span>
-                  <span class="mobile-record-card__subtitle">{{ item.tipo.nombre }} &middot; {{ item.numeroSerie ? 'SN: ' + item.numeroSerie : 'Sin serie' }}</span>
+                  <span class="mobile-record-card__subtitle">{{ item.tipo.nombre }} &middot; {{ physicalIdentifier(item) }}</span>
                 </div>
                 <app-status-badge [code]="item.estado.codigo" [label]="item.estado.nombre" />
               </header>
@@ -130,6 +142,8 @@ export class DispositivosList implements OnInit {
   protected readonly scannerOpen = signal(false);
   protected readonly filtersOpen = signal(false);
   protected readonly error = signal('');
+  protected readonly physicalIdentifier = inventoryPhysicalIdentifier;
+  protected readonly rut = formatRut;
   protected quickQuery = '';
   protected filters = { q: '', tipoDispositivoId: '', estado: '', departamentoId: '', localidad: '' };
 

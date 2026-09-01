@@ -3,6 +3,7 @@ import { toIsoDateTime } from "../../shared/dates";
 import {
   ConflictError,
   NotFoundError,
+  ValidationError,
   isForeignKeyViolation,
   isUniqueViolation
 } from "../../shared/errors";
@@ -29,10 +30,11 @@ import type {
   InventarioConciliado,
   PendienteOffboarding
 } from "./colaboradores.types";
+import { esRutValido, formatearRut, normalizarRut } from "./rut";
 
 const mapColaborador = (row: ColaboradorRow): Colaborador => ({
   id: row.id,
-  rut: row.rut,
+  rut: formatearRut(row.rut),
   nombre: row.nombre,
   cargo: row.cargo,
   departamento:
@@ -56,8 +58,16 @@ const validarRutDisponible = async (
   const existing = await obtenerColaboradorPorRut(rut);
 
   if (existing && existing.id !== currentId) {
-    throw new ConflictError("Ya existe un colaborador con ese RUT.");
+    throw new ConflictError("Ya existe un colaborador registrado con este RUT.");
   }
+};
+
+const obtenerRutCanonico = (rut: string): string => {
+  const canonico = normalizarRut(rut);
+  if (!esRutValido(canonico)) {
+    throw new ValidationError("Ingrese un RUT chileno válido.");
+  }
+  return canonico;
 };
 
 const validarDepartamentoExiste = async (
@@ -97,7 +107,7 @@ export const obtenerColaborador = async (
 export const obtenerColaboradorPorRutExistente = async (
   rut: string
 ): Promise<Colaborador> => {
-  const row = await obtenerColaboradorPorRut(rut);
+  const row = await obtenerColaboradorPorRut(obtenerRutCanonico(rut));
 
   if (!row) {
     throw new NotFoundError("Colaborador no encontrado.");
@@ -109,16 +119,17 @@ export const obtenerColaboradorPorRutExistente = async (
 export const crearNuevoColaborador = async (
   input: CrearColaboradorInput
 ): Promise<Colaborador> => {
-  await validarRutDisponible(input.rut);
+  const rut = obtenerRutCanonico(input.rut);
+  await validarRutDisponible(rut);
   await validarDepartamentoExiste(input.departamentoId);
 
   try {
-    const row = await crearColaborador(input);
+    const row = await crearColaborador({ ...input, rut });
     return mapColaborador(row);
   } catch (error) {
     if (isUniqueViolation(error)) {
       throw new ConflictError(
-        "Ya existe un colaborador con ese RUT."
+        "Ya existe un colaborador registrado con este RUT."
       );
     }
 
@@ -141,7 +152,9 @@ export const actualizarColaboradorExistente = async (
   }
 
   if (input.rut !== undefined) {
-    await validarRutDisponible(input.rut, current.id);
+    const rut = obtenerRutCanonico(input.rut);
+    input = { ...input, rut };
+    await validarRutDisponible(rut, current.id);
   }
 
   await validarDepartamentoExiste(input.departamentoId);
@@ -157,7 +170,7 @@ export const actualizarColaboradorExistente = async (
   } catch (error) {
     if (isUniqueViolation(error)) {
       throw new ConflictError(
-        "Ya existe un colaborador con ese RUT."
+        "Ya existe un colaborador registrado con este RUT."
       );
     }
 
@@ -226,6 +239,7 @@ const mapActivoConciliado = (
   imei: row.imei,
   numeroSerie: row.numero_serie,
   fechaAsignacion: toIsoDateTime(row.fecha_asignacion),
+  fechaSalida: row.fecha_salida ? toIsoDateTime(row.fecha_salida) : null,
   estadoOriginal: { codigo: row.estado_codigo, nombre: row.estado_nombre },
   clasificacionConciliada: clasificacion,
   motivoConciliacion: motivo,

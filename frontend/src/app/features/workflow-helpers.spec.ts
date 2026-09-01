@@ -8,8 +8,13 @@ import {
 } from './colaboradores/colaborador-detail';
 import { COMMERCIAL_VALUE_PATTERN } from './dispositivos/dispositivo-form';
 import { receiversForDepartment } from './dispositivos/dispositivo-detail';
-import { inventoryStateCount, quickSearchMode } from './dispositivos/dispositivos-list';
+import {
+  inventoryPhysicalIdentifier,
+  inventoryStateCount,
+  quickSearchMode,
+} from './dispositivos/dispositivos-list';
 import { repairImpactPercentage, technicalStage } from './servicio-tecnico/servicio-tecnico';
+import { formatRut, isValidRut, normalizeRut } from '../shared/utils/rut';
 
 describe('flujos operacionales del inventario', () => {
   it('interpreta Enter sobre un cÃ³digo numÃ©rico como apertura de ficha', () => {
@@ -57,10 +62,30 @@ describe('flujos operacionales del inventario', () => {
   it('presenta las etiquetas operacionales de conciliación', () => {
     expect(reconciliationLabel('ACTUAL_PROBABLE')).toBe('Actual probable');
     expect(reconciliationLabel('HISTORICO_PROBABLE')).toBe(
-      'Histórico probable — sin devolución registrada',
+      'Histórico probable',
     );
     expect(reconciliationLabel('PENDIENTE_VALIDACION')).toBe('Pendiente de validación');
     expect(reconciliationLabel('CONFLICTO_DATOS')).toBe('Conflicto de datos');
+  });
+
+  it('normaliza, valida y presenta el RUT sin cambiar su valor canónico', () => {
+    expect(normalizeRut('11.184.473-9')).toBe('111844739');
+    expect(normalizeRut('11184473-9')).toBe('111844739');
+    expect(formatRut('127926786')).toBe('12.792.678-6');
+    expect(isValidRut('11.184.473-9')).toBe(true);
+  });
+
+  it('muestra IMEI para Smartphone y serie para otros dispositivos', () => {
+    expect(
+      inventoryPhysicalIdentifier({
+        tipo: { nombre: 'Smartphone' },
+        imei: '352054265288036',
+        numeroSerie: null,
+      }),
+    ).toBe('IMEI: 352054265288036');
+    expect(
+      inventoryPhysicalIdentifier({ tipo: { nombre: 'Notebook' }, imei: null, numeroSerie: 'NB-1' }),
+    ).toBe('SN: NB-1');
   });
 
   it('ofrece como recepcionante solo colaboradores del departamento', () => {

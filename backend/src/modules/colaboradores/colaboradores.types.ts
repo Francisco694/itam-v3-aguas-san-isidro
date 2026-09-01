@@ -78,6 +78,7 @@ export type ClasificacionConciliada =
 
 export interface InventarioConciliableRow extends ActivoColaboradorRow {
   fecha_asignacion: Date | string;
+  fecha_salida: Date | string | null;
   evento_asignacion_id: string | null;
   vinculo_actual: boolean;
   colaborador_actual_id: string | null;
@@ -96,6 +97,7 @@ export interface ActivoConciliado {
   imei: string | null;
   numeroSerie: string | null;
   fechaAsignacion: string;
+  fechaSalida: string | null;
   estadoOriginal: { codigo: string; nombre: string };
   clasificacionConciliada: ClasificacionConciliada;
   motivoConciliacion: string;

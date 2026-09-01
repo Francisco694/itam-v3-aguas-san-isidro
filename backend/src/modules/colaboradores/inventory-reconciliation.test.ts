@@ -23,6 +23,7 @@ const smartphone = (
   estado_codigo: "ASIGNADO",
   estado_nombre: "Asignado",
   fecha_asignacion: fecha,
+  fecha_salida: null,
   evento_asignacion_id: id,
   vinculo_actual: true,
   colaborador_actual_id: "fixture-colaborador",

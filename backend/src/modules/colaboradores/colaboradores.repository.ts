@@ -10,6 +10,7 @@ import type {
   InventarioConciliableRow,
   PendienteOffboardingRow
 } from "./colaboradores.types";
+import { normalizarRut } from "./rut";
 
 const getDb = (client?: PoolClient) => client ?? pool;
 
@@ -37,14 +38,14 @@ export const listarColaboradores = async (
   const values: unknown[] = [];
   const where: string[] = [];
 
-  if (filters.nombre !== undefined) {
+  if (filters.nombre !== undefined && filters.rut === undefined) {
     values.push(`%${filters.nombre}%`);
     where.push(`c.nombre ILIKE $${values.length}`);
   }
 
   if (filters.rut !== undefined) {
-    values.push(`%${filters.rut}%`);
-    where.push(`c.rut ILIKE $${values.length}`);
+    values.push(`%${normalizarRut(filters.rut)}%`);
+    where.push(`REGEXP_REPLACE(UPPER(c.rut), '[^0-9K]', '', 'g') LIKE $${values.length}`);
   }
 
   if (filters.departamentoId !== undefined) {
@@ -91,10 +92,10 @@ export const obtenerColaboradorPorRut = async (
   const result = await pool.query<ColaboradorRow>(
     `
       ${colaboradorSelect}
-      WHERE LOWER(BTRIM(c.rut)) = LOWER(BTRIM($1))
+      WHERE REGEXP_REPLACE(UPPER(c.rut), '[^0-9K]', '', 'g') = $1
       LIMIT 1
     `,
-    [rut]
+    [normalizarRut(rut)]
   );
 
   return result.rows[0] ?? null;
@@ -303,6 +304,7 @@ export const listarInventarioConciliableColaborador = async (
           e.codigo AS estado_codigo,
           e.nombre AS estado_nombre,
           COALESCE(a.fecha_evento, d.fecha_registro::timestamptz) AS fecha_asignacion,
+          cierre.fecha_evento AS fecha_salida,
           a.evento_asignacion_id,
           (d.colaborador_id = $1::bigint) AS vinculo_actual,
           d.colaborador_id AS colaborador_actual_id,
@@ -346,7 +348,7 @@ export const listarInventarioConciliableColaborador = async (
         JOIN itam.tipos_dispositivo t ON t.id = d.tipo_dispositivo_id
         JOIN itam.estados e ON e.id = d.estado_id
         LEFT JOIN LATERAL (
-          SELECT h2.tipo_evento
+          SELECT h2.tipo_evento, h2.fecha_evento
           FROM itam.historial_eventos h2
           WHERE a.evento_asignacion_id IS NOT NULL
             AND h2.dispositivo_id = d.id

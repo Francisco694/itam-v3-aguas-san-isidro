@@ -100,7 +100,7 @@ export type ClasificacionConciliada =
   | 'CONFLICTO_DATOS';
 export interface ActivoConciliado {
   dispositivoId:string;codigoItam:number;tipoDispositivo:string;marca:string|null;modelo:string|null;
-  imei:string|null;numeroSerie:string|null;fechaAsignacion:string;
+  imei:string|null;numeroSerie:string|null;fechaAsignacion:string;fechaSalida:string|null;
   estadoOriginal:{codigo:string;nombre:string};clasificacionConciliada:ClasificacionConciliada;
   motivoConciliacion:string;requiereValidacionManual:boolean;valorComercial:number;
 }
