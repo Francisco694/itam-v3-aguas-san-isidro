@@ -7,6 +7,7 @@ import type {
   CrearColaboradorInput,
   ActivoColaboradorRow,
   HistorialActivoColaboradorRow,
+  InventarioConciliableRow,
   PendienteOffboardingRow
 } from "./colaboradores.types";
 
@@ -257,6 +258,113 @@ export const listarHistorialActivosColaborador = async (
         'DAR_BAJA_DESDE_SERVICIO')
     ORDER BY h2.fecha_evento,h2.id LIMIT 1
   ) siguiente ON TRUE ORDER BY a.fecha_asignacion DESC`,[colaboradorId])).rows;
+
+export const listarInventarioConciliableColaborador = async (
+  colaboradorId: number,
+  client?: PoolClient
+): Promise<InventarioConciliableRow[]> =>
+  (
+    await getDb(client).query<InventarioConciliableRow>(
+      `
+        WITH asignaciones_objetivo AS (
+          SELECT h.id, h.dispositivo_id, h.fecha_evento
+          FROM itam.historial_eventos h
+          WHERE h.tipo_entidad = 'DISPOSITIVO'
+            AND h.tipo_evento IN ('ASIGNAR_COLABORADOR', 'IMPORTAR_CUSTODIA_HISTORICA')
+            AND COALESCE(
+              h.detalle #>> '{custodiaNueva,id}',
+              h.detalle ->> 'collaboratorId',
+              h.detalle ->> 'colaboradorId'
+            ) = $1::text
+        ),
+        candidatos AS (
+          SELECT dispositivo_id FROM asignaciones_objetivo
+          UNION
+          SELECT id FROM itam.dispositivos WHERE colaborador_id = $1::bigint
+        ),
+        ultima_asignacion AS (
+          SELECT DISTINCT ON (c.dispositivo_id)
+            c.dispositivo_id,
+            a.id AS evento_asignacion_id,
+            a.fecha_evento
+          FROM candidatos c
+          LEFT JOIN asignaciones_objetivo a ON a.dispositivo_id = c.dispositivo_id
+          ORDER BY c.dispositivo_id, a.fecha_evento DESC NULLS LAST, a.id DESC
+        )
+        SELECT
+          d.id AS dispositivo_id,
+          d.codigo_inventario,
+          t.nombre AS tipo_dispositivo,
+          d.marca,
+          d.modelo,
+          d.numero_serie,
+          d.imei,
+          d.valor_comercial,
+          e.codigo AS estado_codigo,
+          e.nombre AS estado_nombre,
+          COALESCE(a.fecha_evento, d.fecha_registro::timestamptz) AS fecha_asignacion,
+          a.evento_asignacion_id,
+          (d.colaborador_id = $1::bigint) AS vinculo_actual,
+          d.colaborador_id AS colaborador_actual_id,
+          cierre.tipo_evento AS tipo_cierre,
+          (
+            cierre.tipo_evento = 'DEVOLVER_DISPOSITIVO'
+            OR EXISTS (
+              SELECT 1
+              FROM itam.comprobantes_devolucion comprobante
+              WHERE comprobante.dispositivo_id = d.id
+                AND comprobante.colaborador_id = $1::bigint
+                AND (a.fecha_evento IS NULL OR comprobante.fecha >= a.fecha_evento)
+            )
+          ) AS tiene_devolucion,
+          (
+            cierre.tipo_evento IN ('DAR_BAJA', 'DAR_BAJA_DESDE_SERVICIO')
+            OR EXISTS (
+              SELECT 1
+              FROM itam.bajas_dispositivo baja
+              WHERE baja.dispositivo_id = d.id
+                AND COALESCE(baja.anulada, FALSE) = FALSE
+                AND (a.fecha_evento IS NULL OR baja.fecha >= a.fecha_evento)
+            )
+          ) AS tiene_baja,
+          EXISTS (
+            SELECT 1
+            FROM itam.dispositivos otro
+            WHERE otro.id <> d.id
+              AND otro.colaborador_id IS NOT NULL
+              AND otro.colaborador_id IS DISTINCT FROM d.colaborador_id
+              AND (
+                (BTRIM(COALESCE(d.imei, '')) NOT IN ('', '0') AND BTRIM(otro.imei) = BTRIM(d.imei))
+                OR (
+                  BTRIM(COALESCE(d.numero_serie, '')) <> ''
+                  AND LOWER(BTRIM(otro.numero_serie)) = LOWER(BTRIM(d.numero_serie))
+                )
+              )
+          ) AS identidad_duplicada
+        FROM ultima_asignacion a
+        JOIN itam.dispositivos d ON d.id = a.dispositivo_id
+        JOIN itam.tipos_dispositivo t ON t.id = d.tipo_dispositivo_id
+        JOIN itam.estados e ON e.id = d.estado_id
+        LEFT JOIN LATERAL (
+          SELECT h2.tipo_evento
+          FROM itam.historial_eventos h2
+          WHERE a.evento_asignacion_id IS NOT NULL
+            AND h2.dispositivo_id = d.id
+            AND (h2.fecha_evento, h2.id) > (a.fecha_evento, a.evento_asignacion_id)
+            AND h2.tipo_evento IN (
+              'DEVOLVER_DISPOSITIVO', 'ASIGNAR_COLABORADOR',
+              'ASIGNAR_DEPARTAMENTO', 'IMPORTAR_CUSTODIA_HISTORICA',
+              'CIERRE_CUSTODIA_CONCILIACION', 'DAR_BAJA',
+              'DAR_BAJA_DESDE_SERVICIO'
+            )
+          ORDER BY h2.fecha_evento, h2.id
+          LIMIT 1
+        ) cierre ON TRUE
+        ORDER BY fecha_asignacion DESC, a.evento_asignacion_id DESC NULLS LAST
+      `,
+      [colaboradorId]
+    )
+  ).rows;
 
 export const listarPendientesOffboarding = async ():Promise<PendienteOffboardingRow[]> =>
   (await pool.query<PendienteOffboardingRow>(`

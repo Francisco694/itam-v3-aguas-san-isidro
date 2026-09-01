@@ -68,6 +68,49 @@ export interface HistorialActivoColaboradorRow extends ActivoColaboradorRow {
   tipo_cierre:string|null;resultado:string;
 }
 
+export type ClasificacionConciliada =
+  | "ACTUAL_CONFIRMADO"
+  | "ACTUAL_PROBABLE"
+  | "HISTORICO_CONFIRMADO"
+  | "HISTORICO_PROBABLE"
+  | "PENDIENTE_VALIDACION"
+  | "CONFLICTO_DATOS";
+
+export interface InventarioConciliableRow extends ActivoColaboradorRow {
+  fecha_asignacion: Date | string;
+  evento_asignacion_id: string | null;
+  vinculo_actual: boolean;
+  colaborador_actual_id: string | null;
+  tipo_cierre: string | null;
+  tiene_devolucion: boolean;
+  tiene_baja: boolean;
+  identidad_duplicada: boolean;
+}
+
+export interface ActivoConciliado {
+  dispositivoId: string;
+  codigoItam: number;
+  tipoDispositivo: string;
+  marca: string | null;
+  modelo: string | null;
+  imei: string | null;
+  numeroSerie: string | null;
+  fechaAsignacion: string;
+  estadoOriginal: { codigo: string; nombre: string };
+  clasificacionConciliada: ClasificacionConciliada;
+  motivoConciliacion: string;
+  requiereValidacionManual: boolean;
+  valorComercial: number;
+}
+
+export interface InventarioConciliado {
+  colaborador: Colaborador;
+  actuales: ActivoConciliado[];
+  historicos: ActivoConciliado[];
+  pendientes: ActivoConciliado[];
+  valorTotalActual: number;
+}
+
 export interface PendienteOffboardingRow {
   colaborador_id:string;rut:string;nombre:string;cargo:string|null;localidad:string|null;
   activo:boolean;observaciones:string|null;creado_en:Date|string;actualizado_en:Date|string;

@@ -1,7 +1,11 @@
 import { Colaborador, Dispositivo } from '../core/models/itam.models';
 import { actaCommercialTotal } from '../shared/components/acta-preview/acta-preview';
 import { formatClp } from '../shared/utils/currency';
-import { custodyValue } from './colaboradores/colaborador-detail';
+import {
+  assetIdentifier,
+  custodyValue,
+  reconciliationLabel,
+} from './colaboradores/colaborador-detail';
 import { COMMERCIAL_VALUE_PATTERN } from './dispositivos/dispositivo-form';
 import { receiversForDepartment } from './dispositivos/dispositivo-detail';
 import { inventoryStateCount, quickSearchMode } from './dispositivos/dispositivos-list';
@@ -39,6 +43,24 @@ describe('flujos operacionales del inventario', () => {
     const returnedHistory = [{ fechaDevolucion: '2026-06-10', resultado: 'DEVUELTO' }];
     expect(custodyValue(current)).toBe(500000);
     expect(returnedHistory[0]?.resultado).toBe('DEVUELTO');
+  });
+
+  it('muestra IMEI y nunca usa Sin serie para smartphones', () => {
+    expect(
+      assetIdentifier({ tipoDispositivo: 'Smartphone', imei: '352054265288036', numeroSerie: null }),
+    ).toEqual({ label: 'IMEI', value: '352054265288036' });
+    expect(
+      assetIdentifier({ tipoDispositivo: 'Smartphone', imei: null, numeroSerie: null }),
+    ).toEqual({ label: 'IMEI', value: 'Sin IMEI registrado' });
+  });
+
+  it('presenta las etiquetas operacionales de conciliación', () => {
+    expect(reconciliationLabel('ACTUAL_PROBABLE')).toBe('Actual probable');
+    expect(reconciliationLabel('HISTORICO_PROBABLE')).toBe(
+      'Histórico probable — sin devolución registrada',
+    );
+    expect(reconciliationLabel('PENDIENTE_VALIDACION')).toBe('Pendiente de validación');
+    expect(reconciliationLabel('CONFLICTO_DATOS')).toBe('Conflicto de datos');
   });
 
   it('ofrece como recepcionante solo colaboradores del departamento', () => {

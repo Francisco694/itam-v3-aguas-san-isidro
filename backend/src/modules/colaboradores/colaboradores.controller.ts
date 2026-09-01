@@ -16,6 +16,7 @@ import {
   obtenerColaborador,
   obtenerColaboradorPorRutExistente,
   obtenerColaboradores,
+  obtenerInventarioConciliadoColaborador,
   obtenerInventarioColaborador,
   obtenerPendientesOffboarding
 } from "./colaboradores.service";
@@ -50,6 +51,17 @@ export const listarColaboradoresController = asyncHandler(
 export const obtenerInventarioColaboradorController = asyncHandler(
   async (req:Request,res:Response):Promise<void> => {
     sendItem(res,await obtenerInventarioColaborador(parsePositiveInteger(req.params.id,"id")));
+  }
+);
+
+export const obtenerInventarioConciliadoColaboradorController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    sendItem(
+      res,
+      await obtenerInventarioConciliadoColaborador(
+        parsePositiveInteger(req.params.id, "id")
+      )
+    );
   }
 );
 

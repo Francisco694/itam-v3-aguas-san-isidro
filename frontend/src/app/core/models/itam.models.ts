@@ -91,6 +91,23 @@ export interface InventarioDepartamento { departamento: Departamento; resumen: {
 export interface ActivoColaborador {id:string;codigoInventario:number;tipo:string;marca:string|null;modelo:string|null;numeroSerie:string|null;imei:string|null;valorComercial:number;estado:{codigo:string;nombre:string};}
 export interface HistorialActivoColaborador extends ActivoColaborador {fechaAsignacion:string;fechaDevolucion:string|null;tipoCierre:string|null;resultado:string;}
 export interface InventarioColaborador {colaborador:Colaborador;valorTotalCustodia:number;equiposActuales:ActivoColaborador[];historialEquipos:HistorialActivoColaborador[];}
+export type ClasificacionConciliada =
+  | 'ACTUAL_CONFIRMADO'
+  | 'ACTUAL_PROBABLE'
+  | 'HISTORICO_CONFIRMADO'
+  | 'HISTORICO_PROBABLE'
+  | 'PENDIENTE_VALIDACION'
+  | 'CONFLICTO_DATOS';
+export interface ActivoConciliado {
+  dispositivoId:string;codigoItam:number;tipoDispositivo:string;marca:string|null;modelo:string|null;
+  imei:string|null;numeroSerie:string|null;fechaAsignacion:string;
+  estadoOriginal:{codigo:string;nombre:string};clasificacionConciliada:ClasificacionConciliada;
+  motivoConciliacion:string;requiereValidacionManual:boolean;valorComercial:number;
+}
+export interface InventarioConciliadoColaborador {
+  colaborador:Colaborador;actuales:ActivoConciliado[];historicos:ActivoConciliado[];
+  pendientes:ActivoConciliado[];valorTotalActual:number;
+}
 export interface PendienteOffboarding {colaborador:Colaborador;activosPendientes:number;valorPendiente:number;estado:'PENDIENTE';}
 
 export type EstadoOrdenServicio='PENDIENTE_DIAGNOSTICO'|'COTIZACION_RECIBIDA'|'REPARACION_APROBADA'|'REPARACION_RECHAZADA'|'EN_REPARACION'|'REPARACION_TERMINADA'|'CERRADA'|'BAJA';
