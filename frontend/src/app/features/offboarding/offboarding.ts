@@ -21,6 +21,7 @@ import { StatusBadge } from '../../shared/components/status-badge/status-badge';
 import { ViewState } from '../../shared/components/view-state/view-state';
 import { errorMessage } from '../../shared/utils/error-message';
 import { formatClp } from '../../shared/utils/currency';
+import { RutPipe } from '../../shared/pipes/rut.pipe';
 
 interface EmployeeResult {
   person: Colaborador;
@@ -35,6 +36,7 @@ interface EmployeeResult {
     PageHeader,
     StatusBadge,
     ViewState,
+    RutPipe,
     LucideCircleAlert,
     LucidePackageCheck,
     LucideRotateCcw,
@@ -121,13 +123,13 @@ interface EmployeeResult {
         } @else {
           <div class="table-wrap desktop-table"><table class="data-table pending-table">
             <thead><tr><th>Colaborador</th><th>RUT</th><th>Departamento</th><th>Activos pendientes</th><th>Valor pendiente</th><th>Estado</th><th>Acción</th></tr></thead>
-            <tbody>@for (row of pendingRows(); track row.colaborador.id) {<tr><td><strong>{{ row.colaborador.nombre }}</strong></td><td>{{ row.colaborador.rut }}</td><td>{{ row.colaborador.departamento?.nombre || 'Sin departamento' }}</td><td>{{ row.activosPendientes }}</td><td>{{ clp(row.valorPendiente) }}</td><td><app-status-badge code="PENDIENTE" label="Pendiente" /></td><td><button class="btn btn--secondary btn--small" type="button" (click)="manage(row)">Gestionar</button></td></tr>}</tbody>
+            <tbody>@for (row of pendingRows(); track row.colaborador.id) {<tr><td><strong>{{ row.colaborador.nombre }}</strong></td><td>{{ row.colaborador.rut | rut }}</td><td>{{ row.colaborador.departamento?.nombre || 'Sin departamento' }}</td><td>{{ row.activosPendientes }}</td><td>{{ clp(row.valorPendiente) }}</td><td><app-status-badge code="PENDIENTE" label="Pendiente" /></td><td><button class="btn btn--secondary btn--small" type="button" (click)="manage(row)">Gestionar</button></td></tr>}</tbody>
           </table></div>
           <div class="mobile-record-list pending-mobile-list">
             @for (row of pendingRows(); track row.colaborador.id) {
               <article class="mobile-record-card">
                 <header class="mobile-record-card__top">
-                  <div><strong class="mobile-record-card__title">{{ row.colaborador.nombre }}</strong><span class="mobile-record-card__subtitle">{{ row.colaborador.rut }}</span></div>
+                  <div><strong class="mobile-record-card__title">{{ row.colaborador.nombre }}</strong><span class="mobile-record-card__subtitle">{{ row.colaborador.rut | rut }}</span></div>
                   <app-status-badge code="PENDIENTE" label="Pendiente" />
                 </header>
                 <dl class="mobile-record-card__details">
@@ -178,7 +180,7 @@ interface EmployeeResult {
                 <span class="employee-card__icon"><svg lucideUsers></svg></span
                 ><span
                   ><strong>{{ result.person.nombre }}</strong
-                  ><small>{{ result.person.rut }} · {{ result.person.cargo || 'Sin cargo' }}</small
+                  ><small>{{ result.person.rut | rut }} · {{ result.person.cargo || 'Sin cargo' }}</small
                   ><small>{{
                     result.person.departamento?.nombre || 'Sin departamento'
                   }}</small></span
@@ -201,7 +203,7 @@ interface EmployeeResult {
           <span>RECUPERACIÓN EN CURSO</span>
           <h2>Recuperar equipos de {{ person.nombre }}</h2>
           <p>
-            {{ person.rut }} · {{ person.cargo || 'Sin cargo' }} ·
+            {{ person.rut | rut }} · {{ person.cargo || 'Sin cargo' }} ·
             {{ person.departamento?.nombre || 'Sin departamento' }}
           </p>
         </div>

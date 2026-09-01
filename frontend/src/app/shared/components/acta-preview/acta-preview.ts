@@ -3,6 +3,7 @@ import { Component, input, output } from '@angular/core';
 import { LucideDownload, LucideDroplet, LucideMail, LucidePrinter, LucideX } from '@lucide/angular';
 import { ActaEntrega } from '../../../core/models/itam.models';
 import { formatClp } from '../../utils/currency';
+import { formatRut } from '../../utils/rut';
 
 export const actaCommercialTotal = (devices: readonly { valorComercial: number }[]): number =>
   devices.reduce((total, device) => total + device.valorComercial, 0);
@@ -349,7 +350,7 @@ export class ActaPreview {
     return this.acta().colaborador?.nombre || this.acta().recepcionante?.nombre || '—';
   }
   protected personRut() {
-    return this.acta().colaborador?.rut || this.acta().recepcionante?.rut || '—';
+    return formatRut(this.acta().colaborador?.rut || this.acta().recepcionante?.rut) || '—';
   }
   protected personCargo() {
     return this.acta().colaborador?.cargo || this.acta().recepcionante?.cargo || '—';

@@ -88,12 +88,15 @@ const dispositivoSelect = `
     ON tipo.id = d.tipo_dispositivo_id
   LEFT JOIN itam.familias_codigo_inventario tipo_familia
     ON tipo_familia.id = tipo.familia_codigo_inventario_id
+  LEFT JOIN itam.custodias_dispositivo custodia
+    ON custodia.dispositivo_id = d.id
+   AND custodia.vigente = TRUE
   LEFT JOIN itam.colaboradores c
-    ON c.id = d.colaborador_id
+    ON c.id = custodia.colaborador_id
   LEFT JOIN itam.departamentos colaborador_dep
     ON colaborador_dep.id = c.departamento_id
   LEFT JOIN itam.departamentos dep
-    ON dep.id = d.departamento_id
+    ON dep.id = custodia.departamento_id
   LEFT JOIN itam.colaboradores recibido
     ON recibido.id = d.recibido_por_id
   LEFT JOIN itam.sim s
@@ -150,12 +153,12 @@ export const listarDispositivos = async (
 
   if (filters.colaboradorId !== undefined) {
     values.push(filters.colaboradorId);
-    where.push(`d.colaborador_id = $${values.length}`);
+    where.push(`custodia.colaborador_id = $${values.length}`);
   }
 
   if (filters.departamentoId !== undefined) {
     values.push(filters.departamentoId);
-    where.push(`d.departamento_id = $${values.length}`);
+    where.push(`custodia.departamento_id = $${values.length}`);
   }
 
   if (filters.familiaCodigoInventarioId !== undefined) {
@@ -376,8 +379,8 @@ export const obtenerResumenGerencial = async (): Promise<ResumenGerencialRow> =>
       ), 0) AS inventario_operacional_valor,
       COUNT(*) FILTER (WHERE e.codigo = 'DISPONIBLE') AS disponibles_cantidad,
       COALESCE(SUM(d.valor_comercial) FILTER (WHERE e.codigo = 'DISPONIBLE'), 0) AS disponibles_valor,
-      COUNT(*) FILTER (WHERE e.codigo = 'ASIGNADO') AS asignados_cantidad,
-      COALESCE(SUM(d.valor_comercial) FILTER (WHERE e.codigo = 'ASIGNADO'), 0) AS asignados_valor,
+      COUNT(*) FILTER (WHERE custodia.id IS NOT NULL) AS asignados_cantidad,
+      COALESCE(SUM(d.valor_comercial) FILTER (WHERE custodia.id IS NOT NULL), 0) AS asignados_valor,
       COUNT(*) FILTER (WHERE e.codigo = 'SERVICIO_TECNICO') AS servicio_tecnico_cantidad,
       COALESCE(SUM(d.valor_comercial) FILTER (WHERE e.codigo = 'SERVICIO_TECNICO'), 0) AS servicio_tecnico_valor,
       COUNT(*) FILTER (WHERE e.codigo = 'EXTRAVIADO') AS extraviados_cantidad,
@@ -388,6 +391,9 @@ export const obtenerResumenGerencial = async (): Promise<ResumenGerencialRow> =>
       ), 0) AS bajas_valor
     FROM itam.dispositivos d
     INNER JOIN itam.estados e ON e.id = d.estado_id
+    LEFT JOIN itam.custodias_dispositivo custodia
+      ON custodia.dispositivo_id = d.id
+     AND custodia.vigente = TRUE
     LEFT JOIN LATERAL (
       SELECT b.valor_comercial_momento
       FROM itam.bajas_dispositivo b

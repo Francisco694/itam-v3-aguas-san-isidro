@@ -6,6 +6,7 @@ import { DepartamentosService } from '../../core/services/departamentos.service'
 import { PageHeader } from '../../shared/components/page-header/page-header';
 import { StatusBadge } from '../../shared/components/status-badge/status-badge';
 import { ViewState } from '../../shared/components/view-state/view-state';
+import { RutPipe } from '../../shared/pipes/rut.pipe';
 import { errorMessage } from '../../shared/utils/error-message';
 
 @Component({
@@ -18,6 +19,7 @@ import { errorMessage } from '../../shared/utils/error-message';
     LucideBuilding2,
     LucidePackage,
     LucideUsers,
+    RutPipe,
   ],
   template: `
     <app-page-header
@@ -137,7 +139,7 @@ import { errorMessage } from '../../shared/utils/error-message';
               <header>
                 <div>
                   <strong>{{ group.nombre }}</strong
-                  ><span>{{ group.rut }}</span>
+                  ><span>{{ group.rut | rut }}</span>
                 </div>
                 <b>{{ group.assets.length }} activo{{ group.assets.length === 1 ? '' : 's' }}</b>
               </header>

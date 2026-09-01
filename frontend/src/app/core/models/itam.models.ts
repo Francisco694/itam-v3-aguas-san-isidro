@@ -90,7 +90,17 @@ export interface InventarioDepartamento { departamento: Departamento; resumen: {
 
 export interface ActivoColaborador {id:string;codigoInventario:number;tipo:string;marca:string|null;modelo:string|null;numeroSerie:string|null;imei:string|null;valorComercial:number;estado:{codigo:string;nombre:string};}
 export interface HistorialActivoColaborador extends ActivoColaborador {fechaAsignacion:string;fechaDevolucion:string|null;tipoCierre:string|null;resultado:string;}
-export interface InventarioColaborador {colaborador:Colaborador;valorTotalCustodia:number;equiposActuales:ActivoColaborador[];historialEquipos:HistorialActivoColaborador[];}
+export interface RegistroHistoricoPendiente {
+  id:string;tipoActivo:string|null;descripcion:string|null;imei:string|null;
+  numeroSerie:string|null;fechaEntrega:string|null;estadoConciliacion:string;
+  motivo:string|null;nivelConfianza:string;
+  fuente:{archivo:string;hoja:string;fila:number};
+}
+export interface InventarioColaborador {
+  colaborador:Colaborador;valorTotalCustodia:number;equiposActuales:ActivoColaborador[];
+  historialEquipos:HistorialActivoColaborador[];
+  registrosHistoricosPendientes:RegistroHistoricoPendiente[];
+}
 export interface PendienteOffboarding {colaborador:Colaborador;activosPendientes:number;valorPendiente:number;estado:'PENDIENTE';}
 
 export type EstadoOrdenServicio='PENDIENTE_DIAGNOSTICO'|'COTIZACION_RECIBIDA'|'REPARACION_APROBADA'|'REPARACION_RECHAZADA'|'EN_REPARACION'|'REPARACION_TERMINADA'|'CERRADA'|'BAJA';

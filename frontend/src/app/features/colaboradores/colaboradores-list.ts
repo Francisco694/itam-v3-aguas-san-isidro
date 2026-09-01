@@ -8,11 +8,12 @@ import { DepartamentosService } from '../../core/services/departamentos.service'
 import { PageHeader } from '../../shared/components/page-header/page-header';
 import { StatusBadge } from '../../shared/components/status-badge/status-badge';
 import { ViewState } from '../../shared/components/view-state/view-state';
+import { RutPipe } from '../../shared/pipes/rut.pipe';
 import { errorMessage } from '../../shared/utils/error-message';
 
 @Component({
   selector: 'app-colaboradores-list',
-  imports: [FormsModule, RouterLink, PageHeader, StatusBadge, ViewState],
+  imports: [FormsModule, RouterLink, PageHeader, StatusBadge, ViewState, RutPipe],
   template: `
     <app-page-header
       title="Colaboradores"
@@ -70,7 +71,7 @@ import { errorMessage } from '../../shared/utils/error-message';
               @for (item of items(); track item.id) {
                 <tr>
                   <td><a class="cell-primary link" [routerLink]="[item.id]">{{ item.nombre }}</a><span class="cell-secondary">{{ item.localidad || 'Sin localidad' }}</span></td>
-                  <td>{{ item.rut }}</td>
+                  <td>{{ item.rut | rut }}</td>
                   <td>{{ item.cargo || 'Sin cargo' }}</td>
                   <td>{{ item.departamento?.nombre || 'Sin departamento' }}</td>
                   <td><app-status-badge [code]="item.activo" [label]="item.activo ? 'Activo' : 'Inactivo'" /></td>
@@ -84,7 +85,7 @@ import { errorMessage } from '../../shared/utils/error-message';
           @for (item of items(); track item.id) {
             <article class="mobile-record-card">
               <header class="mobile-record-card__top">
-                <div><a class="mobile-record-card__title" [routerLink]="[item.id]">{{ item.nombre }}</a><span class="mobile-record-card__subtitle">{{ item.rut }}</span></div>
+                <div><a class="mobile-record-card__title" [routerLink]="[item.id]">{{ item.nombre }}</a><span class="mobile-record-card__subtitle">{{ item.rut | rut }}</span></div>
                 <app-status-badge [code]="item.activo" [label]="item.activo ? 'Activo' : 'Inactivo'" />
               </header>
               <dl class="mobile-record-card__details">

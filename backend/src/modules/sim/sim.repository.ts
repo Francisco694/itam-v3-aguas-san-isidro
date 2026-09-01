@@ -41,10 +41,14 @@ const simSelect = `
   FROM itam.sim s
   INNER JOIN itam.estados e
     ON e.id = s.estado_id
+  LEFT JOIN itam.custodias_sim custodia
+    ON custodia.sim_id = s.id AND custodia.vigente = TRUE
   LEFT JOIN itam.colaboradores c
-    ON c.id = s.colaborador_id
+    ON c.id = custodia.colaborador_id
+  LEFT JOIN itam.asociaciones_sim_dispositivo asociacion
+    ON asociacion.sim_id = s.id AND asociacion.vigente = TRUE
   LEFT JOIN itam.dispositivos d
-    ON d.id = s.dispositivo_id
+    ON d.id = asociacion.dispositivo_id
   LEFT JOIN itam.tipos_dispositivo dispositivo_tipo
     ON dispositivo_tipo.id = d.tipo_dispositivo_id
   LEFT JOIN itam.estados de
@@ -85,7 +89,7 @@ export const obtenerSimPorDispositivoId = async (
   const result = await getDb(client).query<SimRow>(
     `
       ${simSelect}
-      WHERE s.dispositivo_id = $1
+      WHERE asociacion.dispositivo_id = $1
       LIMIT 1
     `,
     [dispositivoId]

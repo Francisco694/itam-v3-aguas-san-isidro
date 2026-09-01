@@ -3,6 +3,15 @@ import type { PoolClient } from "pg";
 import { obtenerColaboradorPorId } from "../colaboradores/colaboradores.repository";
 import { obtenerDispositivoPorCodigo } from "../dispositivos/dispositivos.repository";
 import { generateInventoryCode } from "../inventory-codes/inventory-code.service";
+import {
+  cerrarAsociacionSimDispositivo,
+  cerrarCustodiaSim,
+  crearAsociacionSimDispositivo,
+  crearCustodiaSim,
+  obtenerAsociacionVigenteDispositivo,
+  obtenerAsociacionVigenteSim,
+  obtenerCustodiaVigenteSim
+} from "../custodias/custodias.repository";
 import { toIsoDate, toIsoDateTime } from "../../shared/dates";
 import {
   ConflictError,
@@ -167,13 +176,13 @@ const normalizarErrorSim = (error: unknown): never => {
 
   if (isForeignKeyViolation(error)) {
     throw new ConflictError(
-      "La operación referencia un recurso que no existe o no es válido."
+      "La operaciÃ³n referencia un recurso que no existe o no es vÃ¡lido."
     );
   }
 
   if (isDatabaseBusinessRuleViolation(error)) {
     throw new ConflictError(
-      "La operación viola una regla de negocio del inventario."
+      "La operaciÃ³n viola una regla de negocio del inventario."
     );
   }
 
@@ -183,7 +192,7 @@ const normalizarErrorSim = (error: unknown): never => {
 const validarSimOperable = (sim: SimRow): void => {
   if (!estadosSimOperables.includes(sim.estado_codigo)) {
     throw new ConflictError(
-      `La SIM se encuentra en estado ${sim.estado_codigo}; requiere un cambio de estado explícito antes de esta operación.`
+      `La SIM se encuentra en estado ${sim.estado_codigo}; requiere un cambio de estado explÃ­cito antes de esta operaciÃ³n.`
     );
   }
 };
@@ -340,7 +349,7 @@ export const asociarDispositivo = async (
 
     if (sim.dispositivo_id) {
       throw new ConflictError(
-        "La SIM ya está asociada a un dispositivo."
+        "La SIM ya estÃ¡ asociada a un dispositivo."
       );
     }
 
@@ -363,6 +372,20 @@ export const asociarDispositivo = async (
         "El dispositivo ya tiene una SIM asociada."
       );
     }
+
+    const asociacionDispositivo = await obtenerAsociacionVigenteDispositivo(
+      dispositivo.dispositivo_id,
+      client
+    );
+    if (asociacionDispositivo) {
+      throw new ConflictError("El dispositivo ya tiene una SIM asociada.");
+    }
+    await crearAsociacionSimDispositivo(
+      sim.sim_id,
+      dispositivo.dispositivo_id,
+      { responsable: input.responsable },
+      client
+    );
 
     const asociada = await asociarSimADispositivo(
       codigoInventario,
@@ -422,6 +445,20 @@ export const desasociarDispositivo = async (
     }
 
     validarSimOperable(sim);
+
+    const asociacionVigente = await obtenerAsociacionVigenteSim(
+      sim.sim_id,
+      client,
+      true
+    );
+    if (!asociacionVigente) {
+      throw new ConflictError("La SIM no tiene una asociacion vigente.");
+    }
+    await cerrarAsociacionSimDispositivo(
+      asociacionVigente.id,
+      { responsable: input.responsable, motivo: "DESASOCIACION" },
+      client
+    );
 
     const desasociada = await desasociarSimDeDispositivo(
       codigoInventario,
@@ -489,6 +526,26 @@ export const asignarColaboradorSim = async (
 
     validarSimOperable(sim);
 
+    const custodiaSimVigente = await obtenerCustodiaVigenteSim(
+      sim.sim_id,
+      client,
+      true
+    );
+    if (custodiaSimVigente) {
+      throw new ConflictError("La SIM ya tiene una custodia vigente.");
+    }
+    await crearCustodiaSim(
+      {
+        simId: sim.sim_id,
+        colaboradorId: input.colaboradorId,
+        tipoInicio: "ASIGNACION",
+        origen: "API",
+        evidencia: { responsable: input.responsable },
+        nivelConfianza: "ALTA"
+      },
+      client
+    );
+
     const asignada = await asignarSimAColaborador(
       codigoInventario,
       input.colaboradorId,
@@ -546,6 +603,25 @@ export const desasignarColaboradorSim = async (
     }
 
     validarSimOperable(sim);
+
+    const custodiaParaCerrar = await obtenerCustodiaVigenteSim(
+      sim.sim_id,
+      client,
+      true
+    );
+    if (!custodiaParaCerrar) {
+      throw new ConflictError("La SIM no tiene una custodia vigente.");
+    }
+    await cerrarCustodiaSim(
+      custodiaParaCerrar.id,
+      {
+        tipoCierre: "DEVOLUCION",
+        fechaFin: new Date(),
+        fechaCierreRealConocida: true,
+        evidencia: { responsable: input.responsable }
+      },
+      client
+    );
 
     const desasignada = await desasignarSimDeColaborador(
       codigoInventario,

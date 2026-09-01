@@ -68,6 +68,13 @@ export interface HistorialActivoColaboradorRow extends ActivoColaboradorRow {
   tipo_cierre:string|null;resultado:string;
 }
 
+export interface EvidenciaHistoricaPendienteRow {
+  id:string;tipo_activo:string|null;descripcion_original:string|null;
+  imei_original:string|null;serie_original:string|null;fecha_entrega:Date|string|null;
+  estado_conciliacion:string;motivo_conflicto:string|null;nivel_confianza:string;
+  fuente:string;hoja:string;fila_origen:number;
+}
+
 export interface PendienteOffboardingRow {
   colaborador_id:string;rut:string;nombre:string;cargo:string|null;localidad:string|null;
   activo:boolean;observaciones:string|null;creado_en:Date|string;actualizado_en:Date|string;

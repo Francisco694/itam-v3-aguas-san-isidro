@@ -5,6 +5,10 @@ import { pool } from "../config/database";
 import { env } from "../config/env";
 import { formatInventoryCode } from "../modules/inventory-codes/inventory-code";
 import { generateInventoryCodeByFamilyId } from "../modules/inventory-codes/inventory-code.service";
+import {
+  isValidRut as validRut,
+  normalizeRut as rutKey
+} from "../shared/rut";
 
 const SOURCE_FILE = "conciliacion_rrhh_inventario_sql.xlsx";
 const SOURCE_LABEL = "Importación conciliación RRHH + Inventario SQL";
@@ -68,24 +72,6 @@ const txt = (value: Cell | undefined): string => value == null ? ""
 const norm = (value: Cell | undefined): string => txt(value).normalize("NFD")
   .replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/\s+/g, " ").trim();
 const digits = (value: Cell | undefined): string => txt(value).replace(/\D/g, "");
-const rutKey = (value: Cell | undefined): string => txt(value).replace(/[^0-9kK]/g, "").toUpperCase();
-
-const validRut = (value: Cell | undefined): boolean => {
-  const rut = rutKey(value);
-  if (rut.length < 2 || !/^\d+[0-9K]$/.test(rut)) return false;
-  let sum = 0, multiplier = 2;
-  for (let index = rut.length - 2; index >= 0; index -= 1) {
-    sum += Number(rut[index]) * multiplier;
-    multiplier = multiplier === 7 ? 2 : multiplier + 1;
-  }
-  const raw = 11 - (sum % 11);
-  return (raw === 11 ? "0" : raw === 10 ? "K" : String(raw)) === rut.at(-1);
-};
-const formatRut = (rut: string): string => {
-  const body = rut.slice(0, -1), groups: string[] = [];
-  for (let end = body.length; end > 0; end -= 3) groups.unshift(body.slice(Math.max(0, end - 3), end));
-  return `${groups.join(".")}-${rut.at(-1)}`;
-};
 const isoDate = (value: Cell | undefined): string | null => {
   if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString().slice(0, 10);
   const raw = txt(value); if (!raw) return null;
@@ -270,7 +256,7 @@ const collaboratorCandidates = (rows: Row[], context: Context, issues: Issue[]):
     }
     const active = candidates.some((row) => norm(row.estado_laboral_rrhh) === "VIGENTE");
     const existing = context.collaborators.get(key), first = candidates[0]!;
-    result.set(key, { rutKey: key, rut: formatRut(key), name: names[0]!,
+    result.set(key, { rutKey: key, rut: key, name: names[0]!,
       cargo: txt(first.cargo_inventario) || null, locality: txt(first.localidad_inventario) || null,
       active, existingId: existing?.id ?? null, existingActive: existing?.active ?? null });
   }
@@ -514,9 +500,14 @@ const simHistory = async (
 const createOrReuseCollaborator = async (
   client: PoolClient, candidate: Collaborator
 ): Promise<{ id: string; created: boolean }> => {
+  await client.query(
+    "SELECT pg_advisory_xact_lock(hashtextextended($1,0))",
+    [`colaborador-rut:${candidate.rutKey}`]
+  );
   const existing = await client.query<{ id: string }>(
     `SELECT id FROM itam.colaboradores
-     WHERE UPPER(REGEXP_REPLACE(rut,'[^0-9Kk]','','g'))=$1 LIMIT 1`, [candidate.rutKey]
+     WHERE UPPER(REGEXP_REPLACE(BTRIM(rut),'[^0-9Kk]','','g'))=$1
+     ORDER BY id LIMIT 1`, [candidate.rutKey]
   );
   if (existing.rows[0]) return { id: existing.rows[0].id, created: false };
   const inserted = await client.query<{ id: string }>(`INSERT INTO itam.colaboradores(

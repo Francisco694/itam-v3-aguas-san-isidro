@@ -6,19 +6,21 @@ export const consultarResumenReporte=async()=>{
    COUNT(*) cantidad_total,COALESCE(SUM(d.valor_comercial),0) valor_total,
    COUNT(*) FILTER(WHERE e.codigo='DISPONIBLE') cantidad_disponible,
    COALESCE(SUM(d.valor_comercial) FILTER(WHERE e.codigo='DISPONIBLE'),0) valor_disponible,
-   COUNT(*) FILTER(WHERE e.codigo='ASIGNADO') cantidad_asignada,
-   COALESCE(SUM(d.valor_comercial) FILTER(WHERE e.codigo='ASIGNADO'),0) valor_asignado,
-   COUNT(*) FILTER(WHERE d.colaborador_id IS NOT NULL) cantidad_colaborador,
-   COALESCE(SUM(d.valor_comercial) FILTER(WHERE d.colaborador_id IS NOT NULL),0) valor_colaborador,
-   COUNT(*) FILTER(WHERE d.departamento_id IS NOT NULL) cantidad_departamento,
-   COALESCE(SUM(d.valor_comercial) FILTER(WHERE d.departamento_id IS NOT NULL),0) valor_departamento,
+   COUNT(*) FILTER(WHERE custodia.id IS NOT NULL) cantidad_asignada,
+   COALESCE(SUM(d.valor_comercial) FILTER(WHERE custodia.id IS NOT NULL),0) valor_asignado,
+   COUNT(*) FILTER(WHERE custodia.colaborador_id IS NOT NULL) cantidad_colaborador,
+   COALESCE(SUM(d.valor_comercial) FILTER(WHERE custodia.colaborador_id IS NOT NULL),0) valor_colaborador,
+   COUNT(*) FILTER(WHERE custodia.departamento_id IS NOT NULL) cantidad_departamento,
+   COALESCE(SUM(d.valor_comercial) FILTER(WHERE custodia.departamento_id IS NOT NULL),0) valor_departamento,
    COUNT(*) FILTER(WHERE e.codigo='SERVICIO_TECNICO') cantidad_servicio,
    COALESCE(SUM(d.valor_comercial) FILTER(WHERE e.codigo='SERVICIO_TECNICO'),0) valor_servicio,
    COUNT(*) FILTER(WHERE e.codigo='EXTRAVIADO') cantidad_extraviada,
    COALESCE(SUM(d.valor_comercial) FILTER(WHERE e.codigo='EXTRAVIADO'),0) valor_extraviado,
    COUNT(*) FILTER(WHERE e.codigo='DADO_BAJA') cantidad_baja,
    COALESCE((SELECT SUM(valor_comercial_momento) FROM itam.bajas_dispositivo),0) valor_baja
-  FROM itam.dispositivos d JOIN itam.estados e ON e.id=d.estado_id`);
+  FROM itam.dispositivos d JOIN itam.estados e ON e.id=d.estado_id
+  LEFT JOIN itam.custodias_dispositivo custodia
+    ON custodia.dispositivo_id=d.id AND custodia.vigente=TRUE`);
  return result.rows[0]!;
 };
 
@@ -45,9 +47,12 @@ export const consultarOrganizacionReporte=async()=>{
    FROM arbol JOIN itam.departamentos padre ON padre.id=arbol.ancestro_id
    WHERE padre.dependencia_id IS NOT NULL
   ), custodia AS (
-   SELECT d.id,d.valor_comercial,COALESCE(d.departamento_id,c.departamento_id) departamento_id
-   FROM itam.dispositivos d LEFT JOIN itam.colaboradores c ON c.id=d.colaborador_id
-   WHERE COALESCE(d.departamento_id,c.departamento_id) IS NOT NULL
+   SELECT d.id,d.valor_comercial,COALESCE(cd.departamento_id,c.departamento_id) departamento_id
+   FROM itam.custodias_dispositivo cd
+   JOIN itam.dispositivos d ON d.id=cd.dispositivo_id
+   LEFT JOIN itam.colaboradores c ON c.id=cd.colaborador_id
+   WHERE cd.vigente=TRUE
+     AND COALESCE(cd.departamento_id,c.departamento_id) IS NOT NULL
   )
   SELECT dep.id departamento_id,dep.nombre departamento,superior.nombre dependencia,
    COUNT(custodia.id) cantidad,COALESCE(SUM(custodia.valor_comercial),0) valor

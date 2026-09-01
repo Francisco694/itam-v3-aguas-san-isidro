@@ -8,6 +8,10 @@ import {
   generateInventoryCodeByFamilyId
 } from "../modules/inventory-codes/inventory-code.service";
 import { formatInventoryCode } from "../modules/inventory-codes/inventory-code";
+import {
+  isValidRut as validRut,
+  normalizeRut as rutKey
+} from "../shared/rut";
 
 const SOURCE = "Inventario.xlsx";
 const RESPONSIBLE = "Importador Inventario.xlsx";
@@ -70,28 +74,6 @@ const normalizeIccid = (value: Cell | undefined): string | null => {
 const validPhone = (value: Cell | undefined): string | null => {
   const valueDigits = digits(value);
   return valueDigits.length >= 8 ? valueDigits : null;
-};
-const rutKey = (value: Cell | undefined): string =>
-  txt(value).replace(/[^0-9kK]/g, "").toUpperCase();
-const validRut = (value: Cell | undefined): boolean => {
-  const rut = rutKey(value);
-  if (rut.length < 2) return false;
-  let sum = 0;
-  let multiplier = 2;
-  for (let index = rut.length - 2; index >= 0; index -= 1) {
-    sum += Number(rut[index]) * multiplier;
-    multiplier = multiplier === 7 ? 2 : multiplier + 1;
-  }
-  const raw = 11 - (sum % 11);
-  return (raw === 11 ? "0" : raw === 10 ? "K" : String(raw)) === rut.at(-1);
-};
-const formatRut = (value: string): string => {
-  const body = value.slice(0, -1);
-  const groups: string[] = [];
-  for (let end = body.length; end > 0; end -= 3) {
-    groups.unshift(body.slice(Math.max(0, end - 3), end));
-  }
-  return `${groups.join(".")}-${value.at(-1)}`;
 };
 const add = (
   issues: Issue[], severity: Severity, code: string, message: string,
@@ -250,7 +232,7 @@ const analyzeCollaborators = (
     if (localities.length > 1) add(issues, "WARNING", "MULTIPLE_LOCALITIES",
       "Un colaborador presenta varias localidades; se conservará sin localidad.");
     collaborators.set(rut, {
-      rut: formatRut(rut), name: displayByRut.get(rut)!,
+      rut, name: displayByRut.get(rut)!,
       locality: localities.length === 1 ? localities[0]! : null
     });
   }
@@ -608,7 +590,17 @@ const importAll = async (analysis: Analysis): Promise<Counts> => {
     await client.query("BEGIN");
     const collaboratorIds = new Map<string, string>();
     for (const [key, collaborator] of analysis.collaborators) {
-      const existing = analysis.context.existingCollaborators.get(key);
+      await client.query(
+        "SELECT pg_advisory_xact_lock(hashtextextended($1,0))",
+        [`colaborador-rut:${key}`]
+      );
+      const current = await client.query<{ id: string }>(
+        `SELECT id FROM itam.colaboradores
+         WHERE UPPER(REGEXP_REPLACE(BTRIM(rut),'[^0-9Kk]','','g'))=$1
+         ORDER BY id LIMIT 1`,
+        [key]
+      );
+      const existing = current.rows[0];
       if (existing) {
         collaboratorIds.set(key, existing.id);
         counts.collaboratorsReused += 1;

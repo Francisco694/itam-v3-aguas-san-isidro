@@ -64,7 +64,7 @@ interface OperationalMetric {
   template: `
     <app-page-header
       title="Dashboard Gerencial"
-      subtitle="Resumen del inventario tecnológico de Aguas San Isidro."
+      subtitle="Resumen del inventario tecnolÃ³gico de Aguas San Isidro."
       eyebrow="Control patrimonial y operativo"
     />
     @if (loading()) {
@@ -72,7 +72,7 @@ interface OperationalMetric {
         <app-view-state
           kind="loading"
           title="Consultando inventario"
-          message="Consolidando indicadores desde la API…"
+          message="Consolidando indicadores desde la APIâ€¦"
         />
       </section>
     } @else if (error()) {
@@ -105,7 +105,7 @@ interface OperationalMetric {
         <div class="section-heading">
           <div>
             <span>ACCESOS DIRECTOS</span>
-            <h2 id="operational-title">Gestión Operacional</h2>
+            <h2 id="operational-title">GestiÃ³n Operacional</h2>
           </div>
           <p>Procesos que requieren seguimiento y trazabilidad diaria.</p>
         </div>
@@ -122,7 +122,7 @@ interface OperationalMetric {
                 <strong>{{ item.value }}</strong>
                 <p>{{ item.meta }}</p>
               </div>
-              <b aria-hidden="true">→</b>
+              <b aria-hidden="true">â†’</b>
             </a>
           }
         </div>
@@ -130,22 +130,22 @@ interface OperationalMetric {
       <section class="card financial-card">
         <div class="card-heading">
           <div>
-            <span>Control económico</span>
+            <span>Control econÃ³mico</span>
             <h2>Indicadores financieros</h2>
           </div>
         </div>
         <div class="financial-grid">
           <div>
-            <span>Extraviados · {{ lostDevices() }} equipos</span><strong>{{ lostValue() }}</strong>
+            <span>Extraviados Â· {{ lostDevices() }} equipos</span><strong>{{ lostValue() }}</strong>
           </div>
           <div>
-            <span>Bajas · {{ retiredDevices() }} equipos</span><strong>{{ retiredValue() }}</strong>
+            <span>Bajas Â· {{ retiredDevices() }} equipos</span><strong>{{ retiredValue() }}</strong>
           </div>
           <div>
-            <span>En servicio técnico</span><strong>{{ serviceDevices() }} equipos</strong>
+            <span>En servicio tÃ©cnico</span><strong>{{ serviceDevices() }} equipos</strong>
           </div>
           <div>
-            <span>Diagnósticos pendientes</span><strong>{{ pendingDiagnostics() }}</strong>
+            <span>DiagnÃ³sticos pendientes</span><strong>{{ pendingDiagnostics() }}</strong>
           </div>
           <div>
             <span>Cotizaciones por decidir</span><strong>{{ pendingQuotes() }}</strong>
@@ -154,7 +154,7 @@ interface OperationalMetric {
             <span>Reparaciones acumuladas</span><strong>{{ repairCosts() }}</strong>
           </div>
           <div>
-            <span>Valor de equipos activos</span><strong>{{ inventoryValue() }}</strong>
+            <span>Valor del inventario operacional</span><strong>{{ inventoryValue() }}</strong>
           </div>
         </div>
       </section>
@@ -162,16 +162,16 @@ interface OperationalMetric {
         <article class="card type-card">
           <div class="card-heading">
             <div>
-              <span>Distribución real</span>
+              <span>DistribuciÃ³n real</span>
               <h2>Inventario por Tipo</h2>
             </div>
-            <strong>{{ totalDevices() }} activos</strong>
+            <strong>{{ totalDevices() }} operacionales Â· {{ registeredDevices() }} registrados</strong>
           </div>
           @if (!typeSummary().length) {
             <app-view-state
               kind="empty"
               title="Sin dispositivos"
-              message="Registra activos para ver la distribución por tipo."
+              message="Registra activos para ver la distribuciÃ³n por tipo."
             />
           } @else {
             <div class="type-bars">
@@ -242,7 +242,7 @@ interface OperationalMetric {
       <p class="scope-note">
         <svg lucideCircleAlert></svg
         ><span
-          >Los últimos movimientos globales requieren un endpoint agregado para evitar consultar el
+          >Los Ãºltimos movimientos globales requieren un endpoint agregado para evitar consultar el
           historial de cada activo individualmente.</span
         >
       </p>
@@ -264,11 +264,12 @@ export class Dashboard implements OnInit {
   protected readonly metrics = signal<Metric[]>([]);
   protected readonly typeSummary = signal<TypeSummary[]>([]);
   protected readonly totalDevices = signal(0);
+  protected readonly registeredDevices = signal(0);
   protected readonly totalSims = signal(0);
   protected readonly activePeople = signal(0);
   protected readonly activeDepartments = signal(0);
-  protected readonly apiStatus = signal('—');
-  protected readonly databaseStatus = signal('—');
+  protected readonly apiStatus = signal('â€”');
+  protected readonly databaseStatus = signal('â€”');
   protected readonly lostValue = signal('$0');
   protected readonly retiredValue = signal('$0');
   protected readonly serviceDevices = signal(0);
@@ -313,9 +314,9 @@ export class Dashboard implements OnInit {
         );
         this.metrics.set([
           {
-            label: 'Inventario',
+            label: 'Inventario operacional',
             value: r.summary.inventarioOperacional.cantidad,
-            meta: `Valor de equipos activos: ${formatClp(r.summary.inventarioOperacional.valor)}`,
+            meta: `Valor operacional: ${formatClp(r.summary.inventarioOperacional.valor)}`,
             tone: 'blue',
             icon: LucidePackage,
           },
@@ -365,9 +366,9 @@ export class Dashboard implements OnInit {
         this.repairCosts.set(formatClp(r.orders.reduce((s, o) => s + (o.costoFinal ?? 0), 0)));
         this.operationalMetrics.set([
           {
-            title: 'Servicio Técnico',
+            title: 'Servicio TÃ©cnico',
             value: `${this.serviceDevices()} equipos`,
-            meta: `${this.pendingDiagnostics()} diagnósticos · ${this.pendingQuotes()} cotizaciones por decidir`,
+            meta: `${this.pendingDiagnostics()} diagnÃ³sticos Â· ${this.pendingQuotes()} cotizaciones por decidir`,
             route: '/servicio-tecnico',
             tone: 'technical',
             icon: LucideWrench,
@@ -392,15 +393,18 @@ export class Dashboard implements OnInit {
           },
           {
             title: 'Reportes',
-            value: 'Por período',
-            meta: 'Movimientos, valorización y distribución organizacional',
+            value: 'Por perÃ­odo',
+            meta: 'Movimientos, valorizaciÃ³n y distribuciÃ³n organizacional',
             route: '/reportes',
             tone: 'documents',
             icon: LucideChartNoAxesCombined,
           },
         ]);
+        const operationalDevices = r.devices.filter((item) =>
+          ['ASIGNADO', 'DISPONIBLE', 'SERVICIO_TECNICO'].includes(item.estado.codigo),
+        );
         const counts = new Map<string, number>();
-        for (const item of r.devices)
+        for (const item of operationalDevices)
           counts.set(item.tipo.nombre, (counts.get(item.tipo.nombre) ?? 0) + 1);
         this.typeSummary.set(
           [...counts.entries()]
@@ -408,10 +412,13 @@ export class Dashboard implements OnInit {
             .map(([label, count]) => ({
               label,
               count,
-              percentage: r.devices.length ? Math.round((count * 100) / r.devices.length) : 0,
+              percentage: operationalDevices.length
+                ? Math.round((count * 100) / operationalDevices.length)
+                : 0,
             })),
         );
-        this.totalDevices.set(r.devices.length);
+        this.totalDevices.set(operationalDevices.length);
+        this.registeredDevices.set(r.devices.length);
         this.totalSims.set(r.sims.length);
         this.activePeople.set(r.people.filter((i) => i.activo).length);
         this.activeDepartments.set(r.departments.filter((i) => i.activo).length);

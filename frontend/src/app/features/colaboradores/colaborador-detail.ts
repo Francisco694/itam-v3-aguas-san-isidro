@@ -7,6 +7,7 @@ import { ColaboradoresService } from '../../core/services/colaboradores.service'
 import { PageHeader } from '../../shared/components/page-header/page-header';
 import { StatusBadge } from '../../shared/components/status-badge/status-badge';
 import { ViewState } from '../../shared/components/view-state/view-state';
+import { RutPipe } from '../../shared/pipes/rut.pipe';
 import { formatClp } from '../../shared/utils/currency';
 import { errorMessage } from '../../shared/utils/error-message';
 
@@ -15,11 +16,11 @@ export const custodyValue = (assets: readonly { valorComercial: number }[]): num
 
 @Component({
   selector: 'app-colaborador-detail',
-  imports: [DatePipe, RouterLink, PageHeader, StatusBadge, ViewState],
+  imports: [DatePipe, RouterLink, PageHeader, StatusBadge, ViewState, RutPipe],
   template: `
     <app-page-header
       title="Detalle del colaborador"
-      subtitle="Identificación, custodia vigente e historial de equipos."
+      subtitle="IdentificaciÃ³n, custodia vigente e historial de equipos."
     >
       @if (item()) {
         <a class="btn btn--secondary" [routerLink]="['editar']">Editar</a>
@@ -38,7 +39,7 @@ export const custodyValue = (assets: readonly { valorComercial: number }[]): num
             <span class="initial">{{ c.nombre.charAt(0) }}</span>
             <div>
               <h2>{{ c.nombre }}</h2>
-              <p>{{ c.rut }}</p>
+              <p>{{ c.rut | rut }}</p>
             </div>
           </div>
           <app-status-badge [code]="c.activo" [label]="c.activo ? 'Activo' : 'Inactivo'" />
@@ -46,7 +47,7 @@ export const custodyValue = (assets: readonly { valorComercial: number }[]): num
         <dl class="detail-grid">
           <div class="detail-item">
             <dt>Cargo</dt>
-            <dd>{{ c.cargo || '—' }}</dd>
+            <dd>{{ c.cargo || 'â€”' }}</dd>
           </div>
           <div class="detail-item">
             <dt>Departamento</dt>
@@ -54,7 +55,7 @@ export const custodyValue = (assets: readonly { valorComercial: number }[]): num
           </div>
           <div class="detail-item">
             <dt>Localidad</dt>
-            <dd>{{ c.localidad || '—' }}</dd>
+            <dd>{{ c.localidad || 'â€”' }}</dd>
           </div>
           <div class="detail-item">
             <dt>Creado</dt>
@@ -87,7 +88,7 @@ export const custodyValue = (assets: readonly { valorComercial: number }[]): num
               <table class="data-table">
                 <thead>
                   <tr>
-                    <th>Código ITAM</th>
+                    <th>CÃ³digo ITAM</th>
                     <th>Equipo</th>
                     <th>IMEI / Serie</th>
                     <th>Estado</th>
@@ -105,10 +106,10 @@ export const custodyValue = (assets: readonly { valorComercial: number }[]): num
                       <td>
                         <strong>{{ asset.tipo }}</strong
                         ><span class="cell-secondary"
-                          >{{ asset.marca || '—' }} {{ asset.modelo || '' }}</span
+                          >{{ asset.marca || 'â€”' }} {{ asset.modelo || '' }}</span
                         >
                       </td>
-                      <td class="code">{{ asset.imei || asset.numeroSerie || '—' }}</td>
+                      <td class="code">{{ asset.tipo.toUpperCase().includes('SMARTPHONE') ? (asset.imei || 'Sin IMEI registrado') : (asset.numeroSerie || 'Sin serie registrada') }}</td>
                       <td>
                         <app-status-badge
                           [code]="asset.estado.codigo"
@@ -132,15 +133,15 @@ export const custodyValue = (assets: readonly { valorComercial: number }[]): num
             </div>
           </header>
           @if (!inv.historialEquipos.length) {
-            <app-view-state kind="empty" title="Sin asignaciones históricas" />
+            <app-view-state kind="empty" title="Sin asignaciones histÃ³ricas" />
           } @else {
             <div class="table-wrap">
               <table class="data-table">
                 <thead>
                   <tr>
                     <th>Activo</th>
-                    <th>Fecha de asignación</th>
-                    <th>Fecha de devolución</th>
+                    <th>Fecha de asignaciÃ³n</th>
+                    <th>Fecha de devoluciÃ³n</th>
                     <th>Resultado</th>
                   </tr>
                 </thead>
@@ -171,10 +172,37 @@ export const custodyValue = (assets: readonly { valorComercial: number }[]): num
             </div>
           }
         </section>
+        <section class="card collaborator-assets pending-history">
+          <header>
+            <div>
+              <span>CONCILIACI&Oacute;N</span>
+              <h2>Registros hist&oacute;ricos pendientes</h2>
+              <p>Evidencias preservadas que todav&iacute;a no identifican un activo f&iacute;sico con certeza.</p>
+            </div>
+          </header>
+          @if (!inv.registrosHistoricosPendientes.length) {
+            <app-view-state kind="empty" title="Sin evidencias pendientes" />
+          } @else {
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead><tr><th>Registro</th><th>Identificador original</th><th>Fecha de entrega</th><th>Estado de conciliaci&oacute;n</th></tr></thead>
+                <tbody>
+                  @for (record of inv.registrosHistoricosPendientes; track record.id) {
+                    <tr>
+                      <td><strong>{{ record.tipoActivo || 'Activo sin clasificar' }}</strong><span class="cell-secondary">{{ record.descripcion || 'Sin descripci&oacute;n adicional' }}</span></td>
+                      <td class="code">{{ record.imei || record.numeroSerie || 'Activo f&iacute;sico pendiente de identificar' }}</td>
+                      <td>{{ record.fechaEntrega ? (record.fechaEntrega | date: 'dd/MM/yyyy') : 'Fecha no documentada' }}</td>
+                      <td><strong>{{ record.estadoConciliacion.replaceAll('_', ' ') }}</strong>@if (record.motivo) { <span class="cell-secondary">{{ record.motivo }}</span> }</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+        </section>
       }
     }
-  `,
-  styles: [
+  `,  styles: [
     `
       .detail-card {
         padding: 1.4rem;
@@ -254,6 +282,13 @@ export const custodyValue = (assets: readonly { valorComercial: number }[]): num
         color: var(--slate-500);
         font-size: 0.72rem;
         margin: 0.25rem 0 0;
+      }
+      .pending-history {
+        border-left: 4px solid var(--color-warning, #d97706);
+      }
+      .pending-history .code {
+        max-width: 24rem;
+        white-space: normal;
       }
     `,
   ],

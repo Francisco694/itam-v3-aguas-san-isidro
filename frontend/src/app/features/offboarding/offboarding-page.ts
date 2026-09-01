@@ -29,6 +29,7 @@ import { StatusBadge } from '../../shared/components/status-badge/status-badge';
 import { ViewState } from '../../shared/components/view-state/view-state';
 import { formatClp } from '../../shared/utils/currency';
 import { errorMessage } from '../../shared/utils/error-message';
+import { RutPipe } from '../../shared/pipes/rut.pipe';
 import { OffboardingProcessDetailComponent } from './offboarding-process-detail';
 
 type DetailSource = 'search' | 'desktop' | 'mobile';
@@ -42,6 +43,7 @@ type DetailSource = 'search' | 'desktop' | 'mobile';
     PageHeader,
     StatusBadge,
     ViewState,
+    RutPipe,
     LucideCircleAlert,
     LucideCircleCheck,
     LucideSearch,
@@ -51,16 +53,16 @@ type DetailSource = 'search' | 'desktop' | 'mobile';
   ],
   template: `
     <app-page-header
-      title="Offboarding & Recuperación"
+      title="Offboarding & RecuperaciÃ³n"
       subtitle="Busca a una persona para iniciar o continuar su proceso de salida y revisar los equipos que debe devolver."
-      eyebrow="Salida y recuperación de equipos"
+      eyebrow="Salida y recuperaciÃ³n de equipos"
     />
 
     <section class="offboarding-hero">
       <div class="offboarding-hero__copy">
         <span><svg lucideUserMinus></svg></span>
         <div>
-          <h2>Gestión de procesos de salida</h2>
+          <h2>GestiÃ³n de procesos de salida</h2>
           <p>
             Tener equipos asignados no inicia un proceso. Busca a la persona y comienza el proceso
             solo cuando corresponda.
@@ -73,11 +75,11 @@ type DetailSource = 'search' | 'desktop' | 'mobile';
         <input
           id="offboarding-search"
           formControlName="query"
-          placeholder="Buscar por RUT o nombre…"
+          placeholder="Buscar por RUT o nombreâ€¦"
           autocomplete="off"
         />
         <button class="btn btn--primary" type="submit" [disabled]="searching()">
-          {{ searching() ? 'Buscando…' : 'Buscar' }}
+          {{ searching() ? 'Buscandoâ€¦' : 'Buscar' }}
         </button>
       </form>
     </section>
@@ -87,7 +89,7 @@ type DetailSource = 'search' | 'desktop' | 'mobile';
         <app-view-state
           kind="loading"
           title="Buscando personas"
-          message="Consultando colaboradores…"
+          message="Consultando colaboradoresâ€¦"
         />
       </section>
     } @else if (searched()) {
@@ -114,7 +116,7 @@ type DetailSource = 'search' | 'desktop' | 'mobile';
                   <span class="employee-card__icon"><svg lucideUsers></svg></span>
                   <div class="employee-card__identity">
                     <strong>{{ result.colaborador.nombre }}</strong>
-                    <span>{{ result.colaborador.rut }} · {{ result.colaborador.cargo || 'Sin cargo' }}</span>
+                    <span>{{ result.colaborador.rut | rut }} Â· {{ result.colaborador.cargo || 'Sin cargo' }}</span>
                     <span>{{ result.colaborador.departamento?.nombre || 'Sin departamento' }}</span>
                   </div>
                   <div class="employee-card__assets">
@@ -139,7 +141,7 @@ type DetailSource = 'search' | 'desktop' | 'mobile';
                 @if (isExpanded(result.procesoAbiertoId, 'search')) {
                   <div class="inline-detail" [id]="'search-process-' + result.procesoAbiertoId">
                     @if (detailLoading()) {
-                      <app-view-state kind="loading" title="Abriendo proceso" message="Cargando equipos…" />
+                      <app-view-state kind="loading" title="Abriendo proceso" message="Cargando equiposâ€¦" />
                     } @else if (detailError()) {
                       <app-view-state kind="error" title="No se pudo abrir" [message]="detailError()" (retry)="reloadDetail()" />
                     } @else if (detail(); as current) {
@@ -162,10 +164,10 @@ type DetailSource = 'search' | 'desktop' | 'mobile';
     <section class="card global-summary" aria-labelledby="global-summary-title">
       <header>
         <div><span>PANORAMA GLOBAL</span><h2 id="global-summary-title">Procesos de salida abiertos</h2></div>
-        <p>Solo incluye procesos iniciados explícitamente.</p>
+        <p>Solo incluye procesos iniciados explÃ­citamente.</p>
       </header>
       @if (loadingProcesses()) {
-        <app-view-state kind="loading" title="Cargando panorama" message="Consultando procesos abiertos…" />
+        <app-view-state kind="loading" title="Cargando panorama" message="Consultando procesos abiertosâ€¦" />
       } @else if (processError()) {
         <app-view-state kind="error" title="No se pudo cargar el panorama" [message]="processError()" (retry)="loadProcesses()" />
       } @else {
@@ -191,12 +193,12 @@ type DetailSource = 'search' | 'desktop' | 'mobile';
         } @else {
           <div class="table-wrap desktop-table">
             <table class="data-table process-table">
-              <thead><tr><th>Colaborador</th><th>RUT</th><th>Departamento</th><th>Equipos por recuperar</th><th>Valor pendiente</th><th>Estado</th><th>Acción</th></tr></thead>
+              <thead><tr><th>Colaborador</th><th>RUT</th><th>Departamento</th><th>Equipos por recuperar</th><th>Valor pendiente</th><th>Estado</th><th>AcciÃ³n</th></tr></thead>
               <tbody>
                 @for (process of openProcesses(); track process.id) {
                   <tr [class.selected-row]="isExpanded(process.id, 'desktop')">
                     <td><strong>{{ process.colaborador.nombre }}</strong></td>
-                    <td>{{ process.colaborador.rut }}</td>
+                    <td>{{ process.colaborador.rut | rut }}</td>
                     <td>{{ process.colaborador.departamento?.nombre || 'Sin departamento' }}</td>
                     <td>{{ process.equiposPendientes }}</td>
                     <td>{{ clp(process.valorPendiente) }}</td>
@@ -214,7 +216,7 @@ type DetailSource = 'search' | 'desktop' | 'mobile';
                     <tr class="detail-row" [id]="'desktop-process-' + process.id">
                       <td colspan="7">
                         @if (detailLoading()) {
-                          <app-view-state kind="loading" title="Abriendo proceso" message="Cargando equipos…" />
+                          <app-view-state kind="loading" title="Abriendo proceso" message="Cargando equiposâ€¦" />
                         } @else if (detailError()) {
                           <app-view-state kind="error" title="No se pudo abrir" [message]="detailError()" (retry)="reloadDetail()" />
                         } @else if (detail(); as current) {
@@ -237,7 +239,7 @@ type DetailSource = 'search' | 'desktop' | 'mobile';
             @for (process of openProcesses(); track process.id) {
               <article class="mobile-process-card" [class.mobile-process-card--open]="isExpanded(process.id, 'mobile')">
                 <div class="mobile-process-card__summary">
-                  <header><div><strong>{{ process.colaborador.nombre }}</strong><span>{{ process.colaborador.rut }}</span></div><app-status-badge code="ABIERTO" label="En proceso" /></header>
+                  <header><div><strong>{{ process.colaborador.nombre }}</strong><span>{{ process.colaborador.rut | rut }}</span></div><app-status-badge code="ABIERTO" label="En proceso" /></header>
                   <dl>
                     <div><dt>Departamento</dt><dd>{{ process.colaborador.departamento?.nombre || 'Sin departamento' }}</dd></div>
                     <div><dt>Equipos por recuperar</dt><dd>{{ process.equiposPendientes }}</dd></div>
@@ -253,7 +255,7 @@ type DetailSource = 'search' | 'desktop' | 'mobile';
                 @if (isExpanded(process.id, 'mobile')) {
                   <div class="inline-detail" [id]="'mobile-process-' + process.id">
                     @if (detailLoading()) {
-                      <app-view-state kind="loading" title="Abriendo proceso" message="Cargando equipos…" />
+                      <app-view-state kind="loading" title="Abriendo proceso" message="Cargando equiposâ€¦" />
                     } @else if (detailError()) {
                       <app-view-state kind="error" title="No se pudo abrir" [message]="detailError()" (retry)="reloadDetail()" />
                     } @else if (detail(); as current) {
@@ -276,11 +278,11 @@ type DetailSource = 'search' | 'desktop' | 'mobile';
     @if (startCandidate(); as candidate) {
       <div class="dialog-backdrop" role="presentation" (click)="closeStartBackdrop($event)">
         <form class="dialog confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="start-title" [formGroup]="startForm" (ngSubmit)="startProcess()">
-          <header><span><svg lucideUserMinus></svg></span><div><small>INICIO EXPLÍCITO</small><h2 id="start-title">Iniciar proceso de salida</h2></div><button class="icon-button" type="button" aria-label="Cerrar" (click)="startCandidate.set(null)"><svg lucideX></svg></button></header>
-          <p>Se iniciará el proceso de <strong>{{ candidate.colaborador.nombre }}</strong>. Esta acción no cambia equipos, estados ni datos de la persona.</p>
+          <header><span><svg lucideUserMinus></svg></span><div><small>INICIO EXPLÃCITO</small><h2 id="start-title">Iniciar proceso de salida</h2></div><button class="icon-button" type="button" aria-label="Cerrar" (click)="startCandidate.set(null)"><svg lucideX></svg></button></header>
+          <p>Se iniciarÃ¡ el proceso de <strong>{{ candidate.colaborador.nombre }}</strong>. Esta acciÃ³n no cambia equipos, estados ni datos de la persona.</p>
           <div class="field"><label for="start-observations">Observaciones</label><textarea id="start-observations" formControlName="observaciones" placeholder="Antecedentes del proceso (opcional)"></textarea></div>
           @if (startError()) { <div class="notice notice--error">{{ startError() }}</div> }
-          <footer><button class="btn btn--secondary" type="button" (click)="startCandidate.set(null)">Cancelar</button><button class="btn btn--primary" type="submit" [disabled]="starting()">{{ starting() ? 'Iniciando…' : 'Confirmar e iniciar' }}</button></footer>
+          <footer><button class="btn btn--secondary" type="button" (click)="startCandidate.set(null)">Cancelar</button><button class="btn btn--primary" type="submit" [disabled]="starting()">{{ starting() ? 'Iniciandoâ€¦' : 'Confirmar e iniciar' }}</button></footer>
         </form>
       </div>
     }
@@ -288,14 +290,14 @@ type DetailSource = 'search' | 'desktop' | 'mobile';
     @if (resolvingAsset(); as asset) {
       <div class="dialog-backdrop" role="presentation" (click)="closeResolutionBackdrop($event)">
         <form class="dialog resolution-dialog" role="dialog" aria-modal="true" aria-labelledby="resolution-title" [formGroup]="resolutionForm" (ngSubmit)="resolveAsset()">
-          <header><span><svg lucideCircleAlert></svg></span><div><small>RECUPERACIÓN</small><h2 id="resolution-title">Resolver activo</h2></div><button class="icon-button" type="button" aria-label="Cerrar" (click)="resolvingAsset.set(null)"><svg lucideX></svg></button></header>
-          <div class="selected-asset"><strong>{{ asset.tipo.nombre }} {{ asset.marca || '' }} {{ asset.modelo || '' }}</strong><span>Código ITAM {{ asset.codigoInventario }}</span></div>
-          <div class="field"><label for="outcome">Resultado *</label><select id="outcome" formControlName="resultado"><option value="DEVUELTO">Devuelto</option><option value="PENDIENTE">Pendiente</option><option value="DANADO">Dañado</option><option value="NO_ENTREGADO">No entregado</option><option value="EXTRAVIADO">Extraviado</option><option value="ROBADO_HURTADO">Robado o hurtado</option></select></div>
-          <div class="field"><label for="physical-condition">Condición física</label><input id="physical-condition" formControlName="condicion" maxlength="120" /></div>
-          <div class="field"><label for="resolution-observations">Observaciones</label><textarea id="resolution-observations" formControlName="observaciones" placeholder="Antecedentes objetivos de la recepción"></textarea></div>
+          <header><span><svg lucideCircleAlert></svg></span><div><small>RECUPERACIÃ“N</small><h2 id="resolution-title">Resolver activo</h2></div><button class="icon-button" type="button" aria-label="Cerrar" (click)="resolvingAsset.set(null)"><svg lucideX></svg></button></header>
+          <div class="selected-asset"><strong>{{ asset.tipo.nombre }} {{ asset.marca || '' }} {{ asset.modelo || '' }}</strong><span>CÃ³digo ITAM {{ asset.codigoInventario }}</span></div>
+          <div class="field"><label for="outcome">Resultado *</label><select id="outcome" formControlName="resultado"><option value="DEVUELTO">Devuelto</option><option value="PENDIENTE">Pendiente</option><option value="DANADO">DaÃ±ado</option><option value="NO_ENTREGADO">No entregado</option><option value="EXTRAVIADO">Extraviado</option><option value="ROBADO_HURTADO">Robado o hurtado</option></select></div>
+          <div class="field"><label for="physical-condition">CondiciÃ³n fÃ­sica</label><input id="physical-condition" formControlName="condicion" maxlength="120" /></div>
+          <div class="field"><label for="resolution-observations">Observaciones</label><textarea id="resolution-observations" formControlName="observaciones" placeholder="Antecedentes objetivos de la recepciÃ³n"></textarea></div>
           <p class="authenticated-user">Responsable TI: <strong>{{ authenticatedUser() }}</strong></p>
           @if (resolutionError()) { <div class="notice notice--error">{{ resolutionError() }}</div> }
-          <footer><button class="btn btn--secondary" type="button" (click)="resolvingAsset.set(null)">Cancelar</button><button class="btn btn--primary" type="submit" [disabled]="resolving()">{{ resolving() ? 'Registrando…' : 'Confirmar resultado' }}</button></footer>
+          <footer><button class="btn btn--secondary" type="button" (click)="resolvingAsset.set(null)">Cancelar</button><button class="btn btn--primary" type="submit" [disabled]="resolving()">{{ resolving() ? 'Registrandoâ€¦' : 'Confirmar resultado' }}</button></footer>
         </form>
       </div>
     }
@@ -304,9 +306,9 @@ type DetailSource = 'search' | 'desktop' | 'mobile';
       <div class="dialog-backdrop" role="presentation" (click)="closeCompletionBackdrop($event)">
         <section class="dialog confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="complete-title">
           <header><span><svg lucideCircleCheck></svg></span><div><small>CIERRE DEL PROCESO</small><h2 id="complete-title">Completar proceso</h2></div><button class="icon-button" type="button" aria-label="Cerrar" (click)="closeCandidate.set(null)"><svg lucideX></svg></button></header>
-          <p>El proceso de <strong>{{ process.colaborador.nombre }}</strong> quedará completado y saldrá de la lista de procesos en curso.</p>
+          <p>El proceso de <strong>{{ process.colaborador.nombre }}</strong> quedarÃ¡ completado y saldrÃ¡ de la lista de procesos en curso.</p>
           @if (closeError()) { <div class="notice notice--error">{{ closeError() }}</div> }
-          <footer><button class="btn btn--secondary" type="button" (click)="closeCandidate.set(null)">Cancelar</button><button class="btn btn--primary" type="button" [disabled]="closing()" (click)="completeProcess()">{{ closing() ? 'Completando…' : 'Confirmar cierre' }}</button></footer>
+          <footer><button class="btn btn--secondary" type="button" (click)="closeCandidate.set(null)">Cancelar</button><button class="btn btn--primary" type="button" [disabled]="closing()" (click)="completeProcess()">{{ closing() ? 'Completandoâ€¦' : 'Confirmar cierre' }}</button></footer>
         </section>
       </div>
     }
@@ -332,7 +334,7 @@ export class OffboardingPage implements OnInit {
   protected readonly searchForm = this.fb.nonNullable.group({
     query: ['', [Validators.required, Validators.minLength(2)]],
   });
-  protected readonly startForm = this.fb.nonNullable.group({ observations: [''] });
+  protected readonly startForm = this.fb.nonNullable.group({ observaciones: [''] });
   protected readonly resolutionForm = this.fb.nonNullable.group({
     resultado: ['DEVUELTO' as ResultadoOffboarding, Validators.required],
     condicion: ['', Validators.maxLength(120)],
@@ -414,7 +416,7 @@ export class OffboardingPage implements OnInit {
   }
 
   protected requestStart(candidate: OffboardingSearchResult): void {
-    this.startForm.reset({ observations: '' });
+    this.startForm.reset({ observaciones: '' });
     this.startError.set('');
     this.startCandidate.set(candidate);
   }
@@ -424,7 +426,7 @@ export class OffboardingPage implements OnInit {
     if (!candidate || this.starting()) return;
     this.starting.set(true);
     this.startError.set('');
-    const observations = this.startForm.controls.observations.value.trim() || null;
+    const observations = this.startForm.controls.observaciones.value.trim() || null;
     this.offboardingService
       .iniciar({ colaboradorId: Number(candidate.colaborador.id), observaciones: observations })
       .subscribe({
@@ -443,7 +445,7 @@ export class OffboardingPage implements OnInit {
           this.detail.set(process);
           this.loadProcesses();
           this.scrollAfterRender(`search-process-${process.id}`);
-          this.toast.success('Proceso iniciado', 'La persona quedó en seguimiento de salida.');
+          this.toast.success('Proceso iniciado', 'La persona quedÃ³ en seguimiento de salida.');
         },
         error: (error) => {
           this.startError.set(errorMessage(error));
@@ -566,7 +568,7 @@ export class OffboardingPage implements OnInit {
         this.closing.set(false);
         this.collapseDetail();
         this.loadProcesses();
-        this.toast.success('Proceso completado', 'El proceso salió de la lista de seguimiento.');
+        this.toast.success('Proceso completado', 'El proceso saliÃ³ de la lista de seguimiento.');
       },
       error: (error) => {
         this.closeError.set(errorMessage(error));

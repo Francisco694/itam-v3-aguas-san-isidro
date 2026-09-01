@@ -22,6 +22,8 @@ import {
   darDeBajaDispositivo,
   devolverDispositivoExistente,
   registrarResultadoOffboarding,
+  reasignarAColaborador,
+  reasignarADepartamento,
   obtenerDispositivo,
   obtenerDispositivos,
   obtenerIndicadoresGerenciales,
@@ -87,20 +89,20 @@ const parseOptionalSpecificAttributes = (
   const parsed: Record<string, string | number | null> = {};
   for (const [key, attribute] of entries) {
     if (!/^[a-z][A-Za-z0-9]{0,49}$/.test(key)) {
-      throw new ValidationError(`La clave ${key} no es válida.`);
+      throw new ValidationError(`La clave ${key} no es vÃ¡lida.`);
     }
     if (
       attribute !== null &&
       typeof attribute !== "string" &&
       typeof attribute !== "number"
     ) {
-      throw new ValidationError(`El atributo ${key} tiene un tipo no válido.`);
+      throw new ValidationError(`El atributo ${key} tiene un tipo no vÃ¡lido.`);
     }
     if (typeof attribute === "string" && attribute.length > 250) {
       throw new ValidationError(`El atributo ${key} admite hasta 250 caracteres.`);
     }
     if (typeof attribute === "number" && !Number.isFinite(attribute)) {
-      throw new ValidationError(`El atributo ${key} debe ser un número finito.`);
+      throw new ValidationError(`El atributo ${key} debe ser un nÃºmero finito.`);
     }
     parsed[key] = attribute;
   }
@@ -171,7 +173,7 @@ export const crearDispositivoController = asyncHandler(
     const body = parseBodyObject(req.body);
     if (body.codigoInventario !== undefined || body.codigo_inventario !== undefined) {
       throw new ValidationError(
-        "El código ITAM es generado automáticamente por el backend."
+        "El cÃ³digo ITAM es generado automÃ¡ticamente por el backend."
       );
     }
 
@@ -433,5 +435,34 @@ export const historialDispositivoController = asyncHandler(
     const historial = await obtenerHistorialDispositivo(codigo);
 
     sendCollection(res, historial);
+  }
+);
+
+export const reasignarColaboradorController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const codigo = parsePositiveInteger(req.params.codigo, "codigo");
+    const body = parseBodyObject(req.body);
+    const input: AsignarColaboradorInput = {
+      colaboradorId: parsePositiveInteger(body.colaboradorId, "colaboradorId"),
+      responsable: authenticatedActorName(req),
+      observaciones: parseOptionalString(body.observaciones, "observaciones")
+    };
+    sendItem(res, await reasignarAColaborador(codigo, input));
+  }
+);
+
+export const reasignarDepartamentoController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const codigo = parsePositiveInteger(req.params.codigo, "codigo");
+    const body = parseBodyObject(req.body);
+    const input: AsignarDepartamentoInput = {
+      departamentoId: parsePositiveInteger(body.departamentoId, "departamentoId"),
+      recibidoPorId: parsePositiveInteger(body.recibidoPorId, "recibidoPorId"),
+      localidad: parseOptionalString(body.localidad, "localidad", 120),
+      ubicacionDetalle: parseOptionalString(body.ubicacionDetalle, "ubicacionDetalle", 250),
+      responsable: authenticatedActorName(req),
+      observaciones: parseOptionalString(body.observaciones, "observaciones")
+    };
+    sendItem(res, await reasignarADepartamento(codigo, input));
   }
 );

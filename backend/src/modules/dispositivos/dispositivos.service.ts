@@ -10,6 +10,11 @@ import {
   resolverTipoActivo,
   resolverTipoActivoParaAlta
 } from "../tipos-dispositivo/tipos-dispositivo.service";
+import {
+  cerrarCustodiaDispositivo,
+  crearCustodiaDispositivo,
+  obtenerCustodiaVigenteDispositivo
+} from "../custodias/custodias.repository";
 import { toIsoDate, toIsoDateTime } from "../../shared/dates";
 import {
   ConflictError,
@@ -107,7 +112,7 @@ export const normalizeSpecificAttributes = (
 
     if (field.tipo === "number") {
       if (typeof value !== "number" || !Number.isFinite(value)) {
-        throw new ValidationError(`${field.etiqueta} debe ser un número.`);
+        throw new ValidationError(`${field.etiqueta} debe ser un nÃƒÆ’Ã‚Âºmero.`);
       }
       if (field.min !== undefined && value < field.min) {
         throw new ValidationError(`${field.etiqueta} debe ser mayor o igual a ${field.min}.`);
@@ -129,7 +134,7 @@ export const normalizeSpecificAttributes = (
       );
     }
     if (field.tipo === "select" && !field.opciones?.includes(clean)) {
-      throw new ValidationError(`${field.etiqueta} no contiene una opción válida.`);
+      throw new ValidationError(`${field.etiqueta} no contiene una opciÃƒÆ’Ã‚Â³n vÃƒÆ’Ã‚Â¡lida.`);
     }
     normalized[field.clave] = clean;
   }
@@ -362,13 +367,13 @@ const normalizarErrorDispositivo = (error: unknown): never => {
 
   if (isForeignKeyViolation(error)) {
     throw new ConflictError(
-      "La operación referencia un recurso que no existe o no es válido."
+      "La operaciÃƒÆ’Ã‚Â³n referencia un recurso que no existe o no es vÃƒÆ’Ã‚Â¡lido."
     );
   }
 
   if (isDatabaseBusinessRuleViolation(error)) {
     throw new ConflictError(
-      "La operación viola una regla de negocio del inventario."
+      "La operaciÃƒÆ’Ã‚Â³n viola una regla de negocio del inventario."
     );
   }
 
@@ -382,7 +387,7 @@ const obtenerEstadoObligatorio = async (
 
   if (!estado) {
     throw new ConflictError(
-      `No existe un estado activo de dispositivo con código ${codigo}.`
+      `No existe un estado activo de dispositivo con cÃƒÆ’Ã‚Â³digo ${codigo}.`
     );
   }
 
@@ -541,7 +546,7 @@ export const actualizarDispositivoExistente = async (
       const familiaNueva = nuevoTipo.familia_codigo_inventario_id;
       if (familiaAnterior !== familiaNueva) {
         throw new ConflictError(
-          "No se puede cambiar el tipo porque alteraría la familia histórica del código ITAM."
+          "No se puede cambiar el tipo porque alterarÃƒÆ’Ã‚Â­a la familia histÃƒÆ’Ã‚Â³rica del cÃƒÆ’Ã‚Â³digo ITAM."
         );
       }
     }
@@ -624,7 +629,7 @@ export const assertSinOrdenServicioAbierta = async (
   );
   if (result.rows[0]) {
     throw new ConflictError(
-      "El dispositivo tiene una orden de servicio técnico abierta."
+      "El dispositivo tiene una orden de servicio tÃƒÆ’Ã‚Â©cnico abierta."
     );
   }
 };
@@ -632,7 +637,7 @@ export const assertSinOrdenServicioAbierta = async (
 const assertCustodiaDisponible = (dispositivo: DispositivoRow): void => {
   if (dispositivo.colaborador_id || dispositivo.departamento_id) {
     throw new ConflictError(
-      "El dispositivo ya tiene un custodio vigente. Registre primero su devolución."
+      "El dispositivo ya tiene un custodio vigente. Registre primero su devoluciÃƒÆ’Ã‚Â³n."
     );
   }
 };
@@ -641,7 +646,7 @@ const assertNoTerminal = async (dispositivo: DispositivoRow): Promise<void> => {
   const estado = await obtenerEstadoDispositivoPorId(Number(dispositivo.estado_id));
   if (estado && ["EXTRAVIADO", "DADO_BAJA"].includes(estado.codigo)) {
     throw new ConflictError(
-      `El dispositivo está en estado terminal ${estado.nombre} y no admite esta operación.`
+      `El dispositivo estÃƒÆ’Ã‚Â¡ en estado terminal ${estado.nombre} y no admite esta operaciÃƒÆ’Ã‚Â³n.`
     );
   }
 };
@@ -687,7 +692,8 @@ export const assertCambioEstadoGenericoPermitido = (
 
 export const asignarAColaborador = async (
   codigoInventario: number,
-  input: AsignarColaboradorInput
+  input: AsignarColaboradorInput,
+  permitirReasignacion = false
 ): Promise<DispositivoResumen> => {
   const estadoAsignado = await obtenerEstadoObligatorio("ASIGNADO");
   const client = await pool.connect();
@@ -709,8 +715,44 @@ export const asignarAColaborador = async (
     }
 
     await assertNoTerminal(anterior);
-    assertCustodiaDisponible(anterior);
     await assertSinOrdenServicioAbierta(anterior.dispositivo_id, client);
+    const custodiaAnterior = await obtenerCustodiaVigenteDispositivo(
+      anterior.dispositivo_id,
+      client,
+      true
+    );
+    if (custodiaAnterior) {
+      if (!permitirReasignacion) {
+        throw new ConflictError(
+          "El dispositivo ya tiene un custodio vigente. Use la reasignacion controlada."
+        );
+      }
+      await cerrarCustodiaDispositivo(
+        custodiaAnterior.id,
+        {
+          tipoCierre: "REASIGNACION",
+          fechaFin: new Date(),
+          fechaCierreRealConocida: false,
+          evidencia: { responsable: input.responsable, origen: "API" }
+        },
+        client
+      );
+      await devolverDispositivo(codigoInventario, anterior.estado_id, client);
+    } else {
+      assertCustodiaDisponible(anterior);
+    }
+
+    await crearCustodiaDispositivo(
+      {
+        dispositivoId: anterior.dispositivo_id,
+        colaboradorId: input.colaboradorId,
+        tipoInicio: "ASIGNACION",
+        origen: "API",
+        evidencia: { responsable: input.responsable },
+        nivelConfianza: "ALTA"
+      },
+      client
+    );
 
     const actualizado = await asignarDispositivoAColaborador(
       codigoInventario,
@@ -725,7 +767,7 @@ export const asignarAColaborador = async (
 
     await insertarHistorialDispositivo(
       actualizado.dispositivo_id,
-      "ASIGNAR_COLABORADOR",
+      permitirReasignacion ? "REASIGNAR_COLABORADOR" : "ASIGNAR_COLABORADOR",
       anterior.estado_id,
       estadoAsignado.id,
       input.responsable,
@@ -750,7 +792,8 @@ export const asignarAColaborador = async (
 
 export const asignarADepartamento = async (
   codigoInventario: number,
-  input: AsignarDepartamentoInput
+  input: AsignarDepartamentoInput,
+  permitirReasignacion = false
 ): Promise<DispositivoResumen> => {
   const departamento = await obtenerDepartamentoPorId(
     input.departamentoId
@@ -787,8 +830,47 @@ export const asignarADepartamento = async (
     }
 
     await assertNoTerminal(anterior);
-    assertCustodiaDisponible(anterior);
     await assertSinOrdenServicioAbierta(anterior.dispositivo_id, client);
+    const custodiaAnterior = await obtenerCustodiaVigenteDispositivo(
+      anterior.dispositivo_id,
+      client,
+      true
+    );
+    if (custodiaAnterior) {
+      if (!permitirReasignacion) {
+        throw new ConflictError(
+          "El dispositivo ya tiene un custodio vigente. Use la reasignacion controlada."
+        );
+      }
+      await cerrarCustodiaDispositivo(
+        custodiaAnterior.id,
+        {
+          tipoCierre: "REASIGNACION",
+          fechaFin: new Date(),
+          fechaCierreRealConocida: false,
+          evidencia: { responsable: input.responsable, origen: "API" }
+        },
+        client
+      );
+      await devolverDispositivo(codigoInventario, anterior.estado_id, client);
+    } else {
+      assertCustodiaDisponible(anterior);
+    }
+
+    await crearCustodiaDispositivo(
+      {
+        dispositivoId: anterior.dispositivo_id,
+        departamentoId: input.departamentoId,
+        tipoInicio: "ASIGNACION_DEPARTAMENTO",
+        origen: "API",
+        evidencia: {
+          responsable: input.responsable,
+          recibidoPorId: input.recibidoPorId
+        },
+        nivelConfianza: "ALTA"
+      },
+      client
+    );
 
     const actualizado = await asignarDispositivoADepartamento(
       codigoInventario,
@@ -806,7 +888,7 @@ export const asignarADepartamento = async (
 
     await insertarHistorialDispositivo(
       actualizado.dispositivo_id,
-      "ASIGNAR_DEPARTAMENTO",
+      permitirReasignacion ? "REASIGNAR_DEPARTAMENTO" : "ASIGNAR_DEPARTAMENTO",
       anterior.estado_id,
       estadoAsignado.id,
       input.responsable,
@@ -869,7 +951,12 @@ const registrarDevolucionCentral = async (
 
 
     await assertNoTerminal(anterior);
-    if (!anterior.colaborador_id && !anterior.departamento_id) {
+    const custodiaVigente = await obtenerCustodiaVigenteDispositivo(
+      anterior.dispositivo_id,
+      client,
+      true
+    );
+    if (!custodiaVigente) {
       throw new ConflictError("El dispositivo no tiene una custodia vigente que devolver.");
     }
     await assertSinOrdenServicioAbierta(anterior.dispositivo_id, client);
@@ -878,6 +965,21 @@ const registrarDevolucionCentral = async (
       anterior.dispositivo_id,
       anterior.colaborador_id,
       anterior.departamento_id,
+      client
+    );
+
+    await cerrarCustodiaDispositivo(
+      custodiaVigente.id,
+      {
+        tipoCierre: origen === "OFFBOARDING" ? "OFFBOARDING" : "DEVOLUCION",
+        fechaFin: new Date(),
+        fechaCierreRealConocida: true,
+        evidencia: {
+          origen,
+          resultado: input.resultado ?? "DEVUELTO",
+          responsable: input.responsable
+        }
+      },
       client
     );
 
@@ -999,10 +1101,10 @@ export const registrarResultadoOffboarding = async (
 
   try {
     await client.query("BEGIN");
-    const anterior = await obtenerDispositivoPorCodigo(codigoInventario, client);
+    const anterior = await obtenerDispositivoPorCodigo(codigoInventario, client, true);
     if (!anterior) throw new NotFoundError("Dispositivo no encontrado.");
     if (!anterior.colaborador_id) {
-      throw new ConflictError("El dispositivo no estÃ¡ bajo custodia directa de un colaborador.");
+      throw new ConflictError("El dispositivo no estÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ bajo custodia directa de un colaborador.");
     }
     if (esPerdida) {
       await assertSinOrdenServicioAbierta(anterior.dispositivo_id, client);
@@ -1010,7 +1112,33 @@ export const registrarResultadoOffboarding = async (
 
     let actualizado = anterior;
     if (esPerdida) {
-      actualizado = await cambiarEstadoDispositivo(codigoInventario, Number(estadoDestino!.id), client) ?? anterior;
+      const custodiaVigente = await obtenerCustodiaVigenteDispositivo(
+        anterior.dispositivo_id,
+        client,
+        true
+      );
+      if (!custodiaVigente) {
+        throw new ConflictError("El dispositivo no tiene una custodia vigente.");
+      }
+      await cerrarCustodiaDispositivo(
+        custodiaVigente.id,
+        {
+          tipoCierre: "EXTRAVIO",
+          fechaFin: new Date(),
+          fechaCierreRealConocida: true,
+          evidencia: {
+            origen: "OFFBOARDING",
+            resultado: input.resultado,
+            responsable: input.responsable
+          }
+        },
+        client
+      );
+      actualizado = await devolverDispositivo(
+        codigoInventario,
+        estadoDestino!.id,
+        client
+      ) ?? anterior;
     }
 
     await insertarHistorialDispositivo(
@@ -1081,15 +1209,41 @@ export const cambiarEstadoDispositivoExistente = async (
     }
     if (estado.codigo === "DADO_BAJA") {
       throw new ConflictError(
-        "Utilice la operación de baja con motivo obligatorio."
+        "Utilice la operaciÃƒÆ’Ã‚Â³n de baja con motivo obligatorio."
       );
     }
 
-    const actualizado = await cambiarEstadoDispositivo(
-      codigoInventario,
-      input.estadoId,
-      client
-    );
+    let actualizado: DispositivoRow | null;
+    if (estado.codigo === "EXTRAVIADO") {
+      const custodiaVigente = await obtenerCustodiaVigenteDispositivo(
+        anterior.dispositivo_id,
+        client,
+        true
+      );
+      if (custodiaVigente) {
+        await cerrarCustodiaDispositivo(
+          custodiaVigente.id,
+          {
+            tipoCierre: "EXTRAVIO",
+            fechaFin: new Date(),
+            fechaCierreRealConocida: true,
+            evidencia: { responsable: input.responsable, origen: "CAMBIO_ESTADO" }
+          },
+          client
+        );
+      }
+      actualizado = await devolverDispositivo(
+        codigoInventario,
+        estado.id,
+        client
+      );
+    } else {
+      actualizado = await cambiarEstadoDispositivo(
+        codigoInventario,
+        input.estadoId,
+        client
+      );
+    }
 
     if (!actualizado) {
       throw new NotFoundError("Dispositivo no encontrado.");
@@ -1165,6 +1319,23 @@ export const darDeBajaDispositivo = async (
           input.responsable,input.observaciones ?? null]
       );
     }
+    const custodiaVigente = await obtenerCustodiaVigenteDispositivo(
+      anterior.dispositivo_id,
+      client,
+      true
+    );
+    if (custodiaVigente) {
+      await cerrarCustodiaDispositivo(
+        custodiaVigente.id,
+        {
+          tipoCierre: "BAJA",
+          fechaFin: new Date(),
+          fechaCierreRealConocida: true,
+          evidencia: { motivo: input.motivo, responsable: input.responsable }
+        },
+        client
+      );
+    }
     const actualizado = await darDeBajaYLiberarCustodia(
       codigoInventario,Number(estadoBaja.id),client
     );
@@ -1210,3 +1381,15 @@ export const obtenerHistorialDispositivo = async (
 
   return rows.map(mapHistorial);
 };
+
+export const reasignarAColaborador = async (
+  codigoInventario: number,
+  input: AsignarColaboradorInput
+): Promise<DispositivoResumen> =>
+  asignarAColaborador(codigoInventario, input, true);
+
+export const reasignarADepartamento = async (
+  codigoInventario: number,
+  input: AsignarDepartamentoInput
+): Promise<DispositivoResumen> =>
+  asignarADepartamento(codigoInventario, input, true);

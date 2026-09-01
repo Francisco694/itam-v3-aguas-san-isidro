@@ -11,7 +11,12 @@ type DbExecutor = Pool | PoolClient;
 const db = (client?: PoolClient): DbExecutor => client ?? pool;
 
 const pendingAssetCondition = `
-  d.colaborador_id = p.colaborador_id
+  EXISTS (
+    SELECT 1 FROM itam.custodias_dispositivo custodia_actual
+    WHERE custodia_actual.dispositivo_id = d.id
+      AND custodia_actual.colaborador_id = p.colaborador_id
+      AND custodia_actual.vigente = TRUE
+  )
   AND NOT COALESCE((
     SELECT
       CASE
@@ -197,7 +202,10 @@ export const searchCollaborators = async (
          abierto.id AS proceso_abierto_id
        FROM itam.colaboradores c
        LEFT JOIN itam.departamentos dep ON dep.id = c.departamento_id
-       LEFT JOIN itam.dispositivos d ON d.colaborador_id = c.id
+       LEFT JOIN itam.custodias_dispositivo custodia
+         ON custodia.colaborador_id = c.id
+        AND custodia.vigente = TRUE
+       LEFT JOIN itam.dispositivos d ON d.id = custodia.dispositivo_id
        LEFT JOIN itam.procesos_offboarding abierto
          ON abierto.colaborador_id = c.id
         AND abierto.estado = 'ABIERTO'

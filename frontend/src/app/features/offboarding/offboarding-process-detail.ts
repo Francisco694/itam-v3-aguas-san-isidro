@@ -11,10 +11,11 @@ import {
 } from '../../core/models/offboarding.models';
 import { StatusBadge } from '../../shared/components/status-badge/status-badge';
 import { formatClp } from '../../shared/utils/currency';
+import { RutPipe } from '../../shared/pipes/rut.pipe';
 
 @Component({
   selector: 'app-offboarding-process-detail',
-  imports: [DatePipe, StatusBadge, LucideCircleCheck, LucidePackageCheck, LucideRotateCcw],
+  imports: [DatePipe, StatusBadge, RutPipe, LucideCircleCheck, LucidePackageCheck, LucideRotateCcw],
   template: `
     <section class="process-detail" aria-label="Detalle del proceso de salida">
       <header class="process-detail__header">
@@ -22,7 +23,7 @@ import { formatClp } from '../../shared/utils/currency';
           <span>PROCESO DE SALIDA</span>
           <h3>Recuperar equipos de {{ process().colaborador.nombre }}</h3>
           <p>
-            {{ process().colaborador.rut }} ·
+            {{ process().colaborador.rut | rut }} ·
             {{ process().colaborador.departamento?.nombre || 'Sin departamento' }}
           </p>
         </div>

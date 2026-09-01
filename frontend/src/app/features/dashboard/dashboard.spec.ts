@@ -96,9 +96,9 @@ describe('Dashboard QA-10 y QA-15', () => {
     const firstMetric = fixture.nativeElement.querySelector('.metric-grid .metric');
     expect(firstMetric.textContent).toContain('Inventario');
     expect(firstMetric.querySelector('.metric__value').textContent.trim()).toBe('10');
-    expect(firstMetric.textContent).toContain('Valor de equipos activos');
+    expect(firstMetric.textContent).toContain('Valor operacional');
     expect(firstMetric.textContent).toContain('$1.000.000');
-    expect(fixture.nativeElement.textContent).toContain('Valor de equipos activos');
+    expect(fixture.nativeElement.textContent).toContain('Valor del inventario operacional');
   });
 
   it('muestra cero real cuando no existen procesos de Offboarding abiertos', () => {
