@@ -1,7 +1,8 @@
+import { DatePipe } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { LucideCamera, LucideDownload, LucidePlus, LucideScanBarcode, LucideSearch, LucideSlidersHorizontal } from '@lucide/angular';
+import { LucideCamera, LucideDownload, LucidePlus, LucideScanBarcode, LucideSearch, LucideSlidersHorizontal, LucideTriangleAlert } from '@lucide/angular';
 import { catchError, forkJoin, of } from 'rxjs';
 import { Departamento, Dispositivo, Estado, TipoDispositivo } from '../../core/models/itam.models';
 import { DepartamentosService } from '../../core/services/departamentos.service';
@@ -36,13 +37,21 @@ export const inventoryPhysicalIdentifier = (
     return item.imei?.trim() ? `IMEI: ${item.imei.trim()}` : 'Sin IMEI registrado';
   }
   return item.numeroSerie?.trim()
-    ? `SN: ${item.numeroSerie.trim()}`
-    : 'Sin N° de serie registrado';
+    ? `N° serie: ${item.numeroSerie.trim()}`
+    : 'Sin número de serie';
 };
+
+export const isAssignedWithoutResponsible = (
+  item: Pick<Dispositivo, 'estado' | 'colaborador' | 'departamento'>,
+): boolean =>
+  item.estado.codigo === 'ASIGNADO' && !item.colaborador && !item.departamento;
+
+export const isClosedCustodyState = (stateCode: string): boolean =>
+  stateCode === 'DADO_BAJA' || stateCode === 'EXTRAVIADO';
 
 @Component({
   selector: 'app-dispositivos-list',
-  imports: [FormsModule, RouterLink, PageHeader, QrScanner, StatusBadge, ViewState, LucideCamera, LucideDownload, LucidePlus, LucideScanBarcode, LucideSearch, LucideSlidersHorizontal],
+  imports: [DatePipe, FormsModule, RouterLink, PageHeader, QrScanner, StatusBadge, ViewState, LucideCamera, LucideDownload, LucidePlus, LucideScanBarcode, LucideSearch, LucideSlidersHorizontal, LucideTriangleAlert],
   template: `
     <app-page-header title="Inventario de Equipos" subtitle="Control físico, custodias y condición operativa de los activos.">
       <button class="btn btn--navy mobile-qr-action" type="button" (click)="scannerOpen.set(true)"><svg lucideCamera></svg> Escanear QR</button>
@@ -93,7 +102,16 @@ export const inventoryPhysicalIdentifier = (
       @else {
         <div class="table-heading"><div><strong>{{ items().length }}</strong><span>{{ items().length === 1 ? 'activo encontrado' : 'activos encontrados' }}</span></div></div>
         <div class="table-wrap desktop-table"><table class="data-table inventory-table"><thead><tr><th>ID / Código</th><th>Equipo</th><th>Estado</th><th>Responsable</th><th>Ubicación</th><th><span class="sr-only">Acciones</span></th></tr></thead><tbody>
-          @for(item of items(); track item.id){<tr><td><a class="asset-code-link" [routerLink]="[item.codigoInventario]">{{ item.codigoInventario }}</a><span class="cell-secondary mono">{{ physicalIdentifier(item) }}</span></td><td><span class="cell-primary">{{ item.marca || item.tipo.nombre }} {{ item.modelo || '' }}</span><span class="cell-secondary">{{ item.tipo.nombre }}</span></td><td><app-status-badge [code]="item.estado.codigo" [label]="item.estado.nombre" /></td><td><span class="cell-primary">{{ custody(item) }}</span><span class="cell-secondary">{{ item.colaborador?.rut ? rut(item.colaborador!.rut) : item.departamento?.nombre || 'Sin custodia vigente' }}</span></td><td>{{ item.localidad || '—' }}<span class="cell-secondary">{{ item.ubicacionDetalle || '' }}</span></td><td><div class="actions"><a class="btn btn--secondary btn--small" [routerLink]="[item.codigoInventario]">Gestionar ficha</a><a class="btn btn--ghost btn--small" [routerLink]="[item.codigoInventario,'editar']">Editar</a></div></td></tr>}
+          @for(item of items(); track item.id){<tr><td><a class="asset-code-link" [routerLink]="[item.codigoInventario]">{{ item.codigoInventario }}</a><span class="cell-secondary mono">{{ physicalIdentifier(item) }}</span></td><td><span class="cell-primary">{{ item.marca || item.tipo.nombre }} {{ item.modelo || '' }}</span><span class="cell-secondary">{{ item.tipo.nombre }}</span></td><td><app-status-badge [code]="item.estado.codigo" [label]="item.estado.nombre" /></td><td>
+            @if (assignedWithoutResponsible(item)) {
+              <span class="custody-warning"><svg lucideTriangleAlert></svg>Asignado sin responsable</span><span class="cell-secondary">Revisar custodia</span>
+            } @else if (closedCustody(item)) {
+              <span class="cell-primary">Último responsable: {{ lastResponsibleName(item) }}</span>
+              @if (item.ultimoResponsableConocido; as previous) {<span class="cell-secondary">{{ previous.tipo === 'COLABORADOR' ? 'Colaborador' : 'Departamento' }} · {{ previous.fechaMovimiento | date:'dd/MM/yyyy' }}</span>} @else {<span class="cell-secondary">Sin responsable conocido</span>}
+            } @else {
+              <span class="cell-primary">{{ custody(item) }}</span><span class="cell-secondary">{{ item.colaborador?.rut ? rut(item.colaborador!.rut) : item.departamento?.nombre || 'Sin responsable actual' }}</span>
+            }
+          </td><td>{{ item.localidad || '—' }}<span class="cell-secondary">{{ item.ubicacionDetalle || '' }}</span></td><td><div class="actions"><a class="btn btn--secondary btn--small" [routerLink]="[item.codigoInventario]">Gestionar ficha</a><a class="btn btn--ghost btn--small" [routerLink]="[item.codigoInventario,'editar']">Editar</a></div></td></tr>}
         </tbody></table></div>
         <div class="mobile-record-list inventory-mobile-list">
           @for(item of items(); track item.id) {
@@ -107,7 +125,7 @@ export const inventoryPhysicalIdentifier = (
                 <app-status-badge [code]="item.estado.codigo" [label]="item.estado.nombre" />
               </header>
               <dl class="mobile-record-card__details">
-                <div><dt>Responsable</dt><dd>{{ custody(item) }}</dd></div>
+                <div><dt>Responsable</dt><dd>@if(assignedWithoutResponsible(item)){<span class="custody-warning"><svg lucideTriangleAlert></svg>Asignado sin responsable</span><small>Revisar custodia</small>}@else if(closedCustody(item)){<span>Último responsable: {{ lastResponsibleName(item) }}</span>@if(item.ultimoResponsableConocido;as previous){<small>{{ previous.tipo === 'COLABORADOR' ? 'Colaborador' : 'Departamento' }} · {{ previous.fechaMovimiento | date:'dd/MM/yyyy' }}</small>}}@else{<span>{{ custody(item) }}</span>}</dd></div>
                 <div><dt>Ubicaci&oacute;n</dt><dd>{{ item.localidad || item.ubicacionDetalle || 'Sin ubicaci&oacute;n' }}</dd></div>
               </dl>
               <footer class="mobile-record-card__actions">
@@ -143,6 +161,7 @@ export class DispositivosList implements OnInit {
   protected readonly filtersOpen = signal(false);
   protected readonly error = signal('');
   protected readonly physicalIdentifier = inventoryPhysicalIdentifier;
+  protected readonly assignedWithoutResponsible = isAssignedWithoutResponsible;
   protected readonly rut = formatRut;
   protected quickQuery = '';
   protected filters = { q: '', tipoDispositivoId: '', estado: '', departamentoId: '', localidad: '' };
@@ -220,7 +239,14 @@ export class DispositivosList implements OnInit {
     this.service.listar({ q: this.filters.q || undefined, tipoDispositivoId: this.filters.tipoDispositivoId ? Number(this.filters.tipoDispositivoId) : undefined, estado: this.filters.estado || undefined, departamentoId: this.filters.departamentoId ? Number(this.filters.departamentoId) : undefined, localidad: this.filters.localidad || undefined }).subscribe({ next: (items) => { this.items.set(items); this.loading.set(false); }, error: (error) => { this.error.set(errorMessage(error)); this.loading.set(false); } });
   }
   protected clear(): void { this.quickQuery = ''; this.filters = { q: '', tipoDispositivoId: '', estado: '', departamentoId: '', localidad: '' }; this.load(); }
-  protected custody(item: Dispositivo): string { return item.colaborador?.nombre || item.departamento?.nombre || 'Sin responsable'; }
+  protected custody(item: Dispositivo): string { return item.colaborador?.nombre || item.departamento?.nombre || 'Sin responsable actual'; }
+  protected closedCustody(item: Dispositivo): boolean { return isClosedCustodyState(item.estado.codigo); }
+  protected lastResponsibleName(item: Dispositivo): string {
+    return item.ultimoResponsableConocido?.nombre
+      || item.colaborador?.nombre
+      || item.departamento?.nombre
+      || 'Sin responsable conocido';
+  }
   protected exportCsv():void {
     const headers=['Código ITAM','Tipo','Marca','Modelo','Número de serie','IMEI','Estado','Custodio','Departamento','Dependencia','Ubicación','Valor comercial','Fecha registro'];
     const rows=this.items().map((item)=>{

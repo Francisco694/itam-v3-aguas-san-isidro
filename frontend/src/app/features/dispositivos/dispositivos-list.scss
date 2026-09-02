@@ -158,6 +158,27 @@
 .inventory-table tbody tr:hover {
   background: #f4fbfd;
 }
+.custody-warning {
+  align-items: center;
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
+  border-radius: 999px;
+  color: #92400e;
+  display: inline-flex;
+  font-size: 0.72rem;
+  font-weight: 800;
+  gap: 0.3rem;
+  padding: 0.3rem 0.5rem;
+}
+.custody-warning svg {
+  height: 0.9rem;
+  width: 0.9rem;
+}
+.mobile-record-card__details small {
+  color: var(--slate-500);
+  display: block;
+  margin-top: 0.2rem;
+}
 .empty-with-action {
   text-align: center;
   padding-bottom: 2rem;

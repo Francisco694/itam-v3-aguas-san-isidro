@@ -56,6 +56,13 @@ export interface LastKnownResponsible {
   fechaAsignacion: string;
 }
 
+interface KnownResponsibleDisplay {
+  tipo: 'COLABORADOR' | 'DEPARTAMENTO';
+  nombre: string;
+  rut: string | null;
+  fechaMovimiento: string | null;
+}
+
 export const lastKnownPersonalResponsible = (events: readonly HistorialEvento[]): LastKnownResponsible | null => {
   const ordered = [...events].sort((left, right) => Date.parse(right.fechaEvento) - Date.parse(left.fechaEvento));
   for (const event of ordered) {
@@ -87,8 +94,8 @@ type DeviceAction = 'assign-person' | 'assign-department' | 'return' | 'state' |
         <div><span>ACTIVO TECNOLÓGICO</span><h2>{{ device.tipo.nombre }} · {{ device.marca || 'Sin marca' }} {{ device.modelo || '' }}</h2>@if (!isSmartphone(device)) { <p>{{ device.numeroSerie ? 'S/N: ' + device.numeroSerie : 'Sin número de serie registrado' }}</p> }</div>
         <div><app-status-badge [code]="device.estado.codigo" [label]="device.estado.nombre" /><a class="btn btn--secondary btn--small" [routerLink]="['editar']"><svg lucidePencil></svg>Editar ficha</a></div>
       </section>
-      @if (terminal()) { <div class="notice notice--error"><svg lucideCircleAlert></svg>El dispositivo está en un estado terminal. Las asignaciones quedan deshabilitadas; la API continúa siendo la autoridad sobre transiciones permitidas.</div> }
-      @if (device.tipoCustodia === 'NONE') { <div class="notice notice--warning asset-unassigned-alert"><svg lucideCircleAlert></svg><div><strong>Este equipo no tiene un responsable asignado actualmente.</strong><span>Es una condición informativa y puede corresponder a su estado vigente.</span></div></div> }
+      @if (terminal()) { <div class="notice notice--error"><svg lucideCircleAlert></svg>Este equipo está fuera de la operación normal. Su historial y último responsable se mantienen visibles para seguimiento.</div> }
+      @if (assignedWithoutResponsible(device)) { <div class="notice notice--warning asset-unassigned-alert"><svg lucideCircleAlert></svg><div><strong>Asignado sin responsable</strong><span>Revisar custodia: no hay una persona ni un departamento asociados.</span></div></div> }
       <section class="panoramic-card">
         <article class="panoramic-column details-column">
           <div class="column-title"><span>01</span><div><small>IDENTIFICACIÓN</small><h3>Detalles</h3></div></div>
@@ -109,7 +116,7 @@ type DeviceAction = 'assign-person' | 'assign-department' | 'return' | 'state' |
             <div><dt>Registrado en ITAM</dt><dd>{{ device.creadoEn | date:'dd/MM/yyyy HH:mm' }}</dd></div>
           </dl>
           <section class="physical-label"><span>ETIQUETA FÍSICA</span><app-asset-label [code]="device.codigoInventario" [assetType]="device.tipo.nombre" printLabel="Reimprimir etiqueta" /></section>
-          <section class="custody-panel"><span>RESPONSABLE ACTUAL</span>@if(device.tipoCustodia==='COLABORADOR'&&device.colaborador){<div><svg lucideUsers></svg><p><strong>{{device.colaborador.nombre}}</strong><small>RUT {{device.colaborador.rut}}</small><small>Departamento: {{device.colaborador.departamento?.nombre||'Sin departamento'}}</small></p></div>}@else if(device.tipoCustodia==='DEPARTAMENTO'&&device.departamento){<div><svg lucideBuilding></svg><p><strong>{{device.departamento.nombre}}</strong><small>Asignación directa al departamento</small></p></div>}@else{<div><svg lucidePackageCheck></svg><p><strong>Sin responsable asignado</strong><small>Disponible para gestión según su estado</small></p></div>@if(lastResponsible();as previous){<div class="previous-custodian"><svg lucideHistory></svg><p><span>Último responsable</span><strong>{{previous.nombre}}</strong><small>@if(previous.rut){RUT {{previous.rut}} · }Última asignación: {{previous.fechaAsignacion|date:'dd/MM/yyyy HH:mm'}}</small></p></div>}@else{<p class="no-previous-custodian">Sin responsable anterior registrado</p>}}</section>
+          <section class="custody-panel">@if(closedCustody(device)){<span>ÚLTIMO RESPONSABLE CONOCIDO</span>@if(knownResponsible(device);as previous){<div><svg lucideHistory></svg><p><strong>{{previous.nombre}}</strong><small>{{ previous.tipo === 'COLABORADOR' ? 'Colaborador' : 'Departamento' }}@if(previous.rut){ · RUT {{previous.rut}}}</small>@if(previous.fechaMovimiento){<small>Último movimiento: {{previous.fechaMovimiento|date:'dd/MM/yyyy HH:mm'}}</small>}</p></div><p class="no-previous-custodian">Este equipo ya no está en custodia vigente, pero se conserva el último responsable registrado.</p>}@else{<p class="no-previous-custodian">Sin responsable conocido</p>}}@else{<span>RESPONSABLE ACTUAL</span>@if(device.tipoCustodia==='COLABORADOR'&&device.colaborador){<div><svg lucideUsers></svg><p><strong>{{device.colaborador.nombre}}</strong><small>RUT {{device.colaborador.rut}}</small><small>Departamento: {{device.colaborador.departamento?.nombre||'Sin departamento'}}</small></p></div>}@else if(device.tipoCustodia==='DEPARTAMENTO'&&device.departamento){<div><svg lucideBuilding></svg><p><strong>{{device.departamento.nombre}}</strong><small>Asignación directa al departamento</small></p></div>}@else{<div><svg lucidePackageCheck></svg><p><strong>Sin responsable actual</strong><small>Disponible para gestión según su estado</small></p></div>}}</section>
           @if(device.simAsociada){<section class="associated-sim"><strong>SIM asociada #{{ device.simAsociada.codigoInventario }}</strong><span>{{ device.simAsociada.numeroAsociado || 'Sin número telefónico asociado' }} · {{ device.simAsociada.compania || 'Sin operador' }}</span></section>}
         </article>
         <article class="panoramic-column audit-column">
@@ -184,7 +191,19 @@ export class DispositivoDetail implements OnInit {
   protected readonly isSmartphone=isSmartphoneDevice;
   protected historicalDate(): string | null { return historicalDeliveryDate(this.history()); }
   protected historicalDateLabel(): string { return historicalDeliveryDateLabel(this.history()); }
-  protected lastResponsible(): LastKnownResponsible | null { return lastKnownPersonalResponsible(this.history()); }
+  protected assignedWithoutResponsible(device: Dispositivo): boolean {
+    return device.estado.codigo === 'ASIGNADO' && device.tipoCustodia === 'NONE';
+  }
+  protected closedCustody(device: Dispositivo): boolean {
+    return device.estado.codigo === 'DADO_BAJA' || device.estado.codigo === 'EXTRAVIADO';
+  }
+  protected knownResponsible(device: Dispositivo): KnownResponsibleDisplay | null {
+    if (device.ultimoResponsableConocido) return device.ultimoResponsableConocido;
+    if (device.colaborador) return { tipo: 'COLABORADOR', nombre: device.colaborador.nombre, rut: device.colaborador.rut, fechaMovimiento: null };
+    if (device.departamento) return { tipo: 'DEPARTAMENTO', nombre: device.departamento.nombre, rut: null, fechaMovimiento: null };
+    const previous = lastKnownPersonalResponsible(this.history());
+    return previous ? { tipo: 'COLABORADOR', nombre: previous.nombre, rut: previous.rut, fechaMovimiento: previous.fechaAsignacion } : null;
+  }
   private codigo = 0;
   protected readonly servicePrintRequested=signal(false);
   protected readonly actionForm = this.fb.nonNullable.group({ colaboradorId: [''], departamentoId: [''], recibidoPorId:[''], localidad: [''], ubicacionDetalle: [''], estadoId: [''], proveedor:[''], fechaEnvio:[''], fallaReportada:[''], motivoBaja:[''], responsable: ['', [Validators.required, Validators.maxLength(150)]], observaciones: [''] });

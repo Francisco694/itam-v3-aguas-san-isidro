@@ -21,12 +21,12 @@ export const custodyValue = (assets: readonly { valorComercial: number }[]): num
 
 export const reconciliationLabel = (classification: ClasificacionConciliada): string =>
   ({
-    ACTUAL_CONFIRMADO: 'Actual probable',
-    ACTUAL_PROBABLE: 'Actual probable',
-    HISTORICO_CONFIRMADO: 'Histórico confirmado',
-    HISTORICO_PROBABLE: 'Histórico probable',
-    PENDIENTE_VALIDACION: 'Pendiente de validación',
-    CONFLICTO_DATOS: 'Conflicto de datos',
+    ACTUAL_CONFIRMADO: 'Equipo vigente confirmado',
+    ACTUAL_PROBABLE: 'Equipo vigente probable',
+    HISTORICO_CONFIRMADO: 'Equipo anterior confirmado',
+    HISTORICO_PROBABLE: 'Equipo anterior probable — no hay devolución registrada',
+    PENDIENTE_VALIDACION: 'Pendiente de revisión',
+    CONFLICTO_DATOS: 'Datos contradictorios',
   })[classification];
 
 export const assetIdentifier = (
@@ -48,7 +48,7 @@ export const suggestedValidationAction = (classification: ClasificacionConciliad
   template: `
     <app-page-header
       title="Detalle del colaborador"
-      subtitle="Dispositivo vigente, historial y casos que requieren validación."
+      subtitle="Dispositivo vigente, historial y casos que requieren revisión."
     >
       @if (item()) { <a class="btn btn--secondary" [routerLink]="['editar']">Editar</a> }
     </app-page-header>
@@ -78,7 +78,7 @@ export const suggestedValidationAction = (classification: ClasificacionConciliad
         <section class="custody-summary" aria-label="Resumen del inventario conciliado">
           <div><span>Dispositivo vigente</span><strong>{{ inventoryData.actuales.length }}</strong></div>
           <div><span>Valor actual en custodia</span><strong>{{ clp(inventoryData.valorTotalActual) }}</strong></div>
-          <div class="summary-warning"><span>Pendientes / conflictos</span><strong>{{ inventoryData.pendientes.length }}</strong></div>
+          <div class="summary-warning"><span>Pendientes / datos contradictorios</span><strong>{{ inventoryData.pendientes.length }}</strong></div>
         </section>
 
         @if (!inventoryData.actuales.length && !inventoryData.historicos.length && !inventoryData.pendientes.length) {
@@ -127,9 +127,9 @@ export const suggestedValidationAction = (classification: ClasificacionConciliad
           </section>
 
           <section class="card collaborator-assets pending-assets">
-            <header><div><span>CONTROL MANUAL</span><h2>Pendientes / conflictos</h2><p>Evidencia insuficiente o contradictoria que no debe resolverse automáticamente.</p></div></header>
+            <header><div><span>REVISIÓN MANUAL</span><h2>Pendientes / datos contradictorios</h2><p>Información insuficiente o contradictoria que debe ser revisada por una persona.</p></div></header>
             @if (!inventoryData.pendientes.length) {
-              <app-view-state kind="empty" title="Sin pendientes ni conflictos" />
+              <app-view-state kind="empty" title="Sin pendientes ni datos contradictorios" />
             } @else {
               <div class="table-wrap"><table class="data-table reconciled-table pending-table"><thead><tr>
                 <th>Código ITAM / evidencia</th><th>Equipo</th><th>Problema detectado</th><th>Motivo</th><th>Acción sugerida</th>

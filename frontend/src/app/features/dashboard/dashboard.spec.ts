@@ -101,6 +101,14 @@ describe('Dashboard QA-10 y QA-15', () => {
     expect(fixture.nativeElement.textContent).toContain('Valor de equipos activos');
   });
 
+  it('presenta el total por tipo como equipos registrados y no como activos vigentes', () => {
+    fixture.detectChanges();
+    const text = fixture.nativeElement.textContent;
+    expect(text).toContain('Inventario registrado por tipo');
+    expect(text).toContain('0 equipos registrados');
+    expect(text).not.toContain('0 activos');
+  });
+
   it('muestra cero real cuando no existen procesos de Offboarding abiertos', () => {
     fixture.detectChanges();
     const card = [...fixture.nativeElement.querySelectorAll('.operational-link')].find(

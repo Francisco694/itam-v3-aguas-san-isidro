@@ -41,6 +41,7 @@ export interface Dispositivo {
   valorComercial: number;
   facturaAdquisicion:{id:string;numeroFactura:string;fechaFactura:string|null;proveedor:string|null;montoTotal:number|null;observaciones:string|null;referenciaDocumental:string|null;documento:FacturaDocumento|null}|null;
   colaborador: ColaboradorResumen | null; departamento: DepartamentoResumen | null; recibidoPor: ColaboradorResumen | null; simAsociada: SimAsociadaResumen | null; tipoCustodia: 'NONE'|'COLABORADOR'|'DEPARTAMENTO';
+  ultimoResponsableConocido?:{tipo:'COLABORADOR'|'DEPARTAMENTO';nombre:string;rut:string|null;fechaMovimiento:string}|null;
   ultimoResultadoOffboarding: ResultadoOffboarding | null;
 }
 export interface DispositivoFilters { q?: string; tipo?: string; tipoDispositivoId?: number; familiaCodigoInventarioId?: number; estado?: string; colaboradorId?: number; departamentoId?: number; localidad?: string; }

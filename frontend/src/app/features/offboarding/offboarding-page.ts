@@ -278,7 +278,7 @@ type DetailSource = 'search' | 'desktop' | 'mobile';
         <form class="dialog confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="start-title" [formGroup]="startForm" (ngSubmit)="startProcess()">
           <header><span><svg lucideUserMinus></svg></span><div><small>INICIO EXPLÍCITO</small><h2 id="start-title">Iniciar proceso de salida</h2></div><button class="icon-button" type="button" aria-label="Cerrar" (click)="startCandidate.set(null)"><svg lucideX></svg></button></header>
           <p>Se iniciará el proceso de <strong>{{ candidate.colaborador.nombre }}</strong>. Esta acción no cambia equipos, estados ni datos de la persona.</p>
-          <div class="field"><label for="start-observations">Observaciones</label><textarea id="start-observations" formControlName="observaciones" placeholder="Antecedentes del proceso (opcional)"></textarea></div>
+          <div class="field"><label for="start-observations">Observaciones</label><textarea id="start-observations" formControlName="observations" placeholder="Antecedentes del proceso (opcional)"></textarea></div>
           @if (startError()) { <div class="notice notice--error">{{ startError() }}</div> }
           <footer><button class="btn btn--secondary" type="button" (click)="startCandidate.set(null)">Cancelar</button><button class="btn btn--primary" type="submit" [disabled]="starting()">{{ starting() ? 'Iniciando…' : 'Confirmar e iniciar' }}</button></footer>
         </form>

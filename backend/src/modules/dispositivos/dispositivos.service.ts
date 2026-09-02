@@ -285,6 +285,17 @@ const mapDispositivo = (
     : row.departamento_id
       ? "DEPARTAMENTO"
       : "NONE",
+  ultimoResponsableConocido:
+    row.ultimo_responsable_tipo &&
+    row.ultimo_responsable_nombre &&
+    row.ultimo_responsable_fecha
+      ? {
+          tipo: row.ultimo_responsable_tipo,
+          nombre: row.ultimo_responsable_nombre,
+          rut: row.ultimo_responsable_rut,
+          fechaMovimiento: toIsoDateTime(row.ultimo_responsable_fecha)
+        }
+      : null,
   ultimoResultadoOffboarding: row.ultimo_resultado_offboarding
 });
 

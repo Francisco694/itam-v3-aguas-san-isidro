@@ -80,6 +80,15 @@ const dispositivoSelect = `
     sim_estado.id AS sim_estado_id,
     sim_estado.codigo AS sim_estado_codigo,
     sim_estado.nombre AS sim_estado_nombre,
+    ultimo_responsable.tipo AS ultimo_responsable_tipo,
+    COALESCE(
+      NULLIF(ultimo_responsable.nombre, ''),
+      ultimo_colaborador.nombre,
+      ultimo_departamento.nombre
+    ) AS ultimo_responsable_nombre,
+    COALESCE(NULLIF(ultimo_responsable.rut, ''), ultimo_colaborador.rut)
+      AS ultimo_responsable_rut,
+    ultimo_responsable.fecha_movimiento AS ultimo_responsable_fecha,
     offboarding.resultado AS ultimo_resultado_offboarding
   FROM itam.dispositivos d
   INNER JOIN itam.estados e
@@ -102,6 +111,68 @@ const dispositivoSelect = `
     ON sim_estado.id = s.estado_id
   LEFT JOIN itam.facturas_adquisicion factura
     ON factura.id = d.factura_adquisicion_id
+  LEFT JOIN LATERAL (
+    SELECT candidato.tipo, candidato.id, candidato.nombre, candidato.rut,
+      candidato.fecha_movimiento
+    FROM (
+      SELECT custodia.tipo, custodia.id, custodia.nombre, custodia.rut,
+        h.fecha_evento AS fecha_movimiento, custodia.prioridad
+      FROM itam.historial_eventos h
+      CROSS JOIN LATERAL (
+        VALUES
+          (
+            h.detalle#>>'{custodiaNueva,tipo}',
+            h.detalle#>>'{custodiaNueva,id}',
+            h.detalle#>>'{custodiaNueva,nombre}',
+            h.detalle#>>'{custodiaNueva,rut}',
+            0
+          ),
+          (
+            h.detalle#>>'{custodiaAnterior,tipo}',
+            h.detalle#>>'{custodiaAnterior,id}',
+            h.detalle#>>'{custodiaAnterior,nombre}',
+            h.detalle#>>'{custodiaAnterior,rut}',
+            1
+          ),
+          (
+            CASE
+              WHEN h.detalle->>'collaboratorId' ~ '^[0-9]+$' THEN 'COLABORADOR'
+              WHEN h.detalle->>'departamentoId' ~ '^[0-9]+$' THEN 'DEPARTAMENTO'
+              ELSE NULL
+            END,
+            COALESCE(h.detalle->>'collaboratorId', h.detalle->>'departamentoId'),
+            NULL,
+            NULL,
+            2
+          )
+      ) custodia(tipo, id, nombre, rut, prioridad)
+      WHERE h.dispositivo_id = d.id
+        AND h.tipo_entidad = 'DISPOSITIVO'
+        AND custodia.tipo IN ('COLABORADOR', 'DEPARTAMENTO')
+        AND custodia.id ~ '^[0-9]+$'
+
+      UNION ALL
+
+      SELECT
+        CASE WHEN comprobante.colaborador_id IS NOT NULL
+          THEN 'COLABORADOR' ELSE 'DEPARTAMENTO' END,
+        COALESCE(comprobante.colaborador_id, comprobante.departamento_id)::TEXT,
+        NULL,
+        NULL,
+        comprobante.fecha,
+        3
+      FROM itam.comprobantes_devolucion comprobante
+      WHERE comprobante.dispositivo_id = d.id
+    ) candidato
+    ORDER BY candidato.fecha_movimiento DESC, candidato.prioridad ASC
+    LIMIT 1
+  ) ultimo_responsable ON TRUE
+  LEFT JOIN itam.colaboradores ultimo_colaborador
+    ON ultimo_responsable.tipo = 'COLABORADOR'
+    AND ultimo_colaborador.id = ultimo_responsable.id::BIGINT
+  LEFT JOIN itam.departamentos ultimo_departamento
+    ON ultimo_responsable.tipo = 'DEPARTAMENTO'
+    AND ultimo_departamento.id = ultimo_responsable.id::BIGINT
   LEFT JOIN LATERAL (
     SELECT h.detalle->>'resultado' AS resultado
     FROM itam.historial_eventos h

@@ -117,7 +117,7 @@ interface EmployeeResult {
       <header><div><span>SEGUIMIENTO OPERATIVO</span><h2 id="pending-list-title">PENDIENTES DE RECUPERACIÓN</h2></div></header>
       @if (!globalLoading() && !globalError()) {
         @if (!pendingRows().length) {
-          <app-view-state kind="empty" title="Sin custodias pendientes" message="No hay activos pendientes de recuperación actualmente." />
+          <app-view-state kind="empty" title="Sin equipos por recuperar" message="No hay equipos pendientes de recuperación actualmente." />
         } @else {
           <div class="table-wrap desktop-table"><table class="data-table pending-table">
             <thead><tr><th>Colaborador</th><th>RUT</th><th>Departamento</th><th>Activos pendientes</th><th>Valor pendiente</th><th>Estado</th><th>Acción</th></tr></thead>
@@ -212,13 +212,13 @@ interface EmployeeResult {
       </section>
       <section class="offboarding-values">
         <div>
-          <span>Valor total en custodia</span><strong>{{ clp(totalCustody()) }}</strong>
+          <span>Valor total de equipos asignados</span><strong>{{ clp(totalCustody()) }}</strong>
         </div>
         <div>
           <span>Valor recuperado</span><strong>{{ clp(recoveredValue()) }}</strong>
         </div>
         <div>
-          <span>Valor pendiente / no recuperado</span><strong>{{ clp(pendingValue()) }}</strong>
+          <span>Valor de equipos por recuperar</span><strong>{{ clp(pendingValue()) }}</strong>
         </div>
       </section>
       @if (!selectedAssets().length) {
@@ -227,7 +227,7 @@ interface EmployeeResult {
           ><app-view-state
             kind="empty"
             title="No hay colaboradores con activos pendientes"
-            message="Este colaborador no mantiene equipos en custodia según el inventario actual."
+            message="Este colaborador no tiene equipos pendientes según el inventario actual."
           />
         </section>
       } @else {

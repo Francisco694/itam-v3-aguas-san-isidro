@@ -9,6 +9,8 @@ import {
 import { COMMERCIAL_VALUE_PATTERN } from './dispositivos/dispositivo-form';
 import { receiversForDepartment } from './dispositivos/dispositivo-detail';
 import {
+  isAssignedWithoutResponsible,
+  isClosedCustodyState,
   inventoryPhysicalIdentifier,
   inventoryStateCount,
   quickSearchMode,
@@ -60,12 +62,12 @@ describe('flujos operacionales del inventario', () => {
   });
 
   it('presenta las etiquetas operacionales de conciliación', () => {
-    expect(reconciliationLabel('ACTUAL_PROBABLE')).toBe('Actual probable');
+    expect(reconciliationLabel('ACTUAL_PROBABLE')).toBe('Equipo vigente probable');
     expect(reconciliationLabel('HISTORICO_PROBABLE')).toBe(
-      'Histórico probable',
+      'Equipo anterior probable — no hay devolución registrada',
     );
-    expect(reconciliationLabel('PENDIENTE_VALIDACION')).toBe('Pendiente de validación');
-    expect(reconciliationLabel('CONFLICTO_DATOS')).toBe('Conflicto de datos');
+    expect(reconciliationLabel('PENDIENTE_VALIDACION')).toBe('Pendiente de revisión');
+    expect(reconciliationLabel('CONFLICTO_DATOS')).toBe('Datos contradictorios');
   });
 
   it('normaliza, valida y presenta el RUT sin cambiar su valor canónico', () => {
@@ -85,7 +87,22 @@ describe('flujos operacionales del inventario', () => {
     ).toBe('IMEI: 352054265288036');
     expect(
       inventoryPhysicalIdentifier({ tipo: { nombre: 'Notebook' }, imei: null, numeroSerie: 'NB-1' }),
-    ).toBe('SN: NB-1');
+    ).toBe('N° serie: NB-1');
+  });
+
+  it('alerta solo cuando un equipo asignado no tiene responsable', () => {
+    const withoutResponsible = { estado: { codigo: 'ASIGNADO' }, colaborador: null, departamento: null };
+    const available = { estado: { codigo: 'DISPONIBLE' }, colaborador: null, departamento: null };
+    const assigned = { estado: { codigo: 'ASIGNADO' }, colaborador: { id: '1' }, departamento: null };
+    expect(isAssignedWithoutResponsible(withoutResponsible as Pick<Dispositivo, 'estado' | 'colaborador' | 'departamento'>)).toBe(true);
+    expect(isAssignedWithoutResponsible(available as Pick<Dispositivo, 'estado' | 'colaborador' | 'departamento'>)).toBe(false);
+    expect(isAssignedWithoutResponsible(assigned as Pick<Dispositivo, 'estado' | 'colaborador' | 'departamento'>)).toBe(false);
+  });
+
+  it('trata baja y extravío como estados sin custodia vigente', () => {
+    expect(isClosedCustodyState('DADO_BAJA')).toBe(true);
+    expect(isClosedCustodyState('EXTRAVIADO')).toBe(true);
+    expect(isClosedCustodyState('DISPONIBLE')).toBe(false);
   });
 
   it('ofrece como recepcionante solo colaboradores del departamento', () => {

@@ -162,16 +162,16 @@ interface OperationalMetric {
         <article class="card type-card">
           <div class="card-heading">
             <div>
-              <span>Distribución real</span>
-              <h2>Inventario por Tipo</h2>
+              <span>Registros disponibles</span>
+              <h2>Inventario registrado por tipo</h2>
             </div>
-            <strong>{{ totalDevices() }} activos</strong>
+            <strong>{{ totalDevices() }} equipos registrados</strong>
           </div>
           @if (!typeSummary().length) {
             <app-view-state
               kind="empty"
               title="Sin dispositivos"
-              message="Registra activos para ver la distribución por tipo."
+              message="Registra equipos para ver la distribución por tipo."
             />
           } @else {
             <div class="type-bars">
@@ -179,7 +179,7 @@ interface OperationalMetric {
                 <div class="type-row">
                   <div>
                     <strong>{{ type.label }}</strong
-                    ><span>{{ type.count }} {{ type.count === 1 ? 'activo' : 'activos' }}</span>
+                    ><span>{{ type.count }} {{ type.count === 1 ? 'registrado' : 'registrados' }}</span>
                   </div>
                   <div
                     class="bar"
@@ -338,7 +338,7 @@ export class Dashboard implements OnInit {
           {
             label: 'Extraviados',
             value: r.summary.extraviados.cantidad,
-            meta: `Valor comprometido: ${formatClp(r.summary.extraviados.valor)}`,
+            meta: `Valor de equipos por recuperar: ${formatClp(r.summary.extraviados.valor)}`,
             tone: 'dark',
             icon: LucideCircleAlert,
             state: 'EXTRAVIADO',

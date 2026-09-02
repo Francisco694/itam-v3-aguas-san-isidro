@@ -69,7 +69,15 @@ export interface DispositivoResumen {
   recibidoPor: ColaboradorResumen | null;
   simAsociada: SimAsociadaResumen | null;
   tipoCustodia: "NONE" | "COLABORADOR" | "DEPARTAMENTO";
+  ultimoResponsableConocido: UltimoResponsableConocido | null;
   ultimoResultadoOffboarding: ResultadoOffboarding | null;
+}
+
+export interface UltimoResponsableConocido {
+  tipo: "COLABORADOR" | "DEPARTAMENTO";
+  nombre: string;
+  rut: string | null;
+  fechaMovimiento: string;
 }
 
 export interface DispositivoRow {
@@ -136,6 +144,10 @@ export interface DispositivoRow {
   sim_estado_id: string | null;
   sim_estado_codigo: string | null;
   sim_estado_nombre: string | null;
+  ultimo_responsable_tipo: "COLABORADOR" | "DEPARTAMENTO" | null;
+  ultimo_responsable_nombre: string | null;
+  ultimo_responsable_rut: string | null;
+  ultimo_responsable_fecha: Date | string | null;
   ultimo_resultado_offboarding: ResultadoOffboarding | null;
 }
 
