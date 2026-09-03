@@ -3,7 +3,6 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { LucideCamera, LucideDownload, LucidePrinter, LucidePlus, LucideScanBarcode, LucideSearch, LucideSlidersHorizontal, LucideTriangleAlert, LucideX } from '@lucide/angular';
-import QRCode from 'qrcode';
 import { catchError, forkJoin, of } from 'rxjs';
 import { Departamento, Dispositivo, Estado, TipoDispositivo } from '../../core/models/itam.models';
 import { DepartamentosService } from '../../core/services/departamentos.service';
@@ -17,7 +16,6 @@ import { QrScanner } from '../../shared/components/qr-scanner/qr-scanner';
 import { StatusBadge } from '../../shared/components/status-badge/status-badge';
 import { ViewState } from '../../shared/components/view-state/view-state';
 import type { ItamQrTarget } from '../../shared/utils/itam-qr';
-import { buildItamQrValue } from '../../shared/utils/itam-qr';
 import { errorMessage } from '../../shared/utils/error-message';
 import { formatRut } from '../../shared/utils/rut';
 
@@ -58,6 +56,57 @@ export const batchLabelIdentifier = (
   : item.numeroSerie?.trim()
     ? `N° serie: ${item.numeroSerie.trim()}`
     : 'Sin IMEI/Serie registrado';
+
+const escapeHtml = (value: unknown): string => String(value ?? '')
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#039;');
+
+const printableLabel = (device: Dispositivo): string => `
+  <article class="label">
+    <header>AGUAS SAN ISIDRO</header>
+    <div class="label-body">
+      <div class="qr-placeholder" aria-label="Código QR">QR</div>
+      <div class="label-data">
+        <small>INVENTARIO TI</small>
+        <strong>ITAM ${escapeHtml(device.codigoInventario)}</strong>
+        <span>${escapeHtml(device.tipo.nombre)}</span>
+        ${device.marca || device.modelo
+          ? `<b>${escapeHtml(`${device.marca ?? ''} ${device.modelo ?? ''}`.trim())}</b>`
+          : ''}
+        <small>${escapeHtml(batchLabelIdentifier(device))}</small>
+      </div>
+    </div>
+  </article>`;
+
+const printableDocument = (devices: readonly Dispositivo[], mode: 'A4' | 'THERMAL'): string => `
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Etiquetas ITAM</title>
+  <style>
+    @page { size: ${mode === 'A4' ? 'A4 portrait' : '50mm 30mm'}; margin: ${mode === 'A4' ? '10mm' : '0'}; }
+    * { box-sizing: border-box; }
+    html, body { background: #fff; color: #000; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; }
+    .sheet { display: ${mode === 'A4' ? 'grid' : 'block'}; gap: 4mm 3mm; grid-template-columns: repeat(3, 60mm); }
+    .label { border: 1px solid #000; break-inside: avoid; box-sizing: border-box; display: flex; flex-direction: column; height: ${mode === 'A4' ? '35mm' : '30mm'}; overflow: hidden; page-break-inside: avoid; padding: 2mm; width: ${mode === 'A4' ? '60mm' : '50mm'}; }
+    ${mode === 'THERMAL' ? '.label { break-after: page; page-break-after: always; } .label:last-child { break-after: auto; page-break-after: auto; }' : ''}
+    .label header { border-bottom: 1px solid #000; font-size: 8pt; font-weight: 800; line-height: 1; margin-bottom: 1.5mm; padding-bottom: 1mm; text-align: center; }
+    .label-body { align-items: center; display: flex; gap: 2mm; min-height: 0; }
+    .qr-placeholder { align-items: center; border: 1px solid #000; display: flex; flex: 0 0 20mm; font-size: 10pt; font-weight: 800; height: 20mm; justify-content: center; width: 20mm; }
+    .label-data { display: flex; flex: 1; flex-direction: column; min-width: 0; }
+    .label-data small, .label-data span, .label-data b { font-size: 7pt; line-height: 1.25; overflow-wrap: anywhere; }
+    .label-data strong { font-family: Consolas, monospace; font-size: 12pt; line-height: 1.2; margin: .7mm 0; }
+  </style>
+</head>
+<body>
+  <main class="sheet">${devices.map(printableLabel).join('')}</main>
+</body>
+</html>`;
 
 @Component({
   selector: 'app-dispositivos-list',
@@ -167,27 +216,6 @@ export const batchLabelIdentifier = (
         </section>
       </div>
     }
-    @if (printMode()) {
-      <section class="batch-label-print-root" [class.batch-label-print-root--thermal]="printMode() === 'THERMAL'" aria-label="Etiquetas seleccionadas">
-        @for (device of selectedDevices(); track device.id) {
-          <article class="batch-label">
-            <header>AGUAS SAN ISIDRO</header>
-            <div class="batch-label__body">
-              <canvas class="batch-label__qr" [attr.data-code]="device.codigoInventario" role="img" [attr.aria-label]="'QR del activo ITAM ' + device.codigoInventario"></canvas>
-              <div class="batch-label__data">
-                <small>INVENTARIO TI</small>
-                <strong>ITAM {{ device.codigoInventario }}</strong>
-                <span>{{ device.tipo.nombre }}</span>
-                @if (device.marca || device.modelo) {
-                  <b>{{ device.marca || '' }} {{ device.modelo || '' }}</b>
-                }
-                <small>{{ labelIdentifier(device) }}</small>
-              </div>
-            </div>
-          </article>
-        }
-      </section>
-    }
   `,
   styleUrl: './dispositivos-list.scss'
 })
@@ -212,7 +240,6 @@ export class DispositivosList implements OnInit {
   protected readonly filtersOpen = signal(false);
   protected readonly selectedIds = signal<ReadonlySet<string>>(new Set());
   protected readonly printOptionsOpen = signal(false);
-  protected readonly printMode = signal<'A4' | 'THERMAL' | null>(null);
   protected readonly error = signal('');
   protected readonly physicalIdentifier = inventoryPhysicalIdentifier;
   protected readonly assignedWithoutResponsible = isAssignedWithoutResponsible;
@@ -305,23 +332,28 @@ export class DispositivosList implements OnInit {
     const checked = (event.target as HTMLInputElement).checked;
     this.selectedIds.set(checked ? new Set(this.items().map((item) => item.id)) : new Set());
   }
-  protected async printLabels(mode: 'A4' | 'THERMAL'): Promise<void> {
-    if (!this.selectedCount()) return;
+  protected printLabels(mode: 'A4' | 'THERMAL'): void {
+    const devices = this.selectedDevices();
+    if (!devices.length) return;
     this.printOptionsOpen.set(false);
-    this.printMode.set(mode);
-    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-    const canvases = [...document.querySelectorAll<HTMLCanvasElement>('.batch-label__qr')];
-    await Promise.all(canvases.map((canvas) =>
-      QRCode.toCanvas(canvas, buildItamQrValue(Number(canvas.dataset['code'])), {
-        errorCorrectionLevel: 'M',
-        margin: 1,
-        width: 120,
-        color: { dark: '#000000', light: '#FFFFFF' },
-      })
-    ));
-    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-    window.print();
-    this.printMode.set(null);
+    const printWindow = window.open('', '_blank', 'width=900,height=700');
+    if (!printWindow) {
+      this.toast.error('No se pudo abrir la impresión', 'Permite ventanas emergentes para imprimir las etiquetas.');
+      return;
+    }
+    const html = printableDocument(devices, mode);
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+    let printed = false;
+    const print = () => {
+      if (printed) return;
+      printed = true;
+      printWindow.focus();
+      printWindow.print();
+    };
+    printWindow.onload = () => window.setTimeout(print, 300);
+    window.setTimeout(print, 800);
   }
   protected clear(): void { this.quickQuery = ''; this.filters = { q: '', tipoDispositivoId: '', estado: '', departamentoId: '', localidad: '' }; this.load(); }
   protected custody(item: Dispositivo): string { return item.colaborador?.nombre || item.departamento?.nombre || 'Sin responsable actual'; }
