@@ -171,16 +171,19 @@ interface OperationalMetric {
         <article class="card type-card">
           <div class="card-heading">
             <div>
-              <span>Registros disponibles</span>
-              <h2>Inventario actual por tipo</h2>
+              <span>Histórico registrado</span>
+              <h2>Histórico registrado por tipo</h2>
             </div>
-            <strong>{{ totalDevices() }} equipos actuales</strong>
+            <strong>{{ historicalDevices() }} registros históricos</strong>
           </div>
+          <p class="historical-subtitle">
+            Incluye equipos actuales, extraviados, dados de baja y registros antiguos.
+          </p>
           @if (!typeSummary().length) {
             <app-view-state
               kind="empty"
               title="Sin dispositivos"
-              message="Registra equipos para ver la distribución por tipo."
+              message="Registra equipos para ver la distribución histórica por tipo."
             />
           } @else {
             <div class="type-bars">
@@ -427,7 +430,7 @@ export class Dashboard implements OnInit {
           },
         ]);
         const counts = new Map<string, number>();
-        for (const item of inventoryScope.operational)
+        for (const item of r.devices)
           counts.set(item.tipo.nombre, (counts.get(item.tipo.nombre) ?? 0) + 1);
         this.typeSummary.set(
           [...counts.entries()]
@@ -435,8 +438,8 @@ export class Dashboard implements OnInit {
             .map(([label, count]) => ({
               label,
               count,
-              percentage: inventoryScope.operational.length
-                ? Math.round((count * 100) / inventoryScope.operational.length)
+              percentage: inventoryScope.historicalTotal
+                ? Math.round((count * 100) / inventoryScope.historicalTotal)
                 : 0,
             })),
         );

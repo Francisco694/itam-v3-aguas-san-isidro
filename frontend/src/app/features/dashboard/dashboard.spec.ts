@@ -125,10 +125,10 @@ describe('Dashboard QA-10 y QA-15', () => {
   it('distribuye por tipo exactamente la misma cantidad del inventario actual', () => {
     fixture.detectChanges();
     const text = fixture.nativeElement.textContent;
-    expect(text).toContain('Inventario actual por tipo');
-    expect(text).toContain('3 equipos actuales');
-    expect(text).toContain('3 registrados');
-    expect(text).not.toContain('Inventario registrado por tipo');
+    expect(text).toContain('Histórico registrado por tipo');
+    expect(text).toContain('6 registros históricos');
+    expect(text).toContain('Incluye equipos actuales, extraviados, dados de baja y registros antiguos.');
+    expect(text).not.toContain('Registros disponibles');
   });
 
   it('separa servicio técnico y custodias por revisar cuando aplican', () => {
