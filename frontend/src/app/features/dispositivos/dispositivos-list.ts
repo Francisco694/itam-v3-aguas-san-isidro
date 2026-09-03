@@ -3,6 +3,7 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { LucideCamera, LucideDownload, LucidePrinter, LucidePlus, LucideScanBarcode, LucideSearch, LucideSlidersHorizontal, LucideTriangleAlert, LucideX } from '@lucide/angular';
+import QRCode from 'qrcode';
 import { catchError, forkJoin, of } from 'rxjs';
 import { Departamento, Dispositivo, Estado, TipoDispositivo } from '../../core/models/itam.models';
 import { DepartamentosService } from '../../core/services/departamentos.service';
@@ -16,6 +17,7 @@ import { QrScanner } from '../../shared/components/qr-scanner/qr-scanner';
 import { StatusBadge } from '../../shared/components/status-badge/status-badge';
 import { ViewState } from '../../shared/components/view-state/view-state';
 import type { ItamQrTarget } from '../../shared/utils/itam-qr';
+import { buildItamQrValue } from '../../shared/utils/itam-qr';
 import { errorMessage } from '../../shared/utils/error-message';
 import { formatRut } from '../../shared/utils/rut';
 
@@ -117,7 +119,7 @@ export const batchLabelIdentifier = (
           </div>
         </div>
         <div class="table-wrap desktop-table"><table class="data-table inventory-table"><thead><tr><th class="select-column"><input type="checkbox" aria-label="Seleccionar dispositivos visibles" [checked]="allVisibleSelected()" (change)="toggleVisible($event)" /></th><th>ID / Código</th><th>Equipo</th><th>Estado</th><th>Responsable</th><th>Ubicación</th><th><span class="sr-only">Acciones</span></th></tr></thead><tbody>
-          @for(item of items(); track item.id){<tr><td class="select-column"><input type="checkbox" [attr.aria-label]="'Seleccionar ITAM ' + item.codigoInventario" [checked]="selected(item.id)" (change)="toggleItem(item.id, $event)" /></td><td><a class="asset-code-link" [routerLink]="[item.id]">{{ item.codigoInventario }}</a><span class="cell-secondary mono">{{ physicalIdentifier(item) }}</span></td><td><span class="cell-primary">{{ item.marca || item.tipo.nombre }} {{ item.modelo || '' }}</span><span class="cell-secondary">{{ item.tipo.nombre }}</span></td><td><app-status-badge [code]="item.estado.codigo" [label]="item.estado.nombre" /></td><td>
+          @for(item of items(); track item.id){<tr><td class="select-column"><input type="checkbox" [attr.aria-label]="'Seleccionar ITAM ' + item.codigoInventario" [checked]="selected(item.id)" (change)="toggleItem(item.id, $event)" /></td><td><a class="asset-code-link" [routerLink]="[item.codigoInventario]">{{ item.codigoInventario }}</a><span class="cell-secondary mono">{{ physicalIdentifier(item) }}</span></td><td><span class="cell-primary">{{ item.marca || item.tipo.nombre }} {{ item.modelo || '' }}</span><span class="cell-secondary">{{ item.tipo.nombre }}</span></td><td><app-status-badge [code]="item.estado.codigo" [label]="item.estado.nombre" /></td><td>
             @if (assignedWithoutResponsible(item)) {
               <span class="custody-warning"><svg lucideTriangleAlert></svg>Asignado sin responsable</span><span class="cell-secondary">Revisar custodia</span>
             } @else if (closedCustody(item)) {
@@ -126,7 +128,7 @@ export const batchLabelIdentifier = (
             } @else {
               <span class="cell-primary">{{ custody(item) }}</span><span class="cell-secondary">{{ item.colaborador?.rut ? rut(item.colaborador!.rut) : item.departamento?.nombre || 'Sin responsable actual' }}</span>
             }
-          </td><td>{{ item.localidad || '—' }}<span class="cell-secondary">{{ item.ubicacionDetalle || '' }}</span></td><td><div class="actions"><a class="btn btn--secondary btn--small" [routerLink]="[item.id]">Gestionar ficha</a><a class="btn btn--ghost btn--small" [routerLink]="[item.id,'editar']">Editar</a></div></td></tr>}
+          </td><td>{{ item.localidad || '—' }}<span class="cell-secondary">{{ item.ubicacionDetalle || '' }}</span></td><td><div class="actions"><a class="btn btn--secondary btn--small" [routerLink]="[item.codigoInventario]">Gestionar ficha</a><a class="btn btn--ghost btn--small" [routerLink]="[item.codigoInventario,'editar']">Editar</a></div></td></tr>}
         </tbody></table></div>
         <div class="mobile-record-list inventory-mobile-list">
           @for(item of items(); track item.id) {
@@ -134,7 +136,7 @@ export const batchLabelIdentifier = (
               <header class="mobile-record-card__top">
                 <div>
                   <label class="mobile-selector"><input type="checkbox" [checked]="selected(item.id)" (change)="toggleItem(item.id, $event)" /> Seleccionar</label>
-                  <a class="mobile-record-card__title code" [routerLink]="[item.id]">ITAM {{ item.codigoInventario }}</a>
+                  <a class="mobile-record-card__title code" [routerLink]="[item.codigoInventario]">ITAM {{ item.codigoInventario }}</a>
                   <span class="mobile-record-card__subtitle">{{ item.marca || item.tipo.nombre }} {{ item.modelo || '' }}</span>
                   <span class="mobile-record-card__subtitle">{{ item.tipo.nombre }} &middot; {{ physicalIdentifier(item) }}</span>
                 </div>
@@ -145,8 +147,8 @@ export const batchLabelIdentifier = (
                 <div><dt>Ubicaci&oacute;n</dt><dd>{{ item.localidad || item.ubicacionDetalle || 'Sin ubicaci&oacute;n' }}</dd></div>
               </dl>
               <footer class="mobile-record-card__actions">
-                <a class="btn btn--primary" [routerLink]="[item.id]">Gestionar</a>
-                <a class="btn btn--secondary" [routerLink]="[item.id,'editar']">Editar</a>
+                <a class="btn btn--primary" [routerLink]="[item.codigoInventario]">Gestionar</a>
+                <a class="btn btn--secondary" [routerLink]="[item.codigoInventario,'editar']">Editar</a>
               </footer>
             </article>
           }
@@ -169,11 +171,19 @@ export const batchLabelIdentifier = (
       <section class="batch-label-print-root" [class.batch-label-print-root--thermal]="printMode() === 'THERMAL'" aria-label="Etiquetas seleccionadas">
         @for (device of selectedDevices(); track device.id) {
           <article class="batch-label">
-            <header>Aguas San Isidro</header>
-            <strong>ITAM {{ device.codigoInventario }}</strong>
-            <span>{{ device.tipo.nombre }}</span>
-            <b>{{ device.marca || 'Sin marca' }} {{ device.modelo || '' }}</b>
-            <small>{{ labelIdentifier(device) }}</small>
+            <header>AGUAS SAN ISIDRO</header>
+            <div class="batch-label__body">
+              <canvas class="batch-label__qr" [attr.data-code]="device.codigoInventario" role="img" [attr.aria-label]="'QR del activo ITAM ' + device.codigoInventario"></canvas>
+              <div class="batch-label__data">
+                <small>INVENTARIO TI</small>
+                <strong>ITAM {{ device.codigoInventario }}</strong>
+                <span>{{ device.tipo.nombre }}</span>
+                @if (device.marca || device.modelo) {
+                  <b>{{ device.marca || '' }} {{ device.modelo || '' }}</b>
+                }
+                <small>{{ labelIdentifier(device) }}</small>
+              </div>
+            </div>
           </article>
         }
       </section>
@@ -227,7 +237,7 @@ export class DispositivosList implements OnInit {
     if (mode === 'EMPTY') return;
     if (mode === 'DEVICE_CODE') {
       this.quickLoading.set(true);
-      this.service.buscarPorCodigoInventario(Number(query)).subscribe({ next: (item) => { this.quickLoading.set(false); void this.router.navigate(['/dispositivos', item.id]); }, error: (error) => { this.quickLoading.set(false); this.toast.error('Activo no encontrado', errorMessage(error)); } });
+      this.service.buscarPorCodigoInventario(Number(query)).subscribe({ next: (item) => { this.quickLoading.set(false); void this.router.navigate(['/dispositivos', item.codigoInventario]); }, error: (error) => { this.quickLoading.set(false); this.toast.error('Activo no encontrado', errorMessage(error)); } });
       return;
     }
     this.filters.q = query;
@@ -257,7 +267,7 @@ export class DispositivosList implements OnInit {
       this.service.buscarPorCodigoInventario(target.code).subscribe({
         next: (item) => {
           this.quickLoading.set(false);
-          void this.router.navigate(['/dispositivos', item.id]);
+          void this.router.navigate(['/dispositivos', item.codigoInventario]);
         },
         error: notFound
       });
@@ -269,7 +279,7 @@ export class DispositivosList implements OnInit {
     }).subscribe(({ device, sim }) => {
       this.quickLoading.set(false);
       if (device && !sim) {
-        void this.router.navigate(['/dispositivos', device.id]);
+        void this.router.navigate(['/dispositivos', device.codigoInventario]);
         return;
       }
       if (sim && !device) {
@@ -295,14 +305,23 @@ export class DispositivosList implements OnInit {
     const checked = (event.target as HTMLInputElement).checked;
     this.selectedIds.set(checked ? new Set(this.items().map((item) => item.id)) : new Set());
   }
-  protected printLabels(mode: 'A4' | 'THERMAL'): void {
+  protected async printLabels(mode: 'A4' | 'THERMAL'): Promise<void> {
     if (!this.selectedCount()) return;
     this.printOptionsOpen.set(false);
     this.printMode.set(mode);
-    window.setTimeout(() => {
-      window.print();
-      this.printMode.set(null);
-    });
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    const canvases = [...document.querySelectorAll<HTMLCanvasElement>('.batch-label__qr')];
+    await Promise.all(canvases.map((canvas) =>
+      QRCode.toCanvas(canvas, buildItamQrValue(Number(canvas.dataset['code'])), {
+        errorCorrectionLevel: 'M',
+        margin: 1,
+        width: 120,
+        color: { dark: '#000000', light: '#FFFFFF' },
+      })
+    ));
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    window.print();
+    this.printMode.set(null);
   }
   protected clear(): void { this.quickQuery = ''; this.filters = { q: '', tipoDispositivoId: '', estado: '', departamentoId: '', localidad: '' }; this.load(); }
   protected custody(item: Dispositivo): string { return item.colaborador?.nombre || item.departamento?.nombre || 'Sin responsable actual'; }
