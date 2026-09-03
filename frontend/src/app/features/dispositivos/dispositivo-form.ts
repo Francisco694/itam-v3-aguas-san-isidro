@@ -3,6 +3,7 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { LucideDownload, LucideExternalLink, LucideFileText, LucideMapPin, LucidePackagePlus, LucideSave, LucideTrash2 } from '@lucide/angular';
 import { forkJoin, map, of, switchMap } from 'rxjs';
+import { ApiError } from '../../core/models/api.models';
 import { CampoEspecificoFormulario, Dispositivo, FacturaDocumento, TipoDispositivo } from '../../core/models/itam.models';
 import { DispositivosService } from '../../core/services/dispositivos.service';
 import { AuthService } from '../../core/services/auth.service';
@@ -17,6 +18,30 @@ export const COMMERCIAL_VALUE_PATTERN = /^\d+$/;
 
 export const allowsDeviceCreation = (type: TipoDispositivo): boolean =>
   type.activo && !!type.familiaCodigoInventario?.activo;
+
+export const deviceConflictMessage = (
+  error: unknown,
+  identifiers: Pick<{ imei: string; numeroSerie: string }, 'imei' | 'numeroSerie'>,
+): string => {
+  if (!(error instanceof ApiError) || error.status !== 409) {
+    return errorMessage(error);
+  }
+
+  const backendMessage = error.message.toLowerCase();
+  if (backendMessage.includes('imei')) {
+    return 'Ya existe un dispositivo registrado con este IMEI.';
+  }
+  if (backendMessage.includes('serie')) {
+    return 'Ya existe un dispositivo registrado con este número de serie.';
+  }
+  if (identifiers.imei.trim()) {
+    return 'Ya existe un dispositivo registrado con este IMEI.';
+  }
+  if (identifiers.numeroSerie.trim()) {
+    return 'Ya existe un dispositivo registrado con este número de serie.';
+  }
+  return errorMessage(error);
+};
 
 export const requiresImei = (type: TipoDispositivo | null): boolean =>
   type?.requiereImei ?? false;
@@ -148,7 +173,7 @@ export const typesForOperationalGroup = (
         <div class="form-actions"><a class="btn btn--secondary" [routerLink]="id ? ['/dispositivos', id] : ['/dispositivos']">Cancelar</a><button class="btn btn--primary" type="submit" [disabled]="submitting()"><svg lucideSave></svg>{{ submitting() ? 'Guardando…' : 'Guardar Equipo' }}</button></div>
       </form>
     }
-    @if (created(); as device) { <app-asset-created-dialog [code]="device.codigoInventario" [assetType]="device.tipo.nombre" [detailLink]="['/dispositivos', device.id]" [canAssign]="true" (close)="finish(device)" /> }
+    @if (created(); as device) { <app-asset-created-dialog [code]="device.codigoInventario" [assetType]="device.tipo.nombre" [detailLink]="['/dispositivos', device.codigoInventario]" [canAssign]="true" (close)="finish(device)" /> }
   `,
   styles: [`.equipment-form{max-width:62rem;padding:0 1.5rem 1.5rem}.form-section-heading{align-items:center;background:linear-gradient(135deg,var(--navy),#07147c);color:#fff;display:flex;gap:.8rem;margin:0 -1.5rem 1.4rem;padding:1.15rem 1.5rem}.form-section-heading>span{align-items:center;background:rgba(0,180,216,.2);border-radius:.7rem;color:var(--cyan);display:flex;height:2.5rem;justify-content:center;width:2.5rem}.form-section-heading svg{height:1.15rem}.form-section-heading h2{font-size:1rem;margin:0}.form-section-heading p{color:#cbd5e1;font-size:.7rem;margin:.2rem 0 0}.form-section-heading--secondary{background:var(--gray-50);border-block:1px solid var(--gray-200);color:var(--navy);margin-top:1.4rem}.form-section-heading--secondary p{color:var(--slate-500)}.form-section-heading--secondary>span{background:var(--cyan-soft);color:var(--blue)}.selection-hint{background:var(--gray-50);border:1px dashed var(--gray-200);border-radius:.75rem;color:var(--slate-500);font-size:.78rem;padding:.9rem}.file-input{clip:rect(0 0 0 0);clip-path:inset(50%);height:1px;overflow:hidden;position:absolute;white-space:nowrap;width:1px}.file-actions,.existing-document{align-items:center;display:flex;flex-wrap:wrap;gap:.6rem}.selected-file{color:var(--slate-700);font-size:.78rem;font-weight:700;overflow-wrap:anywhere}.existing-document{background:var(--gray-50);border:1px solid var(--gray-200);border-radius:.7rem;margin-top:.7rem;padding:.7rem}.existing-document span{font-size:.74rem;margin-right:auto}.invoice-document-field .hint{margin:.25rem 0 .65rem}`]
 })
@@ -192,7 +217,7 @@ export class DispositivoForm implements OnInit {
   protected selectedType(): TipoDispositivo | null { const id = this.form.controls.tipoDispositivoId.value; return this.types().find((type) => type.id === id) ?? null; }
 
   ngOnInit(): void {
-    this.id = this.route.snapshot.paramMap.get('id') || ''; this.form.controls.responsable.setValue(this.auth.user()?.nombre || ''); if (this.id) this.form.controls.responsable.clearValidators(); this.loading.set(true);
+    this.id = this.route.snapshot.paramMap.get('codigo') || ''; this.form.controls.responsable.setValue(this.auth.user()?.nombre || ''); if (this.id) this.form.controls.responsable.clearValidators(); this.loading.set(true);
     forkJoin({ types: this.typeService.listar(this.id ? undefined : true), device: this.id ? this.service.obtener(this.id) : of(null) }).subscribe({
       next: ({ types, device }) => { this.types.set(types); if (device) this.patchDevice(device); this.loading.set(false); },
       error: (error) => { this.apiError.set(errorMessage(error)); this.loading.set(false); }
@@ -277,7 +302,7 @@ export class DispositivoForm implements OnInit {
       const existing=item.facturaAdquisicion;
       return(existing?this.facturas.actualizar(existing.id,factura,this.invoiceFile()??undefined):this.facturas.crear(factura,this.invoiceFile()??undefined)).pipe(map(()=>item));
     }));
-    request.subscribe({ next: (item) => { this.submitting.set(false); if (this.id) void this.router.navigate(['/dispositivos', item.id]); else this.created.set(item); }, error: (error) => { this.apiError.set(errorMessage(error)); this.submitting.set(false); } });
+    request.subscribe({ next: (item) => { this.submitting.set(false); if (this.id) void this.router.navigate(['/dispositivos', item.codigoInventario]); else this.created.set(item); }, error: (error) => { this.apiError.set(deviceConflictMessage(error, value)); this.submitting.set(false); } });
   }
-  protected finish(device: Dispositivo): void { void this.router.navigate(['/dispositivos', device.id]); }
+  protected finish(device: Dispositivo): void { void this.router.navigate(['/dispositivos', device.codigoInventario]); }
 }

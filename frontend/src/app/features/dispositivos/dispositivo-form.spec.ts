@@ -1,5 +1,6 @@
 import { ConfiguracionFormularioTipo, TipoDispositivo } from '../../core/models/itam.models';
-import { allowsDeviceCreation, assetFieldVisibility, operationalTypeOptions, typesForOperationalGroup } from './dispositivo-form';
+import { ApiError } from '../../core/models/api.models';
+import { allowsDeviceCreation, assetFieldVisibility, deviceConflictMessage, operationalTypeOptions, typesForOperationalGroup } from './dispositivo-form';
 
 const defaultConfig: ConfiguracionFormularioTipo = {
   mostrarMarca: true, mostrarModelo: true, mostrarNumeroSerie: true,
@@ -30,6 +31,20 @@ const type = (
 describe('formulario dinámico de activos', () => {
   it('mantiene el código automático bloqueando tipos sin familia activa', () => {
     expect(allowsDeviceCreation(type('Legacy', { family: false }))).toBe(false);
+  });
+
+  it('muestra un conflicto claro para IMEI duplicado', () => {
+    expect(deviceConflictMessage(
+      new ApiError('CONFLICT', 'Ya existe un recurso con alguno de los identificadores informados.', 409),
+      { imei: '123456789012345', numeroSerie: '' },
+    )).toBe('Ya existe un dispositivo registrado con este IMEI.');
+  });
+
+  it('muestra un conflicto claro para número de serie duplicado', () => {
+    expect(deviceConflictMessage(
+      new ApiError('CONFLICT', 'Ya existe un recurso con alguno de los identificadores informados.', 409),
+      { imei: '', numeroSerie: 'SERIE-001' },
+    )).toBe('Ya existe un dispositivo registrado con este número de serie.');
   });
 
   it('conserva visible el tipo legado del equipo durante su edición', () => {
