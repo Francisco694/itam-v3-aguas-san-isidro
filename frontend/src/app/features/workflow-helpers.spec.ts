@@ -9,6 +9,7 @@ import {
 import { COMMERCIAL_VALUE_PATTERN } from './dispositivos/dispositivo-form';
 import { receiversForDepartment } from './dispositivos/dispositivo-detail';
 import {
+  batchLabelIdentifier,
   isAssignedWithoutResponsible,
   isClosedCustodyState,
   inventoryPhysicalIdentifier,
@@ -88,6 +89,14 @@ describe('flujos operacionales del inventario', () => {
     expect(
       inventoryPhysicalIdentifier({ tipo: { nombre: 'Notebook' }, imei: null, numeroSerie: 'NB-1' }),
     ).toBe('N° serie: NB-1');
+  });
+
+  it('imprime etiquetas sin datos personales y declara identificadores faltantes', () => {
+    expect(batchLabelIdentifier({ imei: '352054265288036', numeroSerie: 'IGNORADA' }))
+      .toBe('IMEI: 352054265288036');
+    expect(batchLabelIdentifier({ imei: null, numeroSerie: 'NB-001' })).toBe('N° serie: NB-001');
+    expect(batchLabelIdentifier({ imei: null, numeroSerie: null }))
+      .toBe('Sin IMEI/Serie registrado');
   });
 
   it('alerta solo cuando un equipo asignado no tiene responsable', () => {

@@ -87,6 +87,13 @@ export interface HistorialEvento {
   colaboradorHistorico?:{id:string;nombre:string;rut:string}|null;
 }
 
+export type TipoResponsableTrazabilidad='COLABORADOR'|'DEPARTAMENTO';
+export type OrigenResponsableTrazabilidad='HISTORIAL'|'BAJA'|'COMPROBANTE';
+export interface ResponsableTrazabilidad {tipo:TipoResponsableTrazabilidad;id:string;nombre:string;rut:string|null;}
+export interface UltimoResponsableTrazabilidad extends ResponsableTrazabilidad {fechaUltimoMovimiento:string;origenDato:OrigenResponsableTrazabilidad;}
+export interface MovimientoResponsable extends UltimoResponsableTrazabilidad {tipoEvento:string;estadoResultante:Pick<EstadoResumen,'codigo'|'nombre'>|null;observacion:string|null;}
+export interface TrazabilidadDispositivo {dispositivo:Dispositivo;responsableActual:ResponsableTrazabilidad|null;ultimoResponsableConocido:UltimoResponsableTrazabilidad|null;historialResponsables:MovimientoResponsable[];eventos:HistorialEvento[];alertas:string[];}
+
 export interface InventarioDepartamento { departamento: Departamento; resumen: { custodiaDirecta: number; conColaboradores: number; totalRelacionado: number }; custodiaDirecta: Dispositivo[]; activosColaboradores: Dispositivo[]; }
 
 export interface ActivoColaborador {id:string;codigoInventario:number;tipo:string;marca:string|null;modelo:string|null;numeroSerie:string|null;imei:string|null;valorComercial:number;estado:{codigo:string;nombre:string};}

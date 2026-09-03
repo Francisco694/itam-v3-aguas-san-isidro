@@ -11,7 +11,8 @@ import {
   listarDispositivosController,
   obtenerDispositivoController,
   resumenGerencialController,
-  resultadoOffboardingController
+  resultadoOffboardingController,
+  trazabilidadDispositivoController
 } from "./dispositivos.controller";
 
 const router = Router();
@@ -19,7 +20,8 @@ const router = Router();
 router.get("/", listarDispositivosController);
 router.get("/resumen-gerencial", resumenGerencialController);
 router.get("/:codigo/historial", historialDispositivoController);
-router.get("/:codigo", obtenerDispositivoController);
+router.get("/:id/trazabilidad", trazabilidadDispositivoController);
+router.get("/:id", obtenerDispositivoController);
 router.post("/", crearDispositivoController);
 router.patch("/:codigo", actualizarDispositivoController);
 router.post(

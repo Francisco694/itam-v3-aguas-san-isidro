@@ -328,3 +328,46 @@ export interface HistorialDispositivo {
   usuarioEjecutor:{id:string;nombre:string;email:string}|null;
   colaboradorHistorico:{id:string;nombre:string;rut:string}|null;
 }
+
+export type TipoResponsableTrazabilidad = "COLABORADOR" | "DEPARTAMENTO";
+export type OrigenResponsableTrazabilidad = "HISTORIAL" | "BAJA" | "COMPROBANTE";
+
+export interface EvidenciaResponsableRow {
+  fecha: Date | string;
+  tipo_evento: string;
+  tipo: TipoResponsableTrazabilidad;
+  responsable_id: string;
+  nombre: string;
+  rut: string | null;
+  estado_resultante_codigo: string | null;
+  estado_resultante_nombre: string | null;
+  observacion: string | null;
+  origen: OrigenResponsableTrazabilidad;
+}
+
+export interface ResponsableTrazabilidad {
+  tipo: TipoResponsableTrazabilidad;
+  id: string;
+  nombre: string;
+  rut: string | null;
+}
+
+export interface UltimoResponsableTrazabilidad extends ResponsableTrazabilidad {
+  fechaUltimoMovimiento: string;
+  origenDato: OrigenResponsableTrazabilidad;
+}
+
+export interface MovimientoResponsable extends UltimoResponsableTrazabilidad {
+  tipoEvento: string;
+  estadoResultante: Pick<EstadoResumen, "codigo" | "nombre"> | null;
+  observacion: string | null;
+}
+
+export interface TrazabilidadDispositivo {
+  dispositivo: DispositivoResumen;
+  responsableActual: ResponsableTrazabilidad | null;
+  ultimoResponsableConocido: UltimoResponsableTrazabilidad | null;
+  historialResponsables: MovimientoResponsable[];
+  eventos: HistorialDispositivo[];
+  alertas: string[];
+}

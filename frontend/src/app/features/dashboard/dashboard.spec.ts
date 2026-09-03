@@ -10,6 +10,7 @@ import { OffboardingService } from '../../core/services/offboarding.service';
 import { ServicioTecnicoService } from '../../core/services/servicio-tecnico.service';
 import { SimService } from '../../core/services/sim.service';
 import type { OffboardingProcessSummary } from '../../core/models/offboarding.models';
+import type { Dispositivo } from '../../core/models/itam.models';
 import { Dashboard } from './dashboard';
 
 const operationalSummary = {
@@ -56,9 +57,25 @@ const process = (
 describe('Dashboard QA-10 y QA-15', () => {
   let fixture: ComponentFixture<Dashboard>;
   let offboardingProcesses: OffboardingProcessSummary[];
+  let devices: Dispositivo[];
 
   beforeEach(async () => {
     offboardingProcesses = [];
+    const device = (id: string, state: string, value: number): Dispositivo => ({
+      id,
+      codigoInventario: Number(id),
+      tipo: { id: '1', nombre: 'Notebook' },
+      estado: { id: state, codigo: state, nombre: state },
+      valorComercial: value,
+      colaborador: null,
+      departamento: null,
+    } as unknown as Dispositivo);
+    devices = [
+      device('1', 'ASIGNADO', 100_000),
+      device('2', 'DISPONIBLE', 200_000),
+      device('3', 'EXTRAVIADO', 300_000),
+      device('4', 'DADO_BAJA', 400_000),
+    ];
     await TestBed.configureTestingModule({
       imports: [Dashboard],
       providers: [
@@ -66,7 +83,7 @@ describe('Dashboard QA-10 y QA-15', () => {
         {
           provide: DispositivosService,
           useValue: {
-            listar: () => of([]),
+            listar: () => of(devices),
             resumenGerencial: () => of(operationalSummary),
           },
         },
@@ -91,22 +108,23 @@ describe('Dashboard QA-10 y QA-15', () => {
     fixture = TestBed.createComponent(Dashboard);
   });
 
-  it('muestra cantidad y valor del inventario operacional entregado por backend', () => {
+  it('separa inventario operacional real del total histórico registrado', () => {
     fixture.detectChanges();
-    const firstMetric = fixture.nativeElement.querySelector('.metric-grid .metric');
-    expect(firstMetric.textContent).toContain('Inventario');
-    expect(firstMetric.querySelector('.metric__value').textContent.trim()).toBe('10');
-    expect(firstMetric.textContent).toContain('Valor de equipos activos');
-    expect(firstMetric.textContent).toContain('$1.000.000');
-    expect(fixture.nativeElement.textContent).toContain('Valor de equipos activos');
+    const cards = fixture.nativeElement.querySelectorAll('.metric-grid .metric');
+    expect(cards[0].textContent).toContain('Inventario operacional real');
+    expect(cards[0].querySelector('.metric__value').textContent.trim()).toBe('2');
+    expect(cards[0].textContent).toContain('$300.000');
+    expect(cards[0].textContent).toContain('1 asignados sin responsable');
+    expect(cards[1].textContent).toContain('Inventario registrado histórico');
+    expect(cards[1].querySelector('.metric__value').textContent.trim()).toBe('4');
+    expect(cards[1].textContent).toContain('$1.000.000');
   });
 
   it('presenta el total por tipo como equipos registrados y no como activos vigentes', () => {
     fixture.detectChanges();
     const text = fixture.nativeElement.textContent;
     expect(text).toContain('Inventario registrado por tipo');
-    expect(text).toContain('0 equipos registrados');
-    expect(text).not.toContain('0 activos');
+    expect(text).toContain('4 equipos registrados');
   });
 
   it('muestra cero real cuando no existen procesos de Offboarding abiertos', () => {

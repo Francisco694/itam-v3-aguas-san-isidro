@@ -22,10 +22,11 @@ import {
   darDeBajaDispositivo,
   devolverDispositivoExistente,
   registrarResultadoOffboarding,
-  obtenerDispositivo,
+  obtenerDispositivoPorIdInterno,
   obtenerDispositivos,
   obtenerIndicadoresGerenciales,
-  obtenerHistorialDispositivo
+  obtenerHistorialDispositivo,
+  obtenerTrazabilidadDispositivo
 } from "./dispositivos.service";
 import type {
   ActualizarDispositivoInput,
@@ -52,6 +53,21 @@ const protectedPatchFields = [
   "recibidoPorId",
   "recibido_por_id"
 ];
+
+const MAX_DEVICE_ID = 2_147_483_647;
+
+export const parseDispositivoId = (value: unknown): number => {
+  if (typeof value !== "string" || !/^[1-9]\d*$/.test(value)) {
+    throw new ValidationError("Identificador de dispositivo inválido");
+  }
+
+  const id = Number(value);
+  if (!Number.isSafeInteger(id) || id > MAX_DEVICE_ID) {
+    throw new ValidationError("Identificador de dispositivo inválido");
+  }
+
+  return id;
+};
 
 const assertNoProtectedPatchFields = (
   body: Record<string, unknown>
@@ -159,8 +175,8 @@ export const resumenGerencialController = asyncHandler(
 
 export const obtenerDispositivoController = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
-    const codigo = parsePositiveInteger(req.params.codigo, "codigo");
-    const dispositivo = await obtenerDispositivo(codigo);
+    const id = parseDispositivoId(req.params.id);
+    const dispositivo = await obtenerDispositivoPorIdInterno(id);
 
     sendItem(res, dispositivo);
   }
@@ -433,5 +449,12 @@ export const historialDispositivoController = asyncHandler(
     const historial = await obtenerHistorialDispositivo(codigo);
 
     sendCollection(res, historial);
+  }
+);
+
+export const trazabilidadDispositivoController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const id = parseDispositivoId(req.params.id);
+    sendItem(res, await obtenerTrazabilidadDispositivo(id));
   }
 );

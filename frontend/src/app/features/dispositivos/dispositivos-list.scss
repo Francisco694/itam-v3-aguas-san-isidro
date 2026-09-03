@@ -127,6 +127,10 @@
   padding-bottom: 0.05rem;
 }
 .table-heading {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
   padding: 1rem 1.25rem 0.5rem;
 }
 .table-heading > div {
@@ -141,6 +145,130 @@
 .table-heading span {
   font-size: 0.82rem;
   color: var(--gray-500);
+}
+.selection-tools,
+.visible-selector {
+  align-items: center;
+  display: flex;
+  gap: .55rem;
+}
+.selection-tools {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.visible-selector {
+  color: var(--slate-700);
+  cursor: pointer;
+  font-size: .78rem;
+  font-weight: 750;
+}
+.select-column {
+  text-align: center;
+  width: 2.7rem;
+}
+.select-column input,
+.visible-selector input,
+.mobile-selector input {
+  accent-color: var(--blue);
+  height: 1rem;
+  width: 1rem;
+}
+.mobile-selector {
+  align-items: center;
+  color: var(--slate-500);
+  display: flex;
+  font-size: .7rem;
+  font-weight: 750;
+  gap: .35rem;
+  margin-bottom: .35rem;
+}
+.mobile-record-card--selected {
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 2px rgba(0, 180, 216, .12);
+}
+.print-options-overlay {
+  align-items: center;
+  background: rgba(3, 4, 94, .65);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 1rem;
+  position: fixed;
+  z-index: 1000;
+}
+.print-options-dialog {
+  background: #fff;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+  max-width: 36rem;
+  padding: 1.4rem;
+  width: 100%;
+}
+.print-options-dialog header {
+  align-items: flex-start;
+  display: flex;
+  justify-content: space-between;
+}
+.print-options-dialog header span {
+  color: var(--blue);
+  font-size: .66rem;
+  font-weight: 850;
+  letter-spacing: .1em;
+}
+.print-options-dialog h2 {
+  color: var(--navy);
+  margin: .2rem 0;
+}
+.print-options-dialog header button {
+  background: var(--gray-100);
+  border: 0;
+  border-radius: .65rem;
+  color: var(--slate-700);
+  display: grid;
+  height: 2.25rem;
+  place-items: center;
+  width: 2.25rem;
+}
+.print-options-dialog header svg,
+.print-choice-grid svg {
+  height: 1.1rem;
+  width: 1.1rem;
+}
+.print-options-dialog > p {
+  color: var(--slate-500);
+  font-size: .8rem;
+}
+.print-choice-grid {
+  display: grid;
+  gap: .8rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 1rem;
+}
+.print-choice-grid button {
+  align-items: flex-start;
+  background: var(--gray-50);
+  border: 1px solid var(--gray-200);
+  border-radius: 1rem;
+  color: var(--navy);
+  display: flex;
+  flex-direction: column;
+  gap: .45rem;
+  min-height: 8.5rem;
+  padding: 1rem;
+  text-align: left;
+}
+.print-choice-grid button:hover,
+.print-choice-grid button:focus-visible {
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 3px rgba(0, 180, 216, .12);
+}
+.print-choice-grid span {
+  color: var(--slate-500);
+  font-size: .74rem;
+  line-height: 1.45;
+}
+.batch-label-print-root {
+  display: none;
 }
 .asset-code-link {
   display: block;
@@ -305,10 +433,83 @@
     width: 1rem;
   }
   .table-heading {
+    align-items: flex-start;
+    flex-direction: column;
     padding: .8rem 1rem .6rem;
+  }
+  .selection-tools {
+    justify-content: flex-start;
+    width: 100%;
+  }
+  .selection-tools .btn {
+    width: 100%;
+  }
+  .print-choice-grid {
+    grid-template-columns: 1fr;
   }
   .empty-with-action {
     padding-bottom: 1rem;
+  }
+}
+
+@media print {
+  :host {
+    background: #fff;
+    inset: 0;
+    position: fixed;
+    z-index: 99999;
+  }
+  :host > :not(.batch-label-print-root) {
+    display: none !important;
+  }
+  .batch-label-print-root {
+    background: #fff;
+    display: grid;
+    gap: 4mm;
+    grid-template-columns: repeat(3, 1fr);
+    padding: 5mm;
+  }
+  .batch-label {
+    border: .35mm solid #03045e;
+    break-inside: avoid;
+    color: #0f172a;
+    display: flex;
+    flex-direction: column;
+    height: 38mm;
+    justify-content: center;
+    overflow: hidden;
+    padding: 3mm;
+    width: 62mm;
+  }
+  .batch-label header {
+    border-bottom: .4mm solid #00b4d8;
+    color: #03045e;
+    font-size: 8pt;
+    font-weight: 800;
+    margin-bottom: 1.5mm;
+    padding-bottom: 1mm;
+  }
+  .batch-label > strong {
+    font: 900 15pt var(--font-mono);
+    letter-spacing: .04em;
+  }
+  .batch-label > span,
+  .batch-label > b,
+  .batch-label > small {
+    font-size: 7.5pt;
+    line-height: 1.35;
+  }
+  .batch-label-print-root--thermal {
+    display: block;
+    padding: 0;
+  }
+  .batch-label-print-root--thermal .batch-label {
+    border: 0;
+    break-after: page;
+    height: 30mm;
+    margin: 0;
+    padding: 2.5mm;
+    width: 50mm;
   }
 }
 .state-shortcuts {

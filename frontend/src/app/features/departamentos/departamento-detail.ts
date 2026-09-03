@@ -95,7 +95,7 @@ import { errorMessage } from '../../shared/utils/error-message';
         } @else {
           <div class="asset-grid">
             @for (device of info.custodiaDirecta; track device.id) {
-              <a class="asset-row" [routerLink]="['/dispositivos', device.codigoInventario]"
+              <a class="asset-row" [routerLink]="['/dispositivos', device.id]"
                 ><div>
                   <strong
                     >{{ device.tipo.nombre }} {{ device.marca || '' }}
@@ -143,7 +143,7 @@ import { errorMessage } from '../../shared/utils/error-message';
               </header>
               <div class="asset-grid">
                 @for (device of group.assets; track device.id) {
-                  <a class="asset-row" [routerLink]="['/dispositivos', device.codigoInventario]"
+                  <a class="asset-row" [routerLink]="['/dispositivos', device.id]"
                     ><div>
                       <strong
                         >{{ device.tipo.nombre }} {{ device.marca || '' }}

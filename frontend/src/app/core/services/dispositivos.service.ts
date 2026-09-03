@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { ApiCollectionResponse, ApiItemResponse } from '../models/api.models';
-import { AsignarDispositivoColaboradorInput, AsignarDispositivoDepartamentoInput, CambiarEstadoInput, DarBajaInput, DevolverDispositivoInput, Dispositivo, DispositivoFilters, DispositivoInput, HistorialEvento, ResultadoDevolucion, ResultadoOffboardingInput, ResumenGerencial } from '../models/itam.models';
+import { AsignarDispositivoColaboradorInput, AsignarDispositivoDepartamentoInput, CambiarEstadoInput, DarBajaInput, DevolverDispositivoInput, Dispositivo, DispositivoFilters, DispositivoInput, HistorialEvento, ResultadoDevolucion, ResultadoOffboardingInput, ResumenGerencial, TrazabilidadDispositivo } from '../models/itam.models';
 
 @Injectable({ providedIn: 'root' })
 export class DispositivosService {
@@ -15,7 +15,14 @@ export class DispositivosService {
     return this.http.get<ApiCollectionResponse<Dispositivo>>(this.url, { params }).pipe(map((r) => r.data));
   }
   resumenGerencial(){return this.http.get<ApiItemResponse<ResumenGerencial>>(`${this.url}/resumen-gerencial`).pipe(map(r=>r.data));}
-  obtener(codigo: number) { return this.item(this.http.get<ApiItemResponse<Dispositivo>>(`${this.url}/${codigo}`)); }
+  obtener(id: string | number) { return this.item(this.http.get<ApiItemResponse<Dispositivo>>(`${this.url}/${id}`)); }
+  buscarPorCodigoInventario(codigo: number) {
+    return this.listar({ q: String(codigo) }).pipe(map((items) => {
+      const item = items.find((candidate) => candidate.codigoInventario === codigo);
+      if (!item) throw new Error('Dispositivo no encontrado.');
+      return item;
+    }));
+  }
   crear(input: DispositivoInput) { return this.item(this.http.post<ApiItemResponse<Dispositivo>>(this.url, input)); }
   actualizar(codigo: number, input: Partial<DispositivoInput>) { return this.item(this.http.patch<ApiItemResponse<Dispositivo>>(`${this.url}/${codigo}`, input)); }
   asignarColaborador(codigo: number, input: AsignarDispositivoColaboradorInput) { return this.item(this.http.post<ApiItemResponse<Dispositivo>>(`${this.url}/${codigo}/asignar-colaborador`, input)); }
@@ -25,5 +32,6 @@ export class DispositivosService {
   darBaja(codigo:number,input:DarBajaInput){return this.item(this.http.post<ApiItemResponse<Dispositivo>>(`${this.url}/${codigo}/dar-baja`,input));}
   cambiarEstado(codigo: number, input: CambiarEstadoInput) { return this.item(this.http.post<ApiItemResponse<Dispositivo>>(`${this.url}/${codigo}/cambiar-estado`, input)); }
   historial(codigo: number) { return this.http.get<ApiCollectionResponse<HistorialEvento>>(`${this.url}/${codigo}/historial`).pipe(map((r) => r.data)); }
+  trazabilidad(id: string | number) { return this.http.get<ApiItemResponse<TrazabilidadDispositivo>>(`${this.url}/${id}/trazabilidad`).pipe(map((r) => r.data)); }
   private item(request: Observable<ApiItemResponse<Dispositivo>>) { return request.pipe(map((response) => response.data)); }
 }

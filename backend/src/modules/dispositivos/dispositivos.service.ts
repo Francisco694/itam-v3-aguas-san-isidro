@@ -29,8 +29,10 @@ import {
   devolverDispositivo,
   insertarHistorialDispositivo,
   listarDispositivos,
+  listarEvidenciasResponsablesDispositivo,
   listarHistorialDispositivo,
   obtenerDispositivoPorCodigo,
+  obtenerDispositivoPorId,
   obtenerEstadoDispositivoPorCodigo,
   obtenerEstadoDispositivoPorId,
   obtenerResumenGerencial,
@@ -49,13 +51,18 @@ import type {
   DispositivoFilters,
   DispositivoResumen,
   DispositivoRow,
+  EvidenciaResponsableRow,
   EstadoResumen,
   HistorialDispositivo,
   HistorialDispositivoRow,
+  MovimientoResponsable,
+  ResponsableTrazabilidad,
   RegistrarResultadoOffboardingInput,
   ResultadoDevolucion,
   ResumenGerencial,
-  SimAsociadaResumen
+  SimAsociadaResumen,
+  TrazabilidadDispositivo,
+  UltimoResponsableTrazabilidad
 } from "./dispositivos.types";
 
 export const obtenerIndicadoresGerenciales = async (): Promise<ResumenGerencial> => {
@@ -414,6 +421,18 @@ export const obtenerDispositivo = async (
   const dispositivo = await obtenerDispositivoPorCodigo(
     codigoInventario
   );
+
+  if (!dispositivo) {
+    throw new NotFoundError("Dispositivo no encontrado.");
+  }
+
+  return mapDispositivo(dispositivo);
+};
+
+export const obtenerDispositivoPorIdInterno = async (
+  dispositivoId: number
+): Promise<DispositivoResumen> => {
+  const dispositivo = await obtenerDispositivoPorId(dispositivoId);
 
   if (!dispositivo) {
     throw new NotFoundError("Dispositivo no encontrado.");
@@ -1220,4 +1239,103 @@ export const obtenerHistorialDispositivo = async (
   const rows = await listarHistorialDispositivo(codigoInventario);
 
   return rows.map(mapHistorial);
+};
+
+const responsableActualDe = (
+  dispositivo: DispositivoResumen
+): ResponsableTrazabilidad | null => {
+  if (dispositivo.estado.codigo !== "ASIGNADO") return null;
+
+  if (dispositivo.colaborador) {
+    return {
+      tipo: "COLABORADOR",
+      id: dispositivo.colaborador.id,
+      nombre: dispositivo.colaborador.nombre,
+      rut: dispositivo.colaborador.rut
+    };
+  }
+
+  if (dispositivo.departamento) {
+    return {
+      tipo: "DEPARTAMENTO",
+      id: dispositivo.departamento.id,
+      nombre: dispositivo.departamento.nombre,
+      rut: null
+    };
+  }
+
+  return null;
+};
+
+const mapMovimientoResponsable = (
+  row: EvidenciaResponsableRow
+): MovimientoResponsable => ({
+  tipo: row.tipo,
+  id: row.responsable_id,
+  nombre: row.nombre,
+  rut: row.rut,
+  fechaUltimoMovimiento: toIsoDateTime(row.fecha),
+  origenDato: row.origen,
+  tipoEvento: row.tipo_evento,
+  estadoResultante:
+    row.estado_resultante_codigo && row.estado_resultante_nombre
+      ? {
+          codigo: row.estado_resultante_codigo,
+          nombre: row.estado_resultante_nombre
+        }
+      : null,
+  observacion: row.observacion
+});
+
+export const construirTrazabilidadDispositivo = (
+  dispositivo: DispositivoResumen,
+  eventos: HistorialDispositivo[],
+  evidencias: EvidenciaResponsableRow[]
+): TrazabilidadDispositivo => {
+  const responsableActual = responsableActualDe(dispositivo);
+  const historialResponsables = evidencias.map(mapMovimientoResponsable);
+  const ultimo = historialResponsables[0] ?? null;
+  const ultimoResponsableConocido: UltimoResponsableTrazabilidad | null = ultimo
+    ? {
+        tipo: ultimo.tipo,
+        id: ultimo.id,
+        nombre: ultimo.nombre,
+        rut: ultimo.rut,
+        fechaUltimoMovimiento: ultimo.fechaUltimoMovimiento,
+        origenDato: ultimo.origenDato
+      }
+    : null;
+  const alertas: string[] = [];
+
+  if (dispositivo.estado.codigo === "ASIGNADO" && !responsableActual) {
+    alertas.push("Asignado sin responsable. Revisar custodia.");
+  }
+  if (dispositivo.estado.codigo === "EXTRAVIADO" && !ultimoResponsableConocido) {
+    alertas.push("Equipo extraviado sin responsable conocido. Revisar historial.");
+  }
+  if (dispositivo.estado.codigo === "DADO_BAJA" && !ultimoResponsableConocido) {
+    alertas.push("Equipo dado de baja sin responsable conocido. Revisar historial.");
+  }
+
+  return {
+    dispositivo,
+    responsableActual,
+    ultimoResponsableConocido,
+    historialResponsables,
+    eventos,
+    alertas
+  };
+};
+
+export const obtenerTrazabilidadDispositivo = async (
+  dispositivoId: number
+): Promise<TrazabilidadDispositivo> => {
+  const dispositivo = await obtenerDispositivoPorIdInterno(dispositivoId);
+  const codigoInventario = dispositivo.codigoInventario;
+  const [eventos, evidencias] = await Promise.all([
+    obtenerHistorialDispositivo(codigoInventario),
+    listarEvidenciasResponsablesDispositivo(codigoInventario)
+  ]);
+
+  return construirTrazabilidadDispositivo(dispositivo, eventos, evidencias);
 };

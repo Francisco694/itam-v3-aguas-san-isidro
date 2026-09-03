@@ -6,6 +6,7 @@ import type {
   CrearDispositivoInput,
   DispositivoFilters,
   DispositivoRow,
+  EvidenciaResponsableRow,
   EstadoRow,
   HistorialDispositivoRow,
   ResumenGerencialRow
@@ -269,6 +270,22 @@ export const obtenerDispositivoPorCodigo = async (
       ${forUpdate ? "FOR UPDATE OF d" : ""}
     `,
     [codigoInventario]
+  );
+
+  return result.rows[0] ?? null;
+};
+
+export const obtenerDispositivoPorId = async (
+  dispositivoId: number,
+  client?: PoolClient
+): Promise<DispositivoRow | null> => {
+  const result = await getDb(client).query<DispositivoRow>(
+    `
+      ${dispositivoSelect}
+      WHERE d.id = $1
+      LIMIT 1
+    `,
+    [dispositivoId]
   );
 
   return result.rows[0] ?? null;
@@ -756,6 +773,104 @@ export const listarHistorialDispositivo = async (
       WHERE d.codigo_inventario = $1
         AND h.tipo_entidad = 'DISPOSITIVO'
       ORDER BY h.fecha_evento DESC
+    `,
+    [codigoInventario]
+  );
+
+  return result.rows;
+};
+
+export const listarEvidenciasResponsablesDispositivo = async (
+  codigoInventario: number
+): Promise<EvidenciaResponsableRow[]> => {
+  const result = await pool.query<EvidenciaResponsableRow>(
+    `
+      WITH evidencias_historial AS (
+        SELECT
+          h.fecha_evento AS fecha,
+          h.tipo_evento,
+          custodia.tipo,
+          custodia.id AS responsable_id,
+          COALESCE(NULLIF(custodia.nombre, ''), colaborador.nombre, departamento.nombre) AS nombre,
+          COALESCE(NULLIF(custodia.rut, ''), colaborador.rut) AS rut,
+          estado.codigo AS estado_resultante_codigo,
+          estado.nombre AS estado_resultante_nombre,
+          h.observaciones AS observacion,
+          CASE
+            WHEN baja.id IS NOT NULL THEN 'BAJA'
+            ELSE 'HISTORIAL'
+          END AS origen
+        FROM itam.historial_eventos h
+        INNER JOIN itam.dispositivos d ON d.id = h.dispositivo_id
+        LEFT JOIN itam.estados estado ON estado.id = h.estado_nuevo_id
+        LEFT JOIN itam.bajas_dispositivo baja
+          ON baja.dispositivo_id = h.dispositivo_id
+          AND baja.anulada = FALSE
+          AND h.tipo_evento IN ('DAR_BAJA', 'DAR_BAJA_DESDE_SERVICIO')
+        CROSS JOIN LATERAL (
+          SELECT candidato.tipo, candidato.id, candidato.nombre, candidato.rut
+          FROM (
+            VALUES
+              (
+                CASE WHEN h.tipo_evento IN ('DEVOLVER_DISPOSITIVO', 'DAR_BAJA', 'DAR_BAJA_DESDE_SERVICIO') THEN 0 ELSE 1 END,
+                h.detalle#>>'{custodiaAnterior,tipo}',
+                h.detalle#>>'{custodiaAnterior,id}',
+                h.detalle#>>'{custodiaAnterior,nombre}',
+                h.detalle#>>'{custodiaAnterior,rut}'
+              ),
+              (
+                CASE WHEN h.tipo_evento IN ('DEVOLVER_DISPOSITIVO', 'DAR_BAJA', 'DAR_BAJA_DESDE_SERVICIO') THEN 1 ELSE 0 END,
+                h.detalle#>>'{custodiaNueva,tipo}',
+                h.detalle#>>'{custodiaNueva,id}',
+                h.detalle#>>'{custodiaNueva,nombre}',
+                h.detalle#>>'{custodiaNueva,rut}'
+              ),
+              (
+                2,
+                CASE
+                  WHEN COALESCE(h.detalle->>'collaboratorId', h.detalle->>'colaboradorId') ~ '^[0-9]+$' THEN 'COLABORADOR'
+                  WHEN h.detalle->>'departamentoId' ~ '^[0-9]+$' THEN 'DEPARTAMENTO'
+                  ELSE NULL
+                END,
+                COALESCE(h.detalle->>'collaboratorId', h.detalle->>'colaboradorId', h.detalle->>'departamentoId'),
+                NULL,
+                NULL
+              )
+          ) candidato(prioridad, tipo, id, nombre, rut)
+          WHERE candidato.tipo IN ('COLABORADOR', 'DEPARTAMENTO')
+            AND candidato.id ~ '^[0-9]+$'
+          ORDER BY candidato.prioridad
+          LIMIT 1
+        ) custodia
+        LEFT JOIN itam.colaboradores colaborador
+          ON custodia.tipo = 'COLABORADOR' AND colaborador.id = custodia.id::BIGINT
+        LEFT JOIN itam.departamentos departamento
+          ON custodia.tipo = 'DEPARTAMENTO' AND departamento.id = custodia.id::BIGINT
+        WHERE d.codigo_inventario = $1
+          AND h.tipo_entidad = 'DISPOSITIVO'
+      ),
+      evidencias_comprobante AS (
+        SELECT
+          comprobante.fecha,
+          'DEVOLVER_DISPOSITIVO'::TEXT AS tipo_evento,
+          CASE WHEN comprobante.colaborador_id IS NOT NULL THEN 'COLABORADOR' ELSE 'DEPARTAMENTO' END AS tipo,
+          COALESCE(comprobante.colaborador_id, comprobante.departamento_id)::TEXT AS responsable_id,
+          COALESCE(colaborador.nombre, departamento.nombre) AS nombre,
+          colaborador.rut,
+          'DISPONIBLE'::TEXT AS estado_resultante_codigo,
+          'Disponible'::TEXT AS estado_resultante_nombre,
+          comprobante.observaciones AS observacion,
+          'COMPROBANTE'::TEXT AS origen
+        FROM itam.comprobantes_devolucion comprobante
+        INNER JOIN itam.dispositivos d ON d.id = comprobante.dispositivo_id
+        LEFT JOIN itam.colaboradores colaborador ON colaborador.id = comprobante.colaborador_id
+        LEFT JOIN itam.departamentos departamento ON departamento.id = comprobante.departamento_id
+        WHERE d.codigo_inventario = $1
+      )
+      SELECT * FROM evidencias_historial WHERE nombre IS NOT NULL
+      UNION ALL
+      SELECT * FROM evidencias_comprobante WHERE nombre IS NOT NULL
+      ORDER BY fecha DESC, tipo_evento DESC
     `,
     [codigoInventario]
   );

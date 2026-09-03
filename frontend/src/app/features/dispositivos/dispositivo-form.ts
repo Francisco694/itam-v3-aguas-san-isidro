@@ -58,7 +58,7 @@ export const typesForOperationalGroup = (
     AssetCreatedDialog, LucideDownload, LucideExternalLink, LucideFileText,
     LucideMapPin, LucidePackagePlus, LucideSave, LucideTrash2],
   template: `
-    <app-page-header [title]="codigo ? 'Editar Equipo' : 'Registrar Nuevo Equipo'"
+    <app-page-header [title]="id ? 'Editar Equipo' : 'Registrar Nuevo Equipo'"
       subtitle="Seleccione el activo y complete solamente sus datos técnicos disponibles."
       eyebrow="Inventario tecnológico" />
     @if (loading()) {
@@ -143,12 +143,12 @@ export const typesForOperationalGroup = (
           <div class="field"><label for="localidad">Localidad</label><input id="localidad" maxlength="120" formControlName="localidad" /></div>
           <div class="field"><label for="ubicacion">Ubicación detallada</label><input id="ubicacion" maxlength="250" formControlName="ubicacionDetalle" /></div>
           <div class="field span-2"><label for="observaciones">Observaciones</label><textarea id="observaciones" formControlName="observaciones"></textarea></div>
-          @if (!codigo) { <div class="field span-2"><label for="responsable">Responsable del registro *</label><input id="responsable" maxlength="150" formControlName="responsable" readonly [class.invalid]="invalid('responsable')" />@if (invalid('responsable')) { <p class="field-error">El responsable es obligatorio.</p> }</div> }
+          @if (!id) { <div class="field span-2"><label for="responsable">Responsable del registro *</label><input id="responsable" maxlength="150" formControlName="responsable" readonly [class.invalid]="invalid('responsable')" />@if (invalid('responsable')) { <p class="field-error">El responsable es obligatorio.</p> }</div> }
         </div>
-        <div class="form-actions"><a class="btn btn--secondary" [routerLink]="codigo ? ['/dispositivos', codigo] : ['/dispositivos']">Cancelar</a><button class="btn btn--primary" type="submit" [disabled]="submitting()"><svg lucideSave></svg>{{ submitting() ? 'Guardando…' : 'Guardar Equipo' }}</button></div>
+        <div class="form-actions"><a class="btn btn--secondary" [routerLink]="id ? ['/dispositivos', id] : ['/dispositivos']">Cancelar</a><button class="btn btn--primary" type="submit" [disabled]="submitting()"><svg lucideSave></svg>{{ submitting() ? 'Guardando…' : 'Guardar Equipo' }}</button></div>
       </form>
     }
-    @if (created(); as device) { <app-asset-created-dialog [code]="device.codigoInventario" [assetType]="device.tipo.nombre" [detailLink]="['/dispositivos', device.codigoInventario]" [canAssign]="true" (close)="finish(device)" /> }
+    @if (created(); as device) { <app-asset-created-dialog [code]="device.codigoInventario" [assetType]="device.tipo.nombre" [detailLink]="['/dispositivos', device.id]" [canAssign]="true" (close)="finish(device)" /> }
   `,
   styles: [`.equipment-form{max-width:62rem;padding:0 1.5rem 1.5rem}.form-section-heading{align-items:center;background:linear-gradient(135deg,var(--navy),#07147c);color:#fff;display:flex;gap:.8rem;margin:0 -1.5rem 1.4rem;padding:1.15rem 1.5rem}.form-section-heading>span{align-items:center;background:rgba(0,180,216,.2);border-radius:.7rem;color:var(--cyan);display:flex;height:2.5rem;justify-content:center;width:2.5rem}.form-section-heading svg{height:1.15rem}.form-section-heading h2{font-size:1rem;margin:0}.form-section-heading p{color:#cbd5e1;font-size:.7rem;margin:.2rem 0 0}.form-section-heading--secondary{background:var(--gray-50);border-block:1px solid var(--gray-200);color:var(--navy);margin-top:1.4rem}.form-section-heading--secondary p{color:var(--slate-500)}.form-section-heading--secondary>span{background:var(--cyan-soft);color:var(--blue)}.selection-hint{background:var(--gray-50);border:1px dashed var(--gray-200);border-radius:.75rem;color:var(--slate-500);font-size:.78rem;padding:.9rem}.file-input{clip:rect(0 0 0 0);clip-path:inset(50%);height:1px;overflow:hidden;position:absolute;white-space:nowrap;width:1px}.file-actions,.existing-document{align-items:center;display:flex;flex-wrap:wrap;gap:.6rem}.selected-file{color:var(--slate-700);font-size:.78rem;font-weight:700;overflow-wrap:anywhere}.existing-document{background:var(--gray-50);border:1px solid var(--gray-200);border-radius:.7rem;margin-top:.7rem;padding:.7rem}.existing-document span{font-size:.74rem;margin-right:auto}.invoice-document-field .hint{margin:.25rem 0 .65rem}`]
 })
@@ -160,6 +160,7 @@ export class DispositivoForm implements OnInit {
   private readonly typeService = inject(TiposDispositivoService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  protected id = '';
   protected codigo = 0;
   protected readonly loading = signal(false);
   protected readonly submitting = signal(false);
@@ -191,13 +192,14 @@ export class DispositivoForm implements OnInit {
   protected selectedType(): TipoDispositivo | null { const id = this.form.controls.tipoDispositivoId.value; return this.types().find((type) => type.id === id) ?? null; }
 
   ngOnInit(): void {
-    this.codigo = Number(this.route.snapshot.paramMap.get('codigo') || 0); this.form.controls.responsable.setValue(this.auth.user()?.nombre || ''); if (this.codigo) this.form.controls.responsable.clearValidators(); this.loading.set(true);
-    forkJoin({ types: this.typeService.listar(this.codigo ? undefined : true), device: this.codigo ? this.service.obtener(this.codigo) : of(null) }).subscribe({
+    this.id = this.route.snapshot.paramMap.get('id') || ''; this.form.controls.responsable.setValue(this.auth.user()?.nombre || ''); if (this.id) this.form.controls.responsable.clearValidators(); this.loading.set(true);
+    forkJoin({ types: this.typeService.listar(this.id ? undefined : true), device: this.id ? this.service.obtener(this.id) : of(null) }).subscribe({
       next: ({ types, device }) => { this.types.set(types); if (device) this.patchDevice(device); this.loading.set(false); },
       error: (error) => { this.apiError.set(errorMessage(error)); this.loading.set(false); }
     });
   }
   private patchDevice(device: Dispositivo): void {
+    this.codigo = device.codigoInventario;
     this.editingTypeId.set(device.tipo.id);
     const grouped = device.tipo.familiaCodigoInventario?.agrupaTipos;
     this.existingInvoiceDocument.set(device.facturaAdquisicion?.documento ?? null);
@@ -257,7 +259,7 @@ export class DispositivoForm implements OnInit {
     this.invoiceFileError.set('');
   }
   protected submit(): void {
-    const selected = this.selectedType(); if (this.form.invalid || !selected || (!this.codigo && !allowsDeviceCreation(selected))) { this.form.markAllAsTouched(); this.form.controls.tipoDispositivoId.markAsTouched(); this.apiError.set(!selected ? 'Seleccione un tipo de activo válido.' : ''); return; }
+    const selected = this.selectedType(); if (this.form.invalid || !selected || (!this.id && !allowsDeviceCreation(selected))) { this.form.markAllAsTouched(); this.form.controls.tipoDispositivoId.markAsTouched(); this.apiError.set(!selected ? 'Seleccione un tipo de activo válido.' : ''); return; }
     const value = this.form.getRawValue();
     if (this.invoiceFile() && !value.numeroFactura.trim()) {
       this.invoiceFileError.set('Ingrese el número de factura para asociar el documento.');
@@ -268,14 +270,14 @@ export class DispositivoForm implements OnInit {
       numeroSerie: visible.numeroSerie ? value.numeroSerie.trim() || null : null, imei: visible.imei ? value.imei.trim() || null : null,
       valorComercial:Number(value.valorComercial),
       atributosEspecificos: this.specificAttributes(), localidad: value.localidad.trim() || null, ubicacionDetalle: value.ubicacionDetalle.trim() || null, observaciones: value.observaciones.trim() || null };
-    const deviceRequest = this.codigo ? this.service.actualizar(this.codigo, base) : this.service.crear({ ...base, responsable: value.responsable.trim() });
+    const deviceRequest = this.id ? this.service.actualizar(this.codigo, base) : this.service.crear({ ...base, responsable: value.responsable.trim() });
     const request=deviceRequest.pipe(switchMap((item)=>{
       const numero=value.numeroFactura.trim();if(!numero)return of(item);
       const factura={numeroFactura:numero,fechaFactura:value.fechaFactura||null,proveedor:value.proveedorFactura.trim()||null,montoTotal:Number(value.montoFactura)||null,observaciones:value.observacionesFactura.trim()||null,referenciaDocumental:null,dispositivosCodigos:[item.codigoInventario]};
       const existing=item.facturaAdquisicion;
       return(existing?this.facturas.actualizar(existing.id,factura,this.invoiceFile()??undefined):this.facturas.crear(factura,this.invoiceFile()??undefined)).pipe(map(()=>item));
     }));
-    request.subscribe({ next: (item) => { this.submitting.set(false); if (this.codigo) void this.router.navigate(['/dispositivos', item.codigoInventario]); else this.created.set(item); }, error: (error) => { this.apiError.set(errorMessage(error)); this.submitting.set(false); } });
+    request.subscribe({ next: (item) => { this.submitting.set(false); if (this.id) void this.router.navigate(['/dispositivos', item.id]); else this.created.set(item); }, error: (error) => { this.apiError.set(errorMessage(error)); this.submitting.set(false); } });
   }
-  protected finish(device: Dispositivo): void { void this.router.navigate(['/dispositivos', device.codigoInventario]); }
+  protected finish(device: Dispositivo): void { void this.router.navigate(['/dispositivos', device.id]); }
 }

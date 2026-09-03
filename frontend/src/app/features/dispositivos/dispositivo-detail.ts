@@ -2,9 +2,9 @@ import { DatePipe } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { LucideBuilding, LucideCircleAlert, LucideDownload, LucideExternalLink, LucideFileText, LucideHistory, LucidePackageCheck, LucidePencil, LucideRotateCcw, LucideShieldAlert, LucideUserCheck, LucideUsers, LucideWrench, LucideX } from '@lucide/angular';
+import { LucideBuilding, LucideCircleAlert, LucideDownload, LucideExternalLink, LucideFileText, LucideHistory, LucidePackageCheck, LucidePencil, LucideRotateCcw, LucideShieldAlert, LucideUserCheck, LucideWrench, LucideX } from '@lucide/angular';
 import { forkJoin, Observable, tap } from 'rxjs';
-import { ActaEntrega, Colaborador, ComprobanteDevolucion, Departamento, Dispositivo, Estado, HistorialEvento, OrdenServicio, ResultadoDevolucion } from '../../core/models/itam.models';
+import { ActaEntrega, Colaborador, ComprobanteDevolucion, Departamento, Dispositivo, Estado, HistorialEvento, OrdenServicio, ResultadoDevolucion, TrazabilidadDispositivo } from '../../core/models/itam.models';
 import { ColaboradoresService } from '../../core/services/colaboradores.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { AuthService } from '../../core/services/auth.service';
@@ -56,13 +56,6 @@ export interface LastKnownResponsible {
   fechaAsignacion: string;
 }
 
-interface KnownResponsibleDisplay {
-  tipo: 'COLABORADOR' | 'DEPARTAMENTO';
-  nombre: string;
-  rut: string | null;
-  fechaMovimiento: string | null;
-}
-
 export const lastKnownPersonalResponsible = (events: readonly HistorialEvento[]): LastKnownResponsible | null => {
   const ordered = [...events].sort((left, right) => Date.parse(right.fechaEvento) - Date.parse(left.fechaEvento));
   for (const event of ordered) {
@@ -82,7 +75,7 @@ type DeviceAction = 'assign-person' | 'assign-department' | 'return' | 'state' |
 
 @Component({
   selector: 'app-dispositivo-detail',
-  imports: [DatePipe, ReactiveFormsModule, RouterLink, PageHeader, StatusBadge, ViewState, ComprobanteDevolucionPreview, ActaPreview, AssetLabel, LucideBuilding, LucideCircleAlert, LucideDownload, LucideExternalLink, LucideFileText, LucideHistory, LucidePackageCheck, LucidePencil, LucideRotateCcw, LucideShieldAlert, LucideUserCheck, LucideUsers, LucideWrench, LucideX],
+  imports: [DatePipe, ReactiveFormsModule, RouterLink, PageHeader, StatusBadge, ViewState, ComprobanteDevolucionPreview, ActaPreview, AssetLabel, LucideBuilding, LucideCircleAlert, LucideDownload, LucideExternalLink, LucideFileText, LucideHistory, LucidePackageCheck, LucidePencil, LucideRotateCcw, LucideShieldAlert, LucideUserCheck, LucideWrench, LucideX],
   template: `
     <app-page-header title="Ficha de Equipo" subtitle="Detalle patrimonial, log de auditoría y acciones operativas.">
       <a class="btn btn--secondary" [routerLink]="['/dispositivos']">Volver al inventario</a>
@@ -94,8 +87,12 @@ type DeviceAction = 'assign-person' | 'assign-department' | 'return' | 'state' |
         <div><span>ACTIVO TECNOLÓGICO</span><h2>{{ device.tipo.nombre }} · {{ device.marca || 'Sin marca' }} {{ device.modelo || '' }}</h2>@if (!isSmartphone(device)) { <p>{{ device.numeroSerie ? 'S/N: ' + device.numeroSerie : 'Sin número de serie registrado' }}</p> }</div>
         <div><app-status-badge [code]="device.estado.codigo" [label]="device.estado.nombre" /><a class="btn btn--secondary btn--small" [routerLink]="['editar']"><svg lucidePencil></svg>Editar ficha</a></div>
       </section>
-      @if (terminal()) { <div class="notice notice--error"><svg lucideCircleAlert></svg>Este equipo está fuera de la operación normal. Su historial y último responsable se mantienen visibles para seguimiento.</div> }
-      @if (assignedWithoutResponsible(device)) { <div class="notice notice--warning asset-unassigned-alert"><svg lucideCircleAlert></svg><div><strong>Asignado sin responsable</strong><span>Revisar custodia: no hay una persona ni un departamento asociados.</span></div></div> }
+      <section class="traceability-overview" aria-label="Resumen de trazabilidad">
+        <article><small>ESTADO DEL EQUIPO</small><strong>{{ device.estado.nombre }}</strong><span>{{ terminal() ? 'Fuera de la operación normal' : 'Estado registrado actualmente' }}</span></article>
+        <article><small>RESPONSABLE ACTUAL</small>@if(traceability()?.responsableActual;as current){<strong>En poder de {{current.nombre}}</strong><span>{{current.tipo==='COLABORADOR' ? ('RUT '+(current.rut||'no informado')) : 'Departamento custodio'}}</span>}@else{<strong>Sin responsable actual</strong><span>{{device.estado.codigo==='DISPONIBLE' ? 'Disponible para asignación' : 'No registra custodia vigente'}}</span>}</article>
+        <article><small>ÚLTIMO RESPONSABLE CONOCIDO</small>@if(traceability()?.ultimoResponsableConocido;as previous){<strong>{{previous.nombre}}</strong><span>{{previous.tipo==='COLABORADOR' ? ('RUT '+(previous.rut||'no informado')) : 'Departamento'}} · {{previous.fechaUltimoMovimiento|date:'dd/MM/yyyy HH:mm'}} · {{originLabel(previous.origenDato)}}</span>}@else{<strong>Sin responsable conocido</strong><span>No existe evidencia histórica vinculada</span>}</article>
+      </section>
+      @for(alert of traceability()?.alertas || [];track alert){<div class="notice notice--warning traceability-alert"><svg lucideCircleAlert></svg><div><strong>{{ alert.includes('Asignado') ? 'Revisar custodia' : (device.estado.codigo==='EXTRAVIADO' ? 'Equipo extraviado' : 'Equipo dado de baja') }}</strong><span>{{alert}}</span></div></div>}
       <section class="panoramic-card">
         <article class="panoramic-column details-column">
           <div class="column-title"><span>01</span><div><small>IDENTIFICACIÓN</small><h3>Detalles</h3></div></div>
@@ -116,11 +113,11 @@ type DeviceAction = 'assign-person' | 'assign-department' | 'return' | 'state' |
             <div><dt>Registrado en ITAM</dt><dd>{{ device.creadoEn | date:'dd/MM/yyyy HH:mm' }}</dd></div>
           </dl>
           <section class="physical-label"><span>ETIQUETA FÍSICA</span><app-asset-label [code]="device.codigoInventario" [assetType]="device.tipo.nombre" printLabel="Reimprimir etiqueta" /></section>
-          <section class="custody-panel">@if(closedCustody(device)){<span>ÚLTIMO RESPONSABLE CONOCIDO</span>@if(knownResponsible(device);as previous){<div><svg lucideHistory></svg><p><strong>{{previous.nombre}}</strong><small>{{ previous.tipo === 'COLABORADOR' ? 'Colaborador' : 'Departamento' }}@if(previous.rut){ · RUT {{previous.rut}}}</small>@if(previous.fechaMovimiento){<small>Último movimiento: {{previous.fechaMovimiento|date:'dd/MM/yyyy HH:mm'}}</small>}</p></div><p class="no-previous-custodian">Este equipo ya no está en custodia vigente, pero se conserva el último responsable registrado.</p>}@else{<p class="no-previous-custodian">Sin responsable conocido</p>}}@else{<span>RESPONSABLE ACTUAL</span>@if(device.tipoCustodia==='COLABORADOR'&&device.colaborador){<div><svg lucideUsers></svg><p><strong>{{device.colaborador.nombre}}</strong><small>RUT {{device.colaborador.rut}}</small><small>Departamento: {{device.colaborador.departamento?.nombre||'Sin departamento'}}</small></p></div>}@else if(device.tipoCustodia==='DEPARTAMENTO'&&device.departamento){<div><svg lucideBuilding></svg><p><strong>{{device.departamento.nombre}}</strong><small>Asignación directa al departamento</small></p></div>}@else{<div><svg lucidePackageCheck></svg><p><strong>Sin responsable actual</strong><small>Disponible para gestión según su estado</small></p></div>}}</section>
           @if(device.simAsociada){<section class="associated-sim"><strong>SIM asociada #{{ device.simAsociada.codigoInventario }}</strong><span>{{ device.simAsociada.numeroAsociado || 'Sin número telefónico asociado' }} · {{ device.simAsociada.compania || 'Sin operador' }}</span></section>}
         </article>
         <article class="panoramic-column audit-column">
-          <div class="column-title"><span>02</span><div><small>TRAZABILIDAD</small><h3>Log de Auditoría</h3></div><svg lucideHistory></svg></div>
+          <div class="column-title"><span>02</span><div><small>TRAZABILIDAD</small><h3>Historial del equipo</h3></div><svg lucideHistory></svg></div>
+          @if(traceability()?.historialResponsables?.length){<section class="responsible-history"><strong>Historial de responsables</strong>@for(movement of traceability()?.historialResponsables || [];track movement.fechaUltimoMovimiento+movement.tipoEvento+movement.id){<article><div><b>{{movement.nombre}}</b><small>{{movement.tipo==='COLABORADOR' ? ('RUT '+(movement.rut||'no informado')) : 'Departamento'}}</small></div><div><time>{{movement.fechaUltimoMovimiento|date:'dd/MM/yyyy HH:mm'}}</time><small>{{movement.tipoEvento.replaceAll('_',' ')}}@if(movement.estadoResultante){ · {{movement.estadoResultante.nombre}}}</small></div>@if(movement.observacion){<p>{{movement.observacion}}</p>}</article>}</section>}
           @if (!history().length) { <app-view-state kind="empty" title="Sin movimientos" message="Este activo aún no registra eventos de historial." /> }
           @else { <div class="audit-timeline">@for(event of history(); track event.id){<article class="audit-event"><span class="audit-event__node"></span><div><strong>{{ event.tipoEvento.replaceAll('_',' ') }}</strong><p><span>{{ event.estadoAnterior?.nombre || 'Sin estado' }}</span><b>→</b><span>{{ event.estadoNuevo?.nombre || 'Sin cambio' }}</span></p>@if(custodyText(event,'custodiaAnterior');as before){<p><span>{{before}}</span><b>→</b><span>{{custodyText(event,'custodiaNueva')||'Sin custodia'}}</span></p>}@if(event.observaciones){<blockquote>{{ event.observaciones }}</blockquote>}<footer><time>{{ event.fechaEvento | date:'dd/MM/yyyy HH:mm' }}</time><span>{{ event.responsable }}</span></footer></div></article>}</div> }
         </article>
@@ -176,6 +173,7 @@ export class DispositivoDetail implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly fb = inject(FormBuilder);
   protected readonly item = signal<Dispositivo | null>(null);
+  protected readonly traceability = signal<TrazabilidadDispositivo | null>(null);
   protected readonly history = signal<HistorialEvento[]>([]);
   protected readonly states = signal<Estado[]>([]);
   protected readonly collaborators = signal<Colaborador[]>([]);
@@ -191,27 +189,16 @@ export class DispositivoDetail implements OnInit {
   protected readonly isSmartphone=isSmartphoneDevice;
   protected historicalDate(): string | null { return historicalDeliveryDate(this.history()); }
   protected historicalDateLabel(): string { return historicalDeliveryDateLabel(this.history()); }
-  protected assignedWithoutResponsible(device: Dispositivo): boolean {
-    return device.estado.codigo === 'ASIGNADO' && device.tipoCustodia === 'NONE';
-  }
-  protected closedCustody(device: Dispositivo): boolean {
-    return device.estado.codigo === 'DADO_BAJA' || device.estado.codigo === 'EXTRAVIADO';
-  }
-  protected knownResponsible(device: Dispositivo): KnownResponsibleDisplay | null {
-    if (device.ultimoResponsableConocido) return device.ultimoResponsableConocido;
-    if (device.colaborador) return { tipo: 'COLABORADOR', nombre: device.colaborador.nombre, rut: device.colaborador.rut, fechaMovimiento: null };
-    if (device.departamento) return { tipo: 'DEPARTAMENTO', nombre: device.departamento.nombre, rut: null, fechaMovimiento: null };
-    const previous = lastKnownPersonalResponsible(this.history());
-    return previous ? { tipo: 'COLABORADOR', nombre: previous.nombre, rut: previous.rut, fechaMovimiento: previous.fechaAsignacion } : null;
-  }
+  protected originLabel(origin: 'HISTORIAL'|'BAJA'|'COMPROBANTE'): string { return {HISTORIAL:'Historial',BAJA:'Registro de baja',COMPROBANTE:'Comprobante'}[origin]; }
   private codigo = 0;
+  private id = '';
   protected readonly servicePrintRequested=signal(false);
   protected readonly actionForm = this.fb.nonNullable.group({ colaboradorId: [''], departamentoId: [''], recibidoPorId:[''], localidad: [''], ubicacionDetalle: [''], estadoId: [''], proveedor:[''], fechaEnvio:[''], fallaReportada:[''], motivoBaja:[''], responsable: ['', [Validators.required, Validators.maxLength(150)]], observaciones: [''] });
 
-  ngOnInit(): void { this.codigo = Number(this.route.snapshot.paramMap.get('codigo')); this.load(); }
+  ngOnInit(): void { this.id = this.route.snapshot.paramMap.get('id') || ''; this.load(); }
   protected load(): void {
     this.loading.set(true); this.error.set('');
-    forkJoin({ item: this.service.obtener(this.codigo), history: this.service.historial(this.codigo), states: this.estadosService.listar('DISPOSITIVO'), collaborators: this.colaboradoresService.listar({ activo: true }), departments: this.departamentosService.listar() }).subscribe({ next: (result) => { this.item.set(result.item); this.history.set(result.history); this.states.set(result.states.filter((state) => state.activo)); this.collaborators.set(result.collaborators); this.departments.set(result.departments.filter((department) => department.activo)); this.loading.set(false); if (this.route.snapshot.queryParamMap.get('action') === 'assign' && !this.terminal()) this.open('assign-person'); }, error: (error) => { this.error.set(errorMessage(error)); this.loading.set(false); } });
+    forkJoin({ traceability: this.service.trazabilidad(this.id), states: this.estadosService.listar('DISPOSITIVO'), collaborators: this.colaboradoresService.listar({ activo: true }), departments: this.departamentosService.listar() }).subscribe({ next: (result) => { this.traceability.set(result.traceability); this.item.set(result.traceability.dispositivo); this.codigo = result.traceability.dispositivo.codigoInventario; this.history.set(result.traceability.eventos); this.states.set(result.states.filter((state) => state.activo)); this.collaborators.set(result.collaborators); this.departments.set(result.departments.filter((department) => department.activo)); this.loading.set(false); if (this.route.snapshot.queryParamMap.get('action') === 'assign' && !this.terminal()) this.open('assign-person'); }, error: (error) => { this.error.set(errorMessage(error)); this.loading.set(false); } });
   }
   protected terminal(): boolean { return this.states().find((state) => state.id === this.item()?.estado.id)?.esTerminal ?? false; }
   protected stateExists(code: string): boolean { return this.states().some((state) => state.codigo === code); }

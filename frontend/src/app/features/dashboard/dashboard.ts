@@ -28,6 +28,28 @@ import { PageHeader } from '../../shared/components/page-header/page-header';
 import { ViewState } from '../../shared/components/view-state/view-state';
 import { formatClp } from '../../shared/utils/currency';
 import { errorMessage } from '../../shared/utils/error-message';
+import type { Dispositivo } from '../../core/models/itam.models';
+
+const OPERATIONAL_STATE_CODES = new Set([
+  'ASIGNADO',
+  'DISPONIBLE',
+  'EN_BODEGA',
+  'EN_SERVICIO_TECNICO',
+  'SERVICIO_TECNICO',
+]);
+
+export const dashboardInventoryScope = (devices: readonly Dispositivo[]) => {
+  const operational = devices.filter((device) => OPERATIONAL_STATE_CODES.has(device.estado.codigo));
+  return {
+    operational,
+    historicalTotal: devices.length,
+    operationalValue: operational.reduce((total, device) => total + device.valorComercial, 0),
+    historicalValue: devices.reduce((total, device) => total + device.valorComercial, 0),
+    assignedWithoutResponsible: operational.filter((device) =>
+      device.estado.codigo === 'ASIGNADO' && !device.colaborador && !device.departamento
+    ).length,
+  };
+};
 
 interface Metric {
   label: string;
@@ -301,6 +323,7 @@ export class Dashboard implements OnInit {
       offboarding: this.offboarding.listarAbiertos(),
     }).subscribe({
       next: (r) => {
+        const inventoryScope = dashboardInventoryScope(r.devices);
         const lostItems = r.devices.filter((i) => i.estado.codigo.includes('EXTRAVIAD'));
         const retiredItems = r.devices.filter((i) => i.estado.codigo.includes('BAJA'));
         const pendingOffboardingAssets = r.offboarding.reduce(
@@ -313,10 +336,19 @@ export class Dashboard implements OnInit {
         );
         this.metrics.set([
           {
-            label: 'Inventario',
-            value: r.summary.inventarioOperacional.cantidad,
-            meta: `Valor de equipos activos: ${formatClp(r.summary.inventarioOperacional.valor)}`,
+            label: 'Inventario operacional real',
+            value: inventoryScope.operational.length,
+            meta: inventoryScope.assignedWithoutResponsible
+              ? `${formatClp(inventoryScope.operationalValue)} · ${inventoryScope.assignedWithoutResponsible} asignados sin responsable`
+              : `Valor operacional: ${formatClp(inventoryScope.operationalValue)}`,
             tone: 'blue',
+            icon: LucidePackage,
+          },
+          {
+            label: 'Inventario registrado histórico',
+            value: inventoryScope.historicalTotal,
+            meta: `Incluye bajas y extravíos · ${formatClp(inventoryScope.historicalValue)}`,
+            tone: 'slate',
             icon: LucidePackage,
           },
           {
@@ -354,7 +386,7 @@ export class Dashboard implements OnInit {
         ]);
         this.lostValue.set(formatClp(lostItems.reduce((s, i) => s + i.valorComercial, 0)));
         this.retiredValue.set(formatClp(retiredItems.reduce((s, i) => s + i.valorComercial, 0)));
-        this.inventoryValue.set(formatClp(r.summary.inventarioOperacional.valor));
+        this.inventoryValue.set(formatClp(inventoryScope.operationalValue));
         this.lostDevices.set(lostItems.length);
         this.retiredDevices.set(retiredItems.length);
         this.serviceDevices.set(r.summary.servicioTecnico.cantidad);

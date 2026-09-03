@@ -2,7 +2,7 @@ import { DatePipe } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { LucideCamera, LucideDownload, LucidePlus, LucideScanBarcode, LucideSearch, LucideSlidersHorizontal, LucideTriangleAlert } from '@lucide/angular';
+import { LucideCamera, LucideDownload, LucidePrinter, LucidePlus, LucideScanBarcode, LucideSearch, LucideSlidersHorizontal, LucideTriangleAlert, LucideX } from '@lucide/angular';
 import { catchError, forkJoin, of } from 'rxjs';
 import { Departamento, Dispositivo, Estado, TipoDispositivo } from '../../core/models/itam.models';
 import { DepartamentosService } from '../../core/services/departamentos.service';
@@ -49,9 +49,17 @@ export const isAssignedWithoutResponsible = (
 export const isClosedCustodyState = (stateCode: string): boolean =>
   stateCode === 'DADO_BAJA' || stateCode === 'EXTRAVIADO';
 
+export const batchLabelIdentifier = (
+  item: Pick<Dispositivo, 'imei' | 'numeroSerie'>,
+): string => item.imei?.trim()
+  ? `IMEI: ${item.imei.trim()}`
+  : item.numeroSerie?.trim()
+    ? `N° serie: ${item.numeroSerie.trim()}`
+    : 'Sin IMEI/Serie registrado';
+
 @Component({
   selector: 'app-dispositivos-list',
-  imports: [DatePipe, FormsModule, RouterLink, PageHeader, QrScanner, StatusBadge, ViewState, LucideCamera, LucideDownload, LucidePlus, LucideScanBarcode, LucideSearch, LucideSlidersHorizontal, LucideTriangleAlert],
+  imports: [DatePipe, FormsModule, RouterLink, PageHeader, QrScanner, StatusBadge, ViewState, LucideCamera, LucideDownload, LucidePrinter, LucidePlus, LucideScanBarcode, LucideSearch, LucideSlidersHorizontal, LucideTriangleAlert, LucideX],
   template: `
     <app-page-header title="Inventario de Equipos" subtitle="Control físico, custodias y condición operativa de los activos.">
       <button class="btn btn--navy mobile-qr-action" type="button" (click)="scannerOpen.set(true)"><svg lucideCamera></svg> Escanear QR</button>
@@ -100,9 +108,16 @@ export const isClosedCustodyState = (stateCode: string): boolean =>
       @else if (error()) { <app-view-state kind="error" title="No se pudo cargar" [message]="error()" (retry)="load()" /> }
       @else if (!items().length) { <div class="empty-with-action"><app-view-state kind="empty" [title]="emptyTitle()" [message]="emptyMessage()" />@if(!allItems().length){<a class="btn btn--primary" routerLink="nuevo"><svg lucidePlus></svg> Registrar dispositivo</a>}</div> }
       @else {
-        <div class="table-heading"><div><strong>{{ items().length }}</strong><span>{{ items().length === 1 ? 'activo encontrado' : 'activos encontrados' }}</span></div></div>
-        <div class="table-wrap desktop-table"><table class="data-table inventory-table"><thead><tr><th>ID / Código</th><th>Equipo</th><th>Estado</th><th>Responsable</th><th>Ubicación</th><th><span class="sr-only">Acciones</span></th></tr></thead><tbody>
-          @for(item of items(); track item.id){<tr><td><a class="asset-code-link" [routerLink]="[item.codigoInventario]">{{ item.codigoInventario }}</a><span class="cell-secondary mono">{{ physicalIdentifier(item) }}</span></td><td><span class="cell-primary">{{ item.marca || item.tipo.nombre }} {{ item.modelo || '' }}</span><span class="cell-secondary">{{ item.tipo.nombre }}</span></td><td><app-status-badge [code]="item.estado.codigo" [label]="item.estado.nombre" /></td><td>
+        <div class="table-heading">
+          <div><strong>{{ items().length }}</strong><span>{{ items().length === 1 ? 'activo encontrado' : 'activos encontrados' }}</span></div>
+          <div class="selection-tools">
+            <label class="visible-selector"><input type="checkbox" [checked]="allVisibleSelected()" (change)="toggleVisible($event)" /> Seleccionar visibles</label>
+            <span>{{ selectedCount() }} seleccionados</span>
+            <button class="btn btn--primary btn--small" type="button" [disabled]="!selectedCount()" (click)="printOptionsOpen.set(true)"><svg lucidePrinter></svg> Imprimir etiquetas</button>
+          </div>
+        </div>
+        <div class="table-wrap desktop-table"><table class="data-table inventory-table"><thead><tr><th class="select-column"><input type="checkbox" aria-label="Seleccionar dispositivos visibles" [checked]="allVisibleSelected()" (change)="toggleVisible($event)" /></th><th>ID / Código</th><th>Equipo</th><th>Estado</th><th>Responsable</th><th>Ubicación</th><th><span class="sr-only">Acciones</span></th></tr></thead><tbody>
+          @for(item of items(); track item.id){<tr><td class="select-column"><input type="checkbox" [attr.aria-label]="'Seleccionar ITAM ' + item.codigoInventario" [checked]="selected(item.id)" (change)="toggleItem(item.id, $event)" /></td><td><a class="asset-code-link" [routerLink]="[item.id]">{{ item.codigoInventario }}</a><span class="cell-secondary mono">{{ physicalIdentifier(item) }}</span></td><td><span class="cell-primary">{{ item.marca || item.tipo.nombre }} {{ item.modelo || '' }}</span><span class="cell-secondary">{{ item.tipo.nombre }}</span></td><td><app-status-badge [code]="item.estado.codigo" [label]="item.estado.nombre" /></td><td>
             @if (assignedWithoutResponsible(item)) {
               <span class="custody-warning"><svg lucideTriangleAlert></svg>Asignado sin responsable</span><span class="cell-secondary">Revisar custodia</span>
             } @else if (closedCustody(item)) {
@@ -111,14 +126,15 @@ export const isClosedCustodyState = (stateCode: string): boolean =>
             } @else {
               <span class="cell-primary">{{ custody(item) }}</span><span class="cell-secondary">{{ item.colaborador?.rut ? rut(item.colaborador!.rut) : item.departamento?.nombre || 'Sin responsable actual' }}</span>
             }
-          </td><td>{{ item.localidad || '—' }}<span class="cell-secondary">{{ item.ubicacionDetalle || '' }}</span></td><td><div class="actions"><a class="btn btn--secondary btn--small" [routerLink]="[item.codigoInventario]">Gestionar ficha</a><a class="btn btn--ghost btn--small" [routerLink]="[item.codigoInventario,'editar']">Editar</a></div></td></tr>}
+          </td><td>{{ item.localidad || '—' }}<span class="cell-secondary">{{ item.ubicacionDetalle || '' }}</span></td><td><div class="actions"><a class="btn btn--secondary btn--small" [routerLink]="[item.id]">Gestionar ficha</a><a class="btn btn--ghost btn--small" [routerLink]="[item.id,'editar']">Editar</a></div></td></tr>}
         </tbody></table></div>
         <div class="mobile-record-list inventory-mobile-list">
           @for(item of items(); track item.id) {
-            <article class="mobile-record-card">
+            <article class="mobile-record-card" [class.mobile-record-card--selected]="selected(item.id)">
               <header class="mobile-record-card__top">
                 <div>
-                  <a class="mobile-record-card__title code" [routerLink]="[item.codigoInventario]">ITAM {{ item.codigoInventario }}</a>
+                  <label class="mobile-selector"><input type="checkbox" [checked]="selected(item.id)" (change)="toggleItem(item.id, $event)" /> Seleccionar</label>
+                  <a class="mobile-record-card__title code" [routerLink]="[item.id]">ITAM {{ item.codigoInventario }}</a>
                   <span class="mobile-record-card__subtitle">{{ item.marca || item.tipo.nombre }} {{ item.modelo || '' }}</span>
                   <span class="mobile-record-card__subtitle">{{ item.tipo.nombre }} &middot; {{ physicalIdentifier(item) }}</span>
                 </div>
@@ -129,14 +145,39 @@ export const isClosedCustodyState = (stateCode: string): boolean =>
                 <div><dt>Ubicaci&oacute;n</dt><dd>{{ item.localidad || item.ubicacionDetalle || 'Sin ubicaci&oacute;n' }}</dd></div>
               </dl>
               <footer class="mobile-record-card__actions">
-                <a class="btn btn--primary" [routerLink]="[item.codigoInventario]">Gestionar</a>
-                <a class="btn btn--secondary" [routerLink]="[item.codigoInventario,'editar']">Editar</a>
+                <a class="btn btn--primary" [routerLink]="[item.id]">Gestionar</a>
+                <a class="btn btn--secondary" [routerLink]="[item.id,'editar']">Editar</a>
               </footer>
             </article>
           }
         </div>
       }
     </section>
+    @if (printOptionsOpen()) {
+      <div class="print-options-overlay" role="presentation" (click)="printOptionsOpen.set(false)">
+        <section class="print-options-dialog" role="dialog" aria-modal="true" aria-labelledby="print-options-title" (click)="$event.stopPropagation()">
+          <header><div><span>IMPRESIÓN MÚLTIPLE</span><h2 id="print-options-title">Imprimir {{ selectedCount() }} etiquetas</h2></div><button type="button" aria-label="Cerrar" (click)="printOptionsOpen.set(false)"><svg lucideX></svg></button></header>
+          <p>Elija el formato de salida. Las etiquetas no incluyen nombres, RUT ni valores comerciales.</p>
+          <div class="print-choice-grid">
+            <button type="button" (click)="printLabels('A4')"><svg lucidePrinter></svg><strong>Hoja A4</strong><span>Varias etiquetas organizadas en grilla por hoja.</span></button>
+            <button type="button" (click)="printLabels('THERMAL')"><svg lucidePrinter></svg><strong>Impresora de etiquetas</strong><span>Una etiqueta por dispositivo para impresora térmica Zebra.</span></button>
+          </div>
+        </section>
+      </div>
+    }
+    @if (printMode()) {
+      <section class="batch-label-print-root" [class.batch-label-print-root--thermal]="printMode() === 'THERMAL'" aria-label="Etiquetas seleccionadas">
+        @for (device of selectedDevices(); track device.id) {
+          <article class="batch-label">
+            <header>Aguas San Isidro</header>
+            <strong>ITAM {{ device.codigoInventario }}</strong>
+            <span>{{ device.tipo.nombre }}</span>
+            <b>{{ device.marca || 'Sin marca' }} {{ device.modelo || '' }}</b>
+            <small>{{ labelIdentifier(device) }}</small>
+          </article>
+        }
+      </section>
+    }
   `,
   styleUrl: './dispositivos-list.scss'
 })
@@ -159,9 +200,13 @@ export class DispositivosList implements OnInit {
   protected readonly quickLoading = signal(false);
   protected readonly scannerOpen = signal(false);
   protected readonly filtersOpen = signal(false);
+  protected readonly selectedIds = signal<ReadonlySet<string>>(new Set());
+  protected readonly printOptionsOpen = signal(false);
+  protected readonly printMode = signal<'A4' | 'THERMAL' | null>(null);
   protected readonly error = signal('');
   protected readonly physicalIdentifier = inventoryPhysicalIdentifier;
   protected readonly assignedWithoutResponsible = isAssignedWithoutResponsible;
+  protected readonly labelIdentifier = batchLabelIdentifier;
   protected readonly rut = formatRut;
   protected quickQuery = '';
   protected filters = { q: '', tipoDispositivoId: '', estado: '', departamentoId: '', localidad: '' };
@@ -182,7 +227,7 @@ export class DispositivosList implements OnInit {
     if (mode === 'EMPTY') return;
     if (mode === 'DEVICE_CODE') {
       this.quickLoading.set(true);
-      this.service.obtener(Number(query)).subscribe({ next: (item) => { this.quickLoading.set(false); void this.router.navigate(['/dispositivos', item.codigoInventario]); }, error: (error) => { this.quickLoading.set(false); this.toast.error('Activo no encontrado', errorMessage(error)); } });
+      this.service.buscarPorCodigoInventario(Number(query)).subscribe({ next: (item) => { this.quickLoading.set(false); void this.router.navigate(['/dispositivos', item.id]); }, error: (error) => { this.quickLoading.set(false); this.toast.error('Activo no encontrado', errorMessage(error)); } });
       return;
     }
     this.filters.q = query;
@@ -209,22 +254,22 @@ export class DispositivosList implements OnInit {
       return;
     }
     if (target.entity === 'DISPOSITIVO') {
-      this.service.obtener(target.code).subscribe({
+      this.service.buscarPorCodigoInventario(target.code).subscribe({
         next: (item) => {
           this.quickLoading.set(false);
-          void this.router.navigate(['/dispositivos', item.codigoInventario]);
+          void this.router.navigate(['/dispositivos', item.id]);
         },
         error: notFound
       });
       return;
     }
     forkJoin({
-      device: this.service.obtener(target.code).pipe(catchError(() => of(null))),
+      device: this.service.buscarPorCodigoInventario(target.code).pipe(catchError(() => of(null))),
       sim: this.simService.obtener(target.code).pipe(catchError(() => of(null)))
     }).subscribe(({ device, sim }) => {
       this.quickLoading.set(false);
       if (device && !sim) {
-        void this.router.navigate(['/dispositivos', device.codigoInventario]);
+        void this.router.navigate(['/dispositivos', device.id]);
         return;
       }
       if (sim && !device) {
@@ -236,7 +281,28 @@ export class DispositivosList implements OnInit {
   }
   protected load(): void {
     this.loading.set(true); this.error.set('');
-    this.service.listar({ q: this.filters.q || undefined, tipoDispositivoId: this.filters.tipoDispositivoId ? Number(this.filters.tipoDispositivoId) : undefined, estado: this.filters.estado || undefined, departamentoId: this.filters.departamentoId ? Number(this.filters.departamentoId) : undefined, localidad: this.filters.localidad || undefined }).subscribe({ next: (items) => { this.items.set(items); this.loading.set(false); }, error: (error) => { this.error.set(errorMessage(error)); this.loading.set(false); } });
+    this.service.listar({ q: this.filters.q || undefined, tipoDispositivoId: this.filters.tipoDispositivoId ? Number(this.filters.tipoDispositivoId) : undefined, estado: this.filters.estado || undefined, departamentoId: this.filters.departamentoId ? Number(this.filters.departamentoId) : undefined, localidad: this.filters.localidad || undefined }).subscribe({ next: (items) => { this.items.set(items); const visible = new Set(items.map((item) => item.id)); this.selectedIds.update((selected) => new Set([...selected].filter((id) => visible.has(id)))); this.loading.set(false); }, error: (error) => { this.error.set(errorMessage(error)); this.loading.set(false); } });
+  }
+  protected selected(id: string): boolean { return this.selectedIds().has(id); }
+  protected selectedCount(): number { return this.selectedIds().size; }
+  protected selectedDevices(): Dispositivo[] { const selected = this.selectedIds(); return this.items().filter((item) => selected.has(item.id)); }
+  protected allVisibleSelected(): boolean { return this.items().length > 0 && this.items().every((item) => this.selected(item.id)); }
+  protected toggleItem(id: string, event: Event): void {
+    const checked = (event.target as HTMLInputElement).checked;
+    this.selectedIds.update((current) => { const next = new Set(current); checked ? next.add(id) : next.delete(id); return next; });
+  }
+  protected toggleVisible(event: Event): void {
+    const checked = (event.target as HTMLInputElement).checked;
+    this.selectedIds.set(checked ? new Set(this.items().map((item) => item.id)) : new Set());
+  }
+  protected printLabels(mode: 'A4' | 'THERMAL'): void {
+    if (!this.selectedCount()) return;
+    this.printOptionsOpen.set(false);
+    this.printMode.set(mode);
+    window.setTimeout(() => {
+      window.print();
+      this.printMode.set(null);
+    });
   }
   protected clear(): void { this.quickQuery = ''; this.filters = { q: '', tipoDispositivoId: '', estado: '', departamentoId: '', localidad: '' }; this.load(); }
   protected custody(item: Dispositivo): string { return item.colaborador?.nombre || item.departamento?.nombre || 'Sin responsable actual'; }
