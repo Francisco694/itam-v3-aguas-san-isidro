@@ -3,6 +3,7 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { LucideCamera, LucideDownload, LucidePrinter, LucidePlus, LucideScanBarcode, LucideSearch, LucideSlidersHorizontal, LucideTriangleAlert, LucideX } from '@lucide/angular';
+import QRCode from 'qrcode';
 import { catchError, forkJoin, of } from 'rxjs';
 import { Departamento, Dispositivo, Estado, TipoDispositivo } from '../../core/models/itam.models';
 import { DepartamentosService } from '../../core/services/departamentos.service';
@@ -16,6 +17,7 @@ import { QrScanner } from '../../shared/components/qr-scanner/qr-scanner';
 import { StatusBadge } from '../../shared/components/status-badge/status-badge';
 import { ViewState } from '../../shared/components/view-state/view-state';
 import type { ItamQrTarget } from '../../shared/utils/itam-qr';
+import { buildItamQrValue } from '../../shared/utils/itam-qr';
 import { errorMessage } from '../../shared/utils/error-message';
 import { formatRut } from '../../shared/utils/rut';
 
@@ -64,14 +66,14 @@ const escapeHtml = (value: unknown): string => String(value ?? '')
   .replace(/"/g, '&quot;')
   .replace(/'/g, '&#039;');
 
-const printableLabel = (device: Dispositivo): string => `
-  <article class="label">
+const printableLabel = (device: Dispositivo, qrDataUrl: string, mode: 'A4' | 'THERMAL'): string => `
+  <article class="${mode === 'A4' ? 'label' : 'thermal-label'}">
     <header>AGUAS SAN ISIDRO</header>
-    <div class="label-body">
-      <div class="qr-placeholder" aria-label="Código QR">QR</div>
-      <div class="label-data">
+    <div class="${mode === 'A4' ? 'label-body' : 'thermal-label__body'}">
+      <img class="${mode === 'A4' ? 'label-qr' : 'thermal-label__qr'}" src="${qrDataUrl}" alt="Código QR">
+      <div class="${mode === 'A4' ? 'label-data' : 'thermal-label__info'}">
         <small>INVENTARIO TI</small>
-        <strong>ITAM ${escapeHtml(device.codigoInventario)}</strong>
+        <strong class="${mode === 'THERMAL' ? 'thermal-label__code' : ''}">ITAM ${escapeHtml(device.codigoInventario)}</strong>
         <span>${escapeHtml(device.tipo.nombre)}</span>
         ${device.marca || device.modelo
           ? `<b>${escapeHtml(`${device.marca ?? ''} ${device.modelo ?? ''}`.trim())}</b>`
@@ -81,7 +83,11 @@ const printableLabel = (device: Dispositivo): string => `
     </div>
   </article>`;
 
-const printableDocument = (devices: readonly Dispositivo[], mode: 'A4' | 'THERMAL'): string => `
+const printableDocument = (
+  devices: readonly Dispositivo[],
+  qrDataUrls: readonly string[],
+  mode: 'A4' | 'THERMAL'
+): string => `
 <!doctype html>
 <html lang="es">
 <head>
@@ -93,18 +99,26 @@ const printableDocument = (devices: readonly Dispositivo[], mode: 'A4' | 'THERMA
     html, body { background: #fff; color: #000; margin: 0; padding: 0; }
     body { font-family: Arial, sans-serif; }
     .sheet { display: ${mode === 'A4' ? 'grid' : 'block'}; gap: 4mm 3mm; grid-template-columns: repeat(3, 60mm); }
-    .label { border: 1px solid #000; break-inside: avoid; box-sizing: border-box; display: flex; flex-direction: column; height: ${mode === 'A4' ? '35mm' : '30mm'}; overflow: hidden; page-break-inside: avoid; padding: 2mm; width: ${mode === 'A4' ? '60mm' : '50mm'}; }
-    ${mode === 'THERMAL' ? '.label { break-after: page; page-break-after: always; } .label:last-child { break-after: auto; page-break-after: auto; }' : ''}
-    .label header { border-bottom: 1px solid #000; font-size: 8pt; font-weight: 800; line-height: 1; margin-bottom: 1.5mm; padding-bottom: 1mm; text-align: center; }
-    .label-body { align-items: center; display: flex; gap: 2mm; min-height: 0; }
-    .qr-placeholder { align-items: center; border: 1px solid #000; display: flex; flex: 0 0 20mm; font-size: 10pt; font-weight: 800; height: 20mm; justify-content: center; width: 20mm; }
-    .label-data { display: flex; flex: 1; flex-direction: column; min-width: 0; }
+    .label, .thermal-label { border: 1px solid #000; box-sizing: border-box; overflow: hidden; }
+    .label { break-inside: avoid; display: flex; flex-direction: column; height: 35mm; page-break-inside: avoid; padding: 2mm; width: 60mm; }
+    .label header, .thermal-label header { border-bottom: 1px solid #000; font-size: 8pt; font-weight: 800; line-height: 1; margin-bottom: 1.5mm; padding-bottom: 1mm; text-align: center; }
+    .label-body, .thermal-label__body { align-items: center; display: flex; gap: 2mm; min-height: 0; }
+    .label-qr { flex: 0 0 20mm; height: 20mm; width: 20mm; }
+    .label-data, .thermal-label__info { display: flex; flex: 1; flex-direction: column; min-width: 0; }
     .label-data small, .label-data span, .label-data b { font-size: 7pt; line-height: 1.25; overflow-wrap: anywhere; }
     .label-data strong { font-family: Consolas, monospace; font-size: 12pt; line-height: 1.2; margin: .7mm 0; }
+    .thermal-label { break-after: page; display: grid; grid-template-columns: 18mm 1fr; column-gap: 2mm; height: 30mm; page-break-after: always; padding: 2mm; width: 50mm; }
+    .thermal-label header { grid-column: 1 / -1; font-size: 7pt; margin-bottom: 0; }
+    .thermal-label__body { grid-column: 1 / -1; }
+    .thermal-label__qr { flex: 0 0 17mm; height: 17mm; width: 17mm; }
+    .thermal-label__info { font-size: 6pt; line-height: 1.15; overflow: hidden; }
+    .thermal-label__info small, .thermal-label__info span { font-size: 6pt; line-height: 1.15; overflow-wrap: anywhere; }
+    .thermal-label__code { font-size: 10pt; font-weight: 700; }
+    .thermal-label:last-child { break-after: auto; page-break-after: auto; }
   </style>
 </head>
 <body>
-  <main class="sheet">${devices.map(printableLabel).join('')}</main>
+  <main class="sheet">${devices.map((device, index) => printableLabel(device, qrDataUrls[index], mode)).join('')}</main>
 </body>
 </html>`;
 
@@ -332,7 +346,7 @@ export class DispositivosList implements OnInit {
     const checked = (event.target as HTMLInputElement).checked;
     this.selectedIds.set(checked ? new Set(this.items().map((item) => item.id)) : new Set());
   }
-  protected printLabels(mode: 'A4' | 'THERMAL'): void {
+  protected async printLabels(mode: 'A4' | 'THERMAL'): Promise<void> {
     const devices = this.selectedDevices();
     if (!devices.length) return;
     this.printOptionsOpen.set(false);
@@ -341,19 +355,32 @@ export class DispositivosList implements OnInit {
       this.toast.error('No se pudo abrir la impresión', 'Permite ventanas emergentes para imprimir las etiquetas.');
       return;
     }
-    const html = printableDocument(devices, mode);
-    printWindow.document.open();
-    printWindow.document.write(html);
-    printWindow.document.close();
-    let printed = false;
-    const print = () => {
-      if (printed) return;
-      printed = true;
-      printWindow.focus();
-      printWindow.print();
-    };
-    printWindow.onload = () => window.setTimeout(print, 300);
-    window.setTimeout(print, 800);
+    try {
+      const qrDataUrls = await Promise.all(
+        devices.map((device) => QRCode.toDataURL(buildItamQrValue(device.codigoInventario), {
+          errorCorrectionLevel: 'M',
+          margin: 1,
+          width: 160,
+          color: { dark: '#000000', light: '#FFFFFF' },
+        }))
+      );
+      const html = printableDocument(devices, qrDataUrls, mode);
+      printWindow.document.open();
+      printWindow.document.write(html);
+      printWindow.document.close();
+      let printed = false;
+      const print = () => {
+        if (printed) return;
+        printed = true;
+        printWindow.focus();
+        printWindow.print();
+      };
+      printWindow.onload = () => window.setTimeout(print, 300);
+      window.setTimeout(print, 1000);
+    } catch (error) {
+      printWindow.close();
+      this.toast.error('No se pudieron generar las etiquetas', errorMessage(error));
+    }
   }
   protected clear(): void { this.quickQuery = ''; this.filters = { q: '', tipoDispositivoId: '', estado: '', departamentoId: '', localidad: '' }; this.load(); }
   protected custody(item: Dispositivo): string { return item.colaborador?.nombre || item.departamento?.nombre || 'Sin responsable actual'; }
