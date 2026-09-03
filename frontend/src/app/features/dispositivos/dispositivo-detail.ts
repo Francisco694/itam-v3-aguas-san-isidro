@@ -35,6 +35,9 @@ export const receiversForDepartment = (
 export const isSmartphoneDevice = (device: Dispositivo): boolean =>
   device.tipo.nombre.trim().toLocaleLowerCase('es') === 'smartphone';
 
+export const deviceActionErrorMessage = (error: unknown): string =>
+  errorMessage(error);
+
 export const historicalDeliveryDate = (events: readonly HistorialEvento[]): string | null => {
   for (const event of events) {
     const value = event.detalle['historicalDeliveryDate'];
@@ -135,8 +138,8 @@ type DeviceAction = 'assign-person' | 'assign-department' | 'return' | 'state' |
             </div>
           } @else {
             <form class="action-form" [formGroup]="actionForm" (ngSubmit)="execute()">
-              <header><div><small>OPERACIÓN EN CURSO</small><h4>{{ actionTitle() }}</h4></div><button class="icon-button" type="button" aria-label="Cancelar operación" (click)="action.set(null)"><svg lucideX></svg></button></header>
-              @if(actionError()){<div class="notice notice--error">{{ actionError() }}</div>}
+              <header><div><small>OPERACIÓN EN CURSO</small><h4>{{ actionTitle() }}</h4></div><button class="icon-button" type="button" aria-label="Cancelar operación" [disabled]="submitting()" (click)="action.set(null)"><svg lucideX></svg></button></header>
+              @if(actionError()){<div class="notice notice--error" role="alert">{{ actionError() }}</div>}
               @if(action()==='assign-person'){<div class="field"><label for="colaborador">Colaborador *</label><select id="colaborador" formControlName="colaboradorId"><option value="">Seleccionar colaborador</option>@for(person of collaborators(); track person.id){<option [value]="person.id">{{ person.nombre }} · {{ person.rut }}</option>}</select></div>}
               @if(action()==='assign-department'){<div class="notice notice--info">La custodia será institucional; el recepcionante identifica a quien recibe físicamente.</div><div class="field"><label for="dept">Departamento *</label><select id="dept" formControlName="departamentoId"><option value="">Seleccionar</option>@for(department of departments(); track department.id){<option [value]="department.id">{{department.nombre}}</option>}</select></div><div class="field"><label for="receiver">Persona que recepciona *</label><select id="receiver" formControlName="recibidoPorId"><option value="">Seleccionar colaborador del departamento</option>@for(person of departmentReceivers();track person.id){<option [value]="person.id">{{person.nombre}} · {{person.rut}} · {{person.cargo||'Sin cargo'}}</option>}</select></div><div class="field"><label for="location">Localidad</label><input id="location" formControlName="localidad" maxlength="120" /></div><div class="field"><label for="position">Ubicación</label><input id="position" formControlName="ubicacionDetalle" maxlength="250" /></div>}
               @if(action()==='state'){<div class="field"><label for="new-state">Nuevo estado *</label><select id="new-state" formControlName="estadoId"><option value="">Seleccionar</option>@for(state of states(); track state.id){<option [value]="state.id">{{ state.nombre }}{{ state.esTerminal ? ' · terminal' : '' }}</option>}</select></div>}
@@ -195,7 +198,7 @@ export class DispositivoDetail implements OnInit {
   protected readonly servicePrintRequested=signal(false);
   protected readonly actionForm = this.fb.nonNullable.group({ colaboradorId: [''], departamentoId: [''], recibidoPorId:[''], localidad: [''], ubicacionDetalle: [''], estadoId: [''], proveedor:[''], fechaEnvio:[''], fallaReportada:[''], motivoBaja:[''], responsable: ['', [Validators.required, Validators.maxLength(150)]], observaciones: [''] });
 
-  ngOnInit(): void { this.id = this.route.snapshot.paramMap.get('id') || ''; this.load(); }
+  ngOnInit(): void { this.id = this.route.snapshot.paramMap.get('codigo') || ''; this.load(); }
   protected load(): void {
     this.loading.set(true); this.error.set('');
     forkJoin({ traceability: this.service.trazabilidad(this.id), states: this.estadosService.listar('DISPOSITIVO'), collaborators: this.colaboradoresService.listar({ activo: true }), departments: this.departamentosService.listar() }).subscribe({ next: (result) => { this.traceability.set(result.traceability); this.item.set(result.traceability.dispositivo); this.codigo = result.traceability.dispositivo.codigoInventario; this.history.set(result.traceability.eventos); this.states.set(result.states.filter((state) => state.activo)); this.collaborators.set(result.collaborators); this.departments.set(result.departments.filter((department) => department.activo)); this.loading.set(false); if (this.route.snapshot.queryParamMap.get('action') === 'assign' && !this.terminal()) this.open('assign-person'); }, error: (error) => { this.error.set(errorMessage(error)); this.loading.set(false); } });
@@ -216,7 +219,7 @@ export class DispositivoDetail implements OnInit {
   }
 
   protected async execute(): Promise<void> {
-    const action = this.action(); if (!action) return;
+    const action = this.action(); if (!action || this.submitting()) return;
     const value = this.actionForm.getRawValue();
     const actor = this.auth.user();
     if (!actor?.nombre.trim()) { this.actionError.set('La sesión no permite identificar al responsable TI.'); return; }
@@ -241,6 +244,6 @@ export class DispositivoDetail implements OnInit {
     else request = this.service.cambiarEstado(this.codigo, { ...common, estadoId: Number(value.estadoId) });
     if(action==='service'&&this.servicePrintRequested()){request=request.pipe(tap(result=>{if(!('entregasTemporales' in result))return;this.technicalService.envioPdf(result.id).subscribe({next:blob=>{const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download='ST-'+result.id+'-envio.pdf';link.click();URL.revokeObjectURL(url)},error:error=>this.toast.warning('Envío registrado','No fue posible descargar el documento: '+errorMessage(error))})}))}
     this.submitting.set(true); this.actionError.set('');
-    request.subscribe({ next: (result) => { this.action.set(null); this.submitting.set(false); this.toast.success('Operación registrada', 'La ficha y el historial fueron actualizados.'); if('comprobante' in result){this.returnService.obtener(result.comprobante.id).subscribe({next:proof=>this.returnProof.set(proof),error:error=>this.toast.warning('Devolución registrada',`No fue posible abrir el comprobante: ${errorMessage(error)}`)});}else if('codigoInventario' in result&&(action==='assign-person'||action==='assign-department')){const updated=result;this.actasService.crear({colaboradorId:action==='assign-person'?Number(value.colaboradorId):null,departamentoId:action==='assign-department'?Number(value.departamentoId):null,recepcionanteId:action==='assign-department'?Number(value.recibidoPorId):null,localidad:value.localidad.trim()||updated.localidad,responsableTi:actor.nombre,observaciones:value.observaciones.trim()||null,dispositivosCodigos:[updated.codigoInventario]}).subscribe({next:acta=>this.createdActa.set(acta),error:error=>this.toast.warning('Asignación registrada',`No fue posible generar el acta: ${errorMessage(error)}`)});}this.load(); }, error: (error) => { this.actionError.set(errorMessage(error)); this.submitting.set(false); } });
+    request.subscribe({ next: (result) => { this.action.set(null); this.submitting.set(false); this.toast.success('Operación registrada', 'La ficha y el historial fueron actualizados.'); if('comprobante' in result){this.returnService.obtener(result.comprobante.id).subscribe({next:proof=>this.returnProof.set(proof),error:error=>this.toast.warning('Devolución registrada',`No fue posible abrir el comprobante: ${errorMessage(error)}`)});}else if('codigoInventario' in result&&(action==='assign-person'||action==='assign-department')){const updated=result;this.actasService.crear({colaboradorId:action==='assign-person'?Number(value.colaboradorId):null,departamentoId:action==='assign-department'?Number(value.departamentoId):null,recepcionanteId:action==='assign-department'?Number(value.recibidoPorId):null,localidad:value.localidad.trim()||updated.localidad,responsableTi:actor.nombre,observaciones:value.observaciones.trim()||null,dispositivosCodigos:[updated.codigoInventario]}).subscribe({next:acta=>this.createdActa.set(acta),error:error=>this.toast.warning('Asignación registrada',`No fue posible generar el acta: ${errorMessage(error)}`)});}this.load(); }, error: (error) => { this.actionError.set(deviceActionErrorMessage(error)); this.submitting.set(false); } });
   }
 }

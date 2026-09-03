@@ -1,5 +1,7 @@
 import type { Dispositivo, HistorialEvento } from '../../core/models/itam.models';
+import { ApiError } from '../../core/models/api.models';
 import {
+  deviceActionErrorMessage,
   historicalDeliveryDate,
   historicalDeliveryDateLabel,
   isSmartphoneDevice,
@@ -26,6 +28,14 @@ describe('ficha de dispositivo QA-01/03/11', () => {
   it('identifica Smartphone por el tipo real, sin depender de la serie', () => {
     expect(isSmartphoneDevice({ tipo: { nombre: 'Smartphone' } } as Dispositivo)).toBe(true);
     expect(isSmartphoneDevice({ tipo: { nombre: 'Notebook' } } as Dispositivo)).toBe(false);
+  });
+
+  it('muestra el conflicto del cambio de estado en pantalla', () => {
+    expect(deviceActionErrorMessage(new ApiError(
+      'CONFLICT',
+      'El dispositivo tiene una orden de servicio técnico abierta.',
+      409,
+    ))).toBe('El dispositivo tiene una orden de servicio técnico abierta.');
   });
 
   it('usa exclusivamente la fecha histórica declarada en el historial', () => {
