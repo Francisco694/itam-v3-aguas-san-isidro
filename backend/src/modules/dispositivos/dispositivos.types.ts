@@ -268,6 +268,8 @@ export interface CambiarEstadoDispositivoInput {
   estadoId: number;
   responsable: string;
   observaciones?: string | null;
+  recuperar?: boolean;
+  motivoRecuperacion?: string;
 }
 
 export type MotivoBaja =

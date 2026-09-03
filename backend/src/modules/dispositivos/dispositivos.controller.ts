@@ -22,7 +22,7 @@ import {
   darDeBajaDispositivo,
   devolverDispositivoExistente,
   registrarResultadoOffboarding,
-  obtenerDispositivoPorIdInterno,
+  obtenerDispositivo,
   obtenerDispositivos,
   obtenerIndicadoresGerenciales,
   obtenerHistorialDispositivo,
@@ -56,17 +56,17 @@ const protectedPatchFields = [
 
 const MAX_DEVICE_ID = 2_147_483_647;
 
-export const parseDispositivoId = (value: unknown): number => {
+export const parseCodigoItam = (value: unknown): number => {
   if (typeof value !== "string" || !/^[1-9]\d*$/.test(value)) {
-    throw new ValidationError("Identificador de dispositivo inválido");
+    throw new ValidationError("Código ITAM inválido.");
   }
 
-  const id = Number(value);
-  if (!Number.isSafeInteger(id) || id > MAX_DEVICE_ID) {
-    throw new ValidationError("Identificador de dispositivo inválido");
+  const codigo = Number(value);
+  if (!Number.isSafeInteger(codigo) || codigo > MAX_DEVICE_ID) {
+    throw new ValidationError("Código ITAM inválido.");
   }
 
-  return id;
+  return codigo;
 };
 
 const assertNoProtectedPatchFields = (
@@ -175,8 +175,8 @@ export const resumenGerencialController = asyncHandler(
 
 export const obtenerDispositivoController = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
-    const id = parseDispositivoId(req.params.id);
-    const dispositivo = await obtenerDispositivoPorIdInterno(id);
+    const codigo = parseCodigoItam(req.params.codigo);
+    const dispositivo = await obtenerDispositivo(codigo);
 
     sendItem(res, dispositivo);
   }
@@ -431,7 +431,13 @@ export const cambiarEstadoDispositivoController = asyncHandler(
       observaciones: parseOptionalString(
         body.observaciones,
         "observaciones"
-      )
+      ),
+      recuperar: body.recuperar === true,
+      motivoRecuperacion: parseOptionalString(
+        body.motivoRecuperacion,
+        "motivoRecuperacion",
+        500
+      ) ?? undefined
     };
 
     const dispositivo = await cambiarEstadoDispositivoExistente(
@@ -454,7 +460,7 @@ export const historialDispositivoController = asyncHandler(
 
 export const trazabilidadDispositivoController = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
-    const id = parseDispositivoId(req.params.id);
-    sendItem(res, await obtenerTrazabilidadDispositivo(id));
+    const codigo = parseCodigoItam(req.params.codigo);
+    sendItem(res, await obtenerTrazabilidadDispositivo(codigo));
   }
 );

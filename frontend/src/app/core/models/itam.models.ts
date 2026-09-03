@@ -57,7 +57,7 @@ export interface DispositivoInput { codigoInventario?: number; tipoDispositivoId
 export interface ResponsableInput { responsable: string; observaciones?: string | null; }
 export interface AsignarDispositivoColaboradorInput extends ResponsableInput { colaboradorId: number; }
 export interface AsignarDispositivoDepartamentoInput extends ResponsableInput { departamentoId: number; recibidoPorId: number; localidad?: string | null; ubicacionDetalle?: string | null; }
-export interface CambiarEstadoInput extends ResponsableInput { estadoId: number; }
+export interface CambiarEstadoInput extends ResponsableInput { estadoId: number; recuperar?: boolean; motivoRecuperacion?: string; }
 export interface DevolverDispositivoInput extends ResponsableInput { condicion?: string | null; resultado?: 'DEVUELTO'|'DANADO'; }
 export interface ComprobanteDevolucionResumen {id:string;numeroComprobante:string;fecha:string;resultado:'DEVUELTO'|'DANADO';}
 export interface ResultadoDevolucion {dispositivo:Dispositivo;comprobante:ComprobanteDevolucionResumen;}

@@ -643,6 +643,20 @@ export const cambiarEstadoDispositivo = async (
   );
 };
 
+export const anularBajaDispositivo = async (
+  dispositivoId: string,
+  motivo: string,
+  client: PoolClient
+): Promise<boolean> => {
+  const result = await client.query(
+    `UPDATE itam.bajas_dispositivo
+     SET anulada=TRUE, anulada_en=NOW(), motivo_anulacion=$2
+     WHERE dispositivo_id=$1 AND anulada=FALSE`,
+    [dispositivoId, motivo]
+  );
+  return (result.rowCount ?? 0) > 0;
+};
+
 export const darDeBajaYLiberarCustodia = async (
   codigoInventario: number,
   estadoId: number,

@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ConflictError } from "../../shared/errors";
+import { ConflictError, ValidationError } from "../../shared/errors";
 import {
   assertAsignadoConCustodioUnico,
   assertCambioEstadoGenericoPermitido,
+  assertRecuperacionPermitida,
   assertColaboradorActivo,
   detectarCambiosDispositivo
 } from "./dispositivos.service";
@@ -21,6 +22,20 @@ test("P1-05: el cambio generico no permite salir de DADO_BAJA", () => {
     () => assertCambioEstadoGenericoPermitido("DADO_BAJA", "DISPONIBLE", null, null),
     (error: unknown) => error instanceof ConflictError && error.statusCode === 409
   );
+});
+
+test("el cambio genérico no permite salir de EXTRAVIADO", () => {
+  assert.throws(
+    () => assertCambioEstadoGenericoPermitido("EXTRAVIADO", "DISPONIBLE", null, null),
+    (error: unknown) => error instanceof ConflictError && error.statusCode === 409
+  );
+});
+
+test("recuperación controlada permite estados seguros y exige motivo", () => {
+  assert.doesNotThrow(() => assertRecuperacionPermitida("DADO_BAJA", "DISPONIBLE", "Equipo encontrado"));
+  assert.doesNotThrow(() => assertRecuperacionPermitida("EXTRAVIADO", "SERVICIO_TECNICO", "Ingresar a revisión"));
+  assert.throws(() => assertRecuperacionPermitida("DADO_BAJA", "ASIGNADO", "Motivo"), ConflictError);
+  assert.throws(() => assertRecuperacionPermitida("EXTRAVIADO", "DISPONIBLE", ""), ValidationError);
 });
 
 test("P1-07: un colaborador inactivo no puede recibir custodia", () => {

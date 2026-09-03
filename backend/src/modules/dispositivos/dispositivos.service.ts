@@ -24,6 +24,7 @@ import {
   asignarDispositivoAColaborador,
   asignarDispositivoADepartamento,
   cambiarEstadoDispositivo,
+  anularBajaDispositivo,
   crearDispositivo,
   darDeBajaYLiberarCustodia,
   devolverDispositivo,
@@ -702,9 +703,9 @@ export const assertCambioEstadoGenericoPermitido = (
   colaboradorId: string | null,
   departamentoId: string | null
 ): void => {
-  if (estadoActual === "DADO_BAJA") {
+  if (["EXTRAVIADO", "DADO_BAJA"].includes(estadoActual)) {
     throw new ConflictError(
-      "DADO_BAJA es terminal. Se requiere un flujo explicito de anulacion de baja."
+      `${estadoActual} es terminal. Se requiere el flujo controlado de recuperación.`
     );
   }
   if (estadoNuevo === "DADO_BAJA") {
@@ -712,6 +713,22 @@ export const assertCambioEstadoGenericoPermitido = (
   }
   if (estadoNuevo === "ASIGNADO") {
     assertAsignadoConCustodioUnico(colaboradorId, departamentoId);
+  }
+};
+
+export const assertRecuperacionPermitida = (
+  estadoActual: string,
+  estadoNuevo: string,
+  motivo: string | undefined
+): void => {
+  if (!["EXTRAVIADO", "DADO_BAJA"].includes(estadoActual)) {
+    throw new ConflictError("La recuperación solo aplica a equipos extraviados o dados de baja.");
+  }
+  if (!["DISPONIBLE", "SERVICIO_TECNICO"].includes(estadoNuevo)) {
+    throw new ConflictError("La recuperación solo permite dejar el equipo disponible o en servicio técnico.");
+  }
+  if (!motivo?.trim()) {
+    throw new ValidationError("El motivo de recuperación es obligatorio.");
   }
 };
 
@@ -1097,11 +1114,21 @@ export const cambiarEstadoDispositivoExistente = async (
     }
 
 
-    await assertSinOrdenServicioAbierta(anterior.dispositivo_id, client);
-    if (anterior.estado_codigo === "DADO_BAJA") {
-      throw new ConflictError(
-        "DADO_BAJA es terminal. Se requiere un flujo explicito de anulacion de baja."
+    if (input.recuperar) {
+      assertRecuperacionPermitida(
+        anterior.estado_codigo,
+        estado.codigo,
+        input.motivoRecuperacion
       );
+    } else {
+      await assertSinOrdenServicioAbierta(anterior.dispositivo_id, client);
+    }
+    if (anterior.estado_codigo === "DADO_BAJA") {
+      if (!input.recuperar) {
+        throw new ConflictError(
+          "DADO_BAJA es terminal. Se requiere un flujo explicito de anulacion de baja."
+        );
+      }
     }
     if (estado.codigo === "ASIGNADO") {
       assertAsignadoConCustodioUnico(
@@ -1115,23 +1142,35 @@ export const cambiarEstadoDispositivoExistente = async (
       );
     }
 
-    const actualizado = await cambiarEstadoDispositivo(
-      codigoInventario,
-      input.estadoId,
-      client
-    );
+    const actualizado = input.recuperar
+      ? await darDeBajaYLiberarCustodia(codigoInventario, input.estadoId, client)
+      : await cambiarEstadoDispositivo(codigoInventario, input.estadoId, client);
 
     if (!actualizado) {
       throw new NotFoundError("Dispositivo no encontrado.");
     }
 
+    if (input.recuperar && anterior.estado_codigo === "DADO_BAJA") {
+      await anularBajaDispositivo(
+        anterior.dispositivo_id,
+        input.motivoRecuperacion!.trim(),
+        client
+      );
+    }
+
     await insertarHistorialDispositivo(
       actualizado.dispositivo_id,
-      "CAMBIAR_ESTADO",
+      input.recuperar
+        ? anterior.estado_codigo === "DADO_BAJA"
+          ? "RECUPERAR_DADO_BAJA"
+          : "RECUPERAR_EXTRAVIADO"
+        : "CAMBIAR_ESTADO",
       anterior.estado_id,
       estado.id,
       input.responsable,
-      input.observaciones,
+      input.recuperar
+        ? `${anterior.estado_codigo === "DADO_BAJA" ? "Baja anulada por recuperación física del equipo." : "Equipo encontrado y reincorporado a inventario."} Motivo: ${input.motivoRecuperacion!.trim()}${input.observaciones ? ` ${input.observaciones}` : ""}`
+        : input.observaciones,
       {
         estadoCodigo: estado.codigo
       },
@@ -1328,10 +1367,9 @@ export const construirTrazabilidadDispositivo = (
 };
 
 export const obtenerTrazabilidadDispositivo = async (
-  dispositivoId: number
+  codigoInventario: number
 ): Promise<TrazabilidadDispositivo> => {
-  const dispositivo = await obtenerDispositivoPorIdInterno(dispositivoId);
-  const codigoInventario = dispositivo.codigoInventario;
+  const dispositivo = await obtenerDispositivo(codigoInventario);
   const [eventos, evidencias] = await Promise.all([
     obtenerHistorialDispositivo(codigoInventario),
     listarEvidenciasResponsablesDispositivo(codigoInventario)
