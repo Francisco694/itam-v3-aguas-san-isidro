@@ -76,6 +76,7 @@ describe('Dashboard QA-10 y QA-15', () => {
       device('3', 'EXTRAVIADO', 300_000),
       device('4', 'DADO_BAJA', 400_000),
       device('5', 'EN_REVISION', 50_000),
+      device('6', 'SERVICIO_TECNICO', 80_000),
     ];
     await TestBed.configureTestingModule({
       imports: [Dashboard],
@@ -109,25 +110,34 @@ describe('Dashboard QA-10 y QA-15', () => {
     fixture = TestBed.createComponent(Dashboard);
   });
 
-  it('separa inventario operacional real del total histórico registrado', () => {
-    fixture.detectChanges();
-    const cards = fixture.nativeElement.querySelectorAll('.metric-grid .metric');
-    expect(cards[0].textContent).toContain('Inventario operacional real');
-    expect(cards[0].querySelector('.metric__value').textContent.trim()).toBe('3');
-    expect(cards[0].textContent).toContain('Equipos disponibles o en uso actualmente');
-    expect(cards[1].textContent).toContain('Inventario registrado histórico');
-    expect(cards[1].querySelector('.metric__value').textContent.trim()).toBe('5');
-    expect(Number(cards[0].querySelector('.metric__value').textContent.trim())
-      + Number(cards[4].querySelector('.metric__value').textContent.trim())
-      + Number(cards[5].querySelector('.metric__value').textContent.trim())).toBe(5);
-    expect(fixture.nativeElement.querySelector('.financial-card')).toBeNull();
-  });
-
-  it('presenta el total por tipo como equipos registrados y no como activos vigentes', () => {
+  it('muestra como inventario actual solo los estados operativos permitidos', () => {
     fixture.detectChanges();
     const text = fixture.nativeElement.textContent;
-    expect(text).toContain('Inventario registrado por tipo');
-    expect(text).toContain('5 equipos registrados');
+    const firstMetric = fixture.nativeElement.querySelector('.metric-grid .metric');
+    expect(firstMetric.textContent).toContain('Inventario actual');
+    expect(firstMetric.querySelector('.metric__value').textContent.trim()).toBe('3');
+    expect(firstMetric.textContent).toContain('Equipos disponibles o en uso actualmente');
+    expect(text).toContain('Histórico registrado');
+    expect(text).toContain('Total de registros en ITAM, incluyendo bajas y extravíos');
+    expect(text).not.toContain('Valor de equipos activos');
+  });
+
+  it('distribuye por tipo exactamente la misma cantidad del inventario actual', () => {
+    fixture.detectChanges();
+    const text = fixture.nativeElement.textContent;
+    expect(text).toContain('Inventario actual por tipo');
+    expect(text).toContain('3 equipos actuales');
+    expect(text).toContain('3 registrados');
+    expect(text).not.toContain('Inventario registrado por tipo');
+  });
+
+  it('separa servicio técnico y custodias por revisar cuando aplican', () => {
+    fixture.detectChanges();
+    const text = fixture.nativeElement.textContent;
+    expect(text).toContain('Servicio técnico');
+    expect(text).toContain('Revisar custodia');
+    expect(text).toContain('Asignados sin responsable identificado');
+    expect(fixture.nativeElement.querySelector('.financial-card')).toBeNull();
   });
 
   it('muestra cero real cuando no existen procesos de Offboarding abiertos', () => {

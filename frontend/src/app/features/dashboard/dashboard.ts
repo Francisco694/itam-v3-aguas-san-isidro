@@ -30,23 +30,38 @@ import { formatClp } from '../../shared/utils/currency';
 import { errorMessage } from '../../shared/utils/error-message';
 import type { Dispositivo } from '../../core/models/itam.models';
 
+const CURRENT_OPERATIONAL_STATE_CODES = new Set([
+  'ASIGNADO',
+  'DISPONIBLE',
+  'EN_BODEGA',
+  'SERVICIO_TECNICO',
+  'EN_SERVICIO_TECNICO',
+]);
+
 export const dashboardInventoryScope = (devices: readonly Dispositivo[]) => {
   const stateCode = (device: Dispositivo): string => device.estado?.codigo ?? '';
-  const operational = devices.filter((device) =>
-    !['EXTRAVIADO', 'DADO_BAJA'].includes(stateCode(device))
-  );
+  const operational = devices.filter((device) => CURRENT_OPERATIONAL_STATE_CODES.has(stateCode(device)));
   const lost = devices.filter((device) => stateCode(device) === 'EXTRAVIADO');
   const retired = devices.filter((device) => stateCode(device) === 'DADO_BAJA');
+  const available = operational.filter((device) => stateCode(device) === 'DISPONIBLE');
+  const assigned = operational.filter((device) => stateCode(device) === 'ASIGNADO');
+  const technicalService = operational.filter((device) =>
+    ['SERVICIO_TECNICO', 'EN_SERVICIO_TECNICO'].includes(stateCode(device))
+  );
+  const assignedWithoutResponsible = assigned.filter((device) =>
+    !device.colaborador && !device.departamento
+  );
   return {
     operational,
     lost,
     retired,
+    available,
+    assigned,
+    technicalService,
+    assignedWithoutResponsible,
     historicalTotal: devices.length,
     operationalValue: operational.reduce((total, device) => total + device.valorComercial, 0),
     historicalValue: devices.reduce((total, device) => total + device.valorComercial, 0),
-    assignedWithoutResponsible: operational.filter((device) =>
-      stateCode(device) === 'ASIGNADO' && !device.colaborador && !device.departamento
-    ).length,
   };
 };
 
@@ -122,6 +137,10 @@ interface OperationalMetric {
           >
         }
       </section>
+      <aside class="historical-summary" aria-label="Histórico registrado">
+        <div><span>Histórico registrado</span><strong>{{ historicalDevices() }}</strong></div>
+        <p>Total de registros en ITAM, incluyendo bajas y extravíos.</p>
+      </aside>
       <section class="operational-section" aria-labelledby="operational-title">
         <div class="section-heading">
           <div>
@@ -153,9 +172,9 @@ interface OperationalMetric {
           <div class="card-heading">
             <div>
               <span>Registros disponibles</span>
-              <h2>Inventario registrado por tipo</h2>
+              <h2>Inventario actual por tipo</h2>
             </div>
-            <strong>{{ totalDevices() }} equipos registrados</strong>
+            <strong>{{ totalDevices() }} equipos actuales</strong>
           </div>
           @if (!typeSummary().length) {
             <app-view-state
@@ -254,6 +273,7 @@ export class Dashboard implements OnInit {
   protected readonly metrics = signal<Metric[]>([]);
   protected readonly typeSummary = signal<TypeSummary[]>([]);
   protected readonly totalDevices = signal(0);
+  protected readonly historicalDevices = signal(0);
   protected readonly totalSims = signal(0);
   protected readonly activePeople = signal(0);
   protected readonly activeDepartments = signal(0);
@@ -295,9 +315,9 @@ export class Dashboard implements OnInit {
           (total, process) => total + process.valorPendiente,
           0,
         );
-        this.metrics.set([
+        const metrics: Metric[] = [
           {
-            label: 'Inventario operacional real',
+            label: 'Inventario actual',
             value: inventoryScope.operational.length,
             meta: 'Equipos disponibles o en uso actualmente',
             tone: 'blue',
@@ -312,7 +332,7 @@ export class Dashboard implements OnInit {
           },
           {
             label: 'Disponibles',
-            value: r.summary.disponibles.cantidad,
+            value: inventoryScope.available.length,
             meta: `Valor disponible: ${formatClp(r.summary.disponibles.valor)}`,
             tone: 'cyan',
             icon: LucidePackageOpen,
@@ -320,7 +340,7 @@ export class Dashboard implements OnInit {
           },
           {
             label: 'Asignados',
-            value: r.summary.asignados.cantidad,
+            value: inventoryScope.assigned.length,
             meta: `Valor bajo custodia: ${formatClp(r.summary.asignados.valor)}`,
             tone: 'green',
             icon: LucideUsers,
@@ -342,7 +362,28 @@ export class Dashboard implements OnInit {
             icon: LucideCircleAlert,
             state: 'DADO_BAJA',
           },
-        ]);
+        ];
+        if (inventoryScope.technicalService.length) {
+          metrics.push({
+            label: 'Servicio técnico',
+            value: inventoryScope.technicalService.length,
+            meta: 'Equipos actualmente en revisión o reparación',
+            tone: 'amber',
+            icon: LucideWrench,
+            state: 'SERVICIO_TECNICO',
+          });
+        }
+        if (inventoryScope.assignedWithoutResponsible.length) {
+          metrics.push({
+            label: 'Revisar custodia',
+            value: inventoryScope.assignedWithoutResponsible.length,
+            meta: 'Asignados sin responsable identificado',
+            tone: 'amber',
+            icon: LucideCircleAlert,
+            state: 'ASIGNADO',
+          });
+        }
+        this.metrics.set(metrics);
         this.serviceDevices.set(r.summary.servicioTecnico.cantidad);
         this.pendingDiagnostics.set(
           r.orders.filter((o) => o.estado === 'PENDIENTE_DIAGNOSTICO').length,
@@ -386,7 +427,7 @@ export class Dashboard implements OnInit {
           },
         ]);
         const counts = new Map<string, number>();
-        for (const item of r.devices)
+        for (const item of inventoryScope.operational)
           counts.set(item.tipo.nombre, (counts.get(item.tipo.nombre) ?? 0) + 1);
         this.typeSummary.set(
           [...counts.entries()]
@@ -394,10 +435,13 @@ export class Dashboard implements OnInit {
             .map(([label, count]) => ({
               label,
               count,
-              percentage: r.devices.length ? Math.round((count * 100) / r.devices.length) : 0,
+              percentage: inventoryScope.operational.length
+                ? Math.round((count * 100) / inventoryScope.operational.length)
+                : 0,
             })),
         );
-        this.totalDevices.set(r.devices.length);
+        this.totalDevices.set(inventoryScope.operational.length);
+        this.historicalDevices.set(inventoryScope.historicalTotal);
         this.totalSims.set(r.sims.length);
         this.activePeople.set(r.people.filter((i) => i.activo).length);
         this.activeDepartments.set(r.departments.filter((i) => i.activo).length);
