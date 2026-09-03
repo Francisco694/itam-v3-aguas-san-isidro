@@ -244,7 +244,7 @@ test("QA-05: una falla intermedia revierte estado, custodia y baja patrimonial",
   assert.deepEqual(after.rows[0], snapshot.rows[0]);
 });
 
-test("QA-10: inventario operacional coincide con los tres estados definidos", async () => {
+test("QA-10: inventario operacional incluye todo salvo extraviados y bajas", async () => {
   const expected = await pool.query<{
     cantidad: string;
     valor: string;
@@ -253,15 +253,15 @@ test("QA-10: inventario operacional coincide con los tres estados definidos", as
     servicio_tecnico: string;
   }>(`
     SELECT
-      COUNT(*) FILTER (WHERE e.codigo IN ('ASIGNADO', 'DISPONIBLE', 'SERVICIO_TECNICO')) AS cantidad,
+      COUNT(*) FILTER (WHERE COALESCE(e.codigo, '') NOT IN ('EXTRAVIADO', 'DADO_BAJA')) AS cantidad,
       COALESCE(SUM(d.valor_comercial) FILTER (
-        WHERE e.codigo IN ('ASIGNADO', 'DISPONIBLE', 'SERVICIO_TECNICO')
+        WHERE COALESCE(e.codigo, '') NOT IN ('EXTRAVIADO', 'DADO_BAJA')
       ), 0) AS valor,
       COUNT(*) FILTER (WHERE e.codigo = 'ASIGNADO') AS asignados,
       COUNT(*) FILTER (WHERE e.codigo = 'DISPONIBLE') AS disponibles,
       COUNT(*) FILTER (WHERE e.codigo = 'SERVICIO_TECNICO') AS servicio_tecnico
     FROM itam.dispositivos d
-    JOIN itam.estados e ON e.id = d.estado_id
+    LEFT JOIN itam.estados e ON e.id = d.estado_id
   `);
   const metrics = await obtenerIndicadoresGerenciales();
   assert.equal(metrics.inventarioOperacional.cantidad, Number(expected.rows[0]!.cantidad));
@@ -269,6 +269,10 @@ test("QA-10: inventario operacional coincide con los tres estados definidos", as
   assert.equal(metrics.asignados.cantidad, Number(expected.rows[0]!.asignados));
   assert.equal(metrics.disponibles.cantidad, Number(expected.rows[0]!.disponibles));
   assert.equal(metrics.servicioTecnico.cantidad, Number(expected.rows[0]!.servicio_tecnico));
+  assert.equal(
+    metrics.inventarioOperacional.cantidad + metrics.extraviados.cantidad + metrics.bajas.cantidad,
+    Number((await pool.query("SELECT COUNT(*) AS total FROM itam.dispositivos")).rows[0]!.total)
+  );
 });
 
 test("P1-06: una segunda asignacion condicional no sobrescribe la primera", async () => {

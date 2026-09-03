@@ -457,10 +457,10 @@ export const obtenerResumenGerencial = async (): Promise<ResumenGerencialRow> =>
   const result = await pool.query<ResumenGerencialRow>(`
     SELECT
       COUNT(*) FILTER (
-        WHERE e.codigo IN ('ASIGNADO', 'DISPONIBLE', 'SERVICIO_TECNICO')
+        WHERE COALESCE(e.codigo, '') NOT IN ('EXTRAVIADO', 'DADO_BAJA')
       ) AS inventario_operacional_cantidad,
       COALESCE(SUM(d.valor_comercial) FILTER (
-        WHERE e.codigo IN ('ASIGNADO', 'DISPONIBLE', 'SERVICIO_TECNICO')
+        WHERE COALESCE(e.codigo, '') NOT IN ('EXTRAVIADO', 'DADO_BAJA')
       ), 0) AS inventario_operacional_valor,
       COUNT(*) FILTER (WHERE e.codigo = 'DISPONIBLE') AS disponibles_cantidad,
       COALESCE(SUM(d.valor_comercial) FILTER (WHERE e.codigo = 'DISPONIBLE'), 0) AS disponibles_valor,
@@ -475,7 +475,7 @@ export const obtenerResumenGerencial = async (): Promise<ResumenGerencialRow> =>
         WHERE e.codigo = 'DADO_BAJA'
       ), 0) AS bajas_valor
     FROM itam.dispositivos d
-    INNER JOIN itam.estados e ON e.id = d.estado_id
+    LEFT JOIN itam.estados e ON e.id = d.estado_id
     LEFT JOIN LATERAL (
       SELECT b.valor_comercial_momento
       FROM itam.bajas_dispositivo b

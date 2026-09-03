@@ -331,37 +331,9 @@
 .operational-link--offboarding {
   border-left-color: #7c3aed;
 }
-.financial-card {
-  margin-top: 1rem;
-  padding: 1.25rem;
-}
-.financial-grid {
-  display: grid;
-  gap: 0.8rem;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-.financial-grid > div {
-  background: var(--gray-50);
-  border: 1px solid var(--gray-200);
-  border-radius: 0.8rem;
-  padding: 1rem;
-}
-.financial-grid span {
-  color: var(--slate-500);
-  display: block;
-  font-size: 0.72rem;
-}
-.financial-grid strong {
-  color: var(--navy);
-  display: block;
-  margin-top: 0.35rem;
-}
 @media (max-width: 900px) {
   .operational-grid {
     grid-template-columns: 1fr;
-  }
-  .financial-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 @media (max-width: 620px) {
@@ -369,8 +341,5 @@
     align-items: flex-start;
     flex-direction: column;
     gap: 0.35rem;
-  }
-  .financial-grid {
-    grid-template-columns: 1fr;
   }
 }

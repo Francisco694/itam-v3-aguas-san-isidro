@@ -30,23 +30,22 @@ import { formatClp } from '../../shared/utils/currency';
 import { errorMessage } from '../../shared/utils/error-message';
 import type { Dispositivo } from '../../core/models/itam.models';
 
-const OPERATIONAL_STATE_CODES = new Set([
-  'ASIGNADO',
-  'DISPONIBLE',
-  'EN_BODEGA',
-  'EN_SERVICIO_TECNICO',
-  'SERVICIO_TECNICO',
-]);
-
 export const dashboardInventoryScope = (devices: readonly Dispositivo[]) => {
-  const operational = devices.filter((device) => OPERATIONAL_STATE_CODES.has(device.estado.codigo));
+  const stateCode = (device: Dispositivo): string => device.estado?.codigo ?? '';
+  const operational = devices.filter((device) =>
+    !['EXTRAVIADO', 'DADO_BAJA'].includes(stateCode(device))
+  );
+  const lost = devices.filter((device) => stateCode(device) === 'EXTRAVIADO');
+  const retired = devices.filter((device) => stateCode(device) === 'DADO_BAJA');
   return {
     operational,
+    lost,
+    retired,
     historicalTotal: devices.length,
     operationalValue: operational.reduce((total, device) => total + device.valorComercial, 0),
     historicalValue: devices.reduce((total, device) => total + device.valorComercial, 0),
     assignedWithoutResponsible: operational.filter((device) =>
-      device.estado.codigo === 'ASIGNADO' && !device.colaborador && !device.departamento
+      stateCode(device) === 'ASIGNADO' && !device.colaborador && !device.departamento
     ).length,
   };
 };
@@ -147,37 +146,6 @@ interface OperationalMetric {
               <b aria-hidden="true">→</b>
             </a>
           }
-        </div>
-      </section>
-      <section class="card financial-card">
-        <div class="card-heading">
-          <div>
-            <span>Control económico</span>
-            <h2>Indicadores financieros</h2>
-          </div>
-        </div>
-        <div class="financial-grid">
-          <div>
-            <span>Extraviados · {{ lostDevices() }} equipos</span><strong>{{ lostValue() }}</strong>
-          </div>
-          <div>
-            <span>Bajas · {{ retiredDevices() }} equipos</span><strong>{{ retiredValue() }}</strong>
-          </div>
-          <div>
-            <span>En servicio técnico</span><strong>{{ serviceDevices() }} equipos</strong>
-          </div>
-          <div>
-            <span>Diagnósticos pendientes</span><strong>{{ pendingDiagnostics() }}</strong>
-          </div>
-          <div>
-            <span>Cotizaciones por decidir</span><strong>{{ pendingQuotes() }}</strong>
-          </div>
-          <div>
-            <span>Reparaciones acumuladas</span><strong>{{ repairCosts() }}</strong>
-          </div>
-          <div>
-            <span>Valor de equipos activos</span><strong>{{ inventoryValue() }}</strong>
-          </div>
         </div>
       </section>
       <section class="dashboard-grid">
@@ -291,15 +259,10 @@ export class Dashboard implements OnInit {
   protected readonly activeDepartments = signal(0);
   protected readonly apiStatus = signal('—');
   protected readonly databaseStatus = signal('—');
-  protected readonly lostValue = signal('$0');
-  protected readonly retiredValue = signal('$0');
   protected readonly serviceDevices = signal(0);
   protected readonly pendingDiagnostics = signal(0);
   protected readonly pendingQuotes = signal(0);
   protected readonly repairCosts = signal('$0');
-  protected readonly inventoryValue = signal('$0');
-  protected readonly lostDevices = signal(0);
-  protected readonly retiredDevices = signal(0);
   protected readonly operationalMetrics = signal<OperationalMetric[]>([]);
   protected readonly simIcon = LucideCardSim;
   protected readonly usersIcon = LucideUsers;
@@ -324,8 +287,6 @@ export class Dashboard implements OnInit {
     }).subscribe({
       next: (r) => {
         const inventoryScope = dashboardInventoryScope(r.devices);
-        const lostItems = r.devices.filter((i) => i.estado.codigo.includes('EXTRAVIAD'));
-        const retiredItems = r.devices.filter((i) => i.estado.codigo.includes('BAJA'));
         const pendingOffboardingAssets = r.offboarding.reduce(
           (total, process) => total + process.equiposPendientes,
           0,
@@ -338,16 +299,14 @@ export class Dashboard implements OnInit {
           {
             label: 'Inventario operacional real',
             value: inventoryScope.operational.length,
-            meta: inventoryScope.assignedWithoutResponsible
-              ? `${formatClp(inventoryScope.operationalValue)} · ${inventoryScope.assignedWithoutResponsible} asignados sin responsable`
-              : `Valor operacional: ${formatClp(inventoryScope.operationalValue)}`,
+            meta: 'Equipos disponibles o en uso actualmente',
             tone: 'blue',
             icon: LucidePackage,
           },
           {
             label: 'Inventario registrado histórico',
             value: inventoryScope.historicalTotal,
-            meta: `Incluye bajas y extravíos · ${formatClp(inventoryScope.historicalValue)}`,
+            meta: 'Total de registros, incluidas bajas y extravíos',
             tone: 'slate',
             icon: LucidePackage,
           },
@@ -369,7 +328,7 @@ export class Dashboard implements OnInit {
           },
           {
             label: 'Extraviados',
-            value: r.summary.extraviados.cantidad,
+            value: inventoryScope.lost.length,
             meta: `Valor de equipos por recuperar: ${formatClp(r.summary.extraviados.valor)}`,
             tone: 'dark',
             icon: LucideCircleAlert,
@@ -377,18 +336,13 @@ export class Dashboard implements OnInit {
           },
           {
             label: 'Bajas',
-            value: r.summary.bajas.cantidad,
+            value: inventoryScope.retired.length,
             meta: `Valor retirado: ${formatClp(r.summary.bajas.valor)}`,
             tone: 'red',
             icon: LucideCircleAlert,
             state: 'DADO_BAJA',
           },
         ]);
-        this.lostValue.set(formatClp(lostItems.reduce((s, i) => s + i.valorComercial, 0)));
-        this.retiredValue.set(formatClp(retiredItems.reduce((s, i) => s + i.valorComercial, 0)));
-        this.inventoryValue.set(formatClp(inventoryScope.operationalValue));
-        this.lostDevices.set(lostItems.length);
-        this.retiredDevices.set(retiredItems.length);
         this.serviceDevices.set(r.summary.servicioTecnico.cantidad);
         this.pendingDiagnostics.set(
           r.orders.filter((o) => o.estado === 'PENDIENTE_DIAGNOSTICO').length,
@@ -399,7 +353,7 @@ export class Dashboard implements OnInit {
           {
             title: 'Servicio Técnico',
             value: `${this.serviceDevices()} equipos`,
-            meta: `${this.pendingDiagnostics()} diagnósticos · ${this.pendingQuotes()} cotizaciones por decidir`,
+            meta: `${this.pendingDiagnostics()} diagnósticos · ${this.pendingQuotes()} cotizaciones por decidir · Reparaciones ${this.repairCosts()}`,
             route: '/servicio-tecnico',
             tone: 'technical',
             icon: LucideWrench,

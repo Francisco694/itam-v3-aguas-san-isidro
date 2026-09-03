@@ -75,6 +75,7 @@ describe('Dashboard QA-10 y QA-15', () => {
       device('2', 'DISPONIBLE', 200_000),
       device('3', 'EXTRAVIADO', 300_000),
       device('4', 'DADO_BAJA', 400_000),
+      device('5', 'EN_REVISION', 50_000),
     ];
     await TestBed.configureTestingModule({
       imports: [Dashboard],
@@ -112,19 +113,21 @@ describe('Dashboard QA-10 y QA-15', () => {
     fixture.detectChanges();
     const cards = fixture.nativeElement.querySelectorAll('.metric-grid .metric');
     expect(cards[0].textContent).toContain('Inventario operacional real');
-    expect(cards[0].querySelector('.metric__value').textContent.trim()).toBe('2');
-    expect(cards[0].textContent).toContain('$300.000');
-    expect(cards[0].textContent).toContain('1 asignados sin responsable');
+    expect(cards[0].querySelector('.metric__value').textContent.trim()).toBe('3');
+    expect(cards[0].textContent).toContain('Equipos disponibles o en uso actualmente');
     expect(cards[1].textContent).toContain('Inventario registrado histórico');
-    expect(cards[1].querySelector('.metric__value').textContent.trim()).toBe('4');
-    expect(cards[1].textContent).toContain('$1.000.000');
+    expect(cards[1].querySelector('.metric__value').textContent.trim()).toBe('5');
+    expect(Number(cards[0].querySelector('.metric__value').textContent.trim())
+      + Number(cards[4].querySelector('.metric__value').textContent.trim())
+      + Number(cards[5].querySelector('.metric__value').textContent.trim())).toBe(5);
+    expect(fixture.nativeElement.querySelector('.financial-card')).toBeNull();
   });
 
   it('presenta el total por tipo como equipos registrados y no como activos vigentes', () => {
     fixture.detectChanges();
     const text = fixture.nativeElement.textContent;
     expect(text).toContain('Inventario registrado por tipo');
-    expect(text).toContain('4 equipos registrados');
+    expect(text).toContain('5 equipos registrados');
   });
 
   it('muestra cero real cuando no existen procesos de Offboarding abiertos', () => {
