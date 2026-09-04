@@ -131,6 +131,19 @@ describe('Dashboard QA-10 y QA-15', () => {
     expect(text).not.toContain('Registros disponibles');
   });
 
+  it('separa la distribución activa real de la distribución histórica', () => {
+    fixture.detectChanges();
+    const cards = fixture.nativeElement.querySelectorAll('.type-card');
+    expect(cards).toHaveLength(2);
+    expect(cards[0].textContent).toContain('Inventario activo real por tipo');
+    expect(cards[0].textContent).toContain('3 equipos activos reales');
+    expect(cards[0].textContent).toContain('3 activos reales');
+    expect(cards[0].textContent).not.toContain('EXTRAVIADO');
+    expect(cards[0].textContent).not.toContain('DADO_BAJA');
+    expect(cards[1].textContent).toContain('Histórico registrado por tipo');
+    expect(cards[1].textContent).toContain('6 registros históricos');
+  });
+
   it('separa servicio técnico y custodias por revisar cuando aplican', () => {
     fixture.detectChanges();
     const text = fixture.nativeElement.textContent;

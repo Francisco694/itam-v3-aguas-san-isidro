@@ -171,6 +171,46 @@ interface OperationalMetric {
         <article class="card type-card">
           <div class="card-heading">
             <div>
+              <span>Inventario activo real</span>
+              <h2>Inventario activo real por tipo</h2>
+            </div>
+            <strong>{{ totalDevices() }} equipos activos reales</strong>
+          </div>
+          <p class="historical-subtitle">
+            Incluye solo equipos actualmente vigentes en la empresa.
+          </p>
+          @if (!activeTypeSummary().length) {
+            <app-view-state
+              kind="empty"
+              title="Sin dispositivos activos"
+              message="No hay equipos vigentes para mostrar por tipo."
+            />
+          } @else {
+            <div class="type-bars">
+              @for (type of activeTypeSummary(); track type.label) {
+                <div class="type-row">
+                  <div>
+                    <strong>{{ type.label }}</strong
+                    ><span>{{ type.count }} {{ type.count === 1 ? 'activo real' : 'activos reales' }}</span>
+                  </div>
+                  <div
+                    class="bar"
+                    role="progressbar"
+                    [attr.aria-valuenow]="type.percentage"
+                    aria-valuemin="0"
+                    aria-valuemax="100"
+                  >
+                    <span [style.width.%]="type.percentage"></span>
+                  </div>
+                  <b>{{ type.percentage }}%</b>
+                </div>
+              }
+            </div>
+          }
+        </article>
+        <article class="card type-card">
+          <div class="card-heading">
+            <div>
               <span>Histórico registrado</span>
               <h2>Histórico registrado por tipo</h2>
             </div>
@@ -275,6 +315,7 @@ export class Dashboard implements OnInit {
   protected readonly error = signal('');
   protected readonly metrics = signal<Metric[]>([]);
   protected readonly typeSummary = signal<TypeSummary[]>([]);
+  protected readonly activeTypeSummary = signal<TypeSummary[]>([]);
   protected readonly totalDevices = signal(0);
   protected readonly historicalDevices = signal(0);
   protected readonly totalSims = signal(0);
@@ -443,6 +484,20 @@ export class Dashboard implements OnInit {
                 : 0,
             })),
         );
+         const activeCounts = new Map<string, number>();
+         for (const item of inventoryScope.operational)
+             activeCounts.set(item.tipo.nombre, (activeCounts.get(item.tipo.nombre) ?? 0) + 1);
+         this.activeTypeSummary.set(
+             [...activeCounts.entries()]
+               .sort((a, b) => b[1] - a[1])
+               .map(([label, count]) => ({
+                 label,
+                 count,
+                 percentage: inventoryScope.operational.length
+                   ? Math.round((count * 100) / inventoryScope.operational.length)
+                   : 0,
+               })),
+         );
         this.totalDevices.set(inventoryScope.operational.length);
         this.historicalDevices.set(inventoryScope.historicalTotal);
         this.totalSims.set(r.sims.length);

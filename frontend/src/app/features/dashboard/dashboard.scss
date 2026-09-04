@@ -64,6 +64,9 @@
 .operational-card {
   padding: 1.35rem;
 }
+.dashboard-grid > .type-card {
+  grid-column: 1 / -1;
+}
 .card-heading {
   align-items: start;
   display: flex;
