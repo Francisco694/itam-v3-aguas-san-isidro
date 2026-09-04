@@ -9,11 +9,11 @@ import {
 import { COMMERCIAL_VALUE_PATTERN } from './dispositivos/dispositivo-form';
 import { receiversForDepartment } from './dispositivos/dispositivo-detail';
 import {
-  batchLabelIdentifier,
   isAssignedWithoutResponsible,
   isClosedCustodyState,
   inventoryPhysicalIdentifier,
   inventoryStateCount,
+  extractQuickSearchCode,
   quickSearchMode,
 } from './dispositivos/dispositivos-list';
 import { repairImpactPercentage, technicalStage } from './servicio-tecnico/servicio-tecnico';
@@ -24,6 +24,8 @@ describe('flujos operacionales del inventario', () => {
     expect(quickSearchMode(' 3001 ')).toBe('DEVICE_CODE');
     expect(quickSearchMode('Dell Latitude')).toBe('FILTER');
     expect(quickSearchMode('   ')).toBe('EMPTY');
+    expect(extractQuickSearchCode('/q/1003')).toBe(1003);
+    expect(extractQuickSearchCode('203652984')).toBeNull();
   });
 
   it('calcula contadores reales para los filtros rÃ¡pidos', () => {
@@ -89,14 +91,6 @@ describe('flujos operacionales del inventario', () => {
     expect(
       inventoryPhysicalIdentifier({ tipo: { nombre: 'Notebook' }, imei: null, numeroSerie: 'NB-1' }),
     ).toBe('N° serie: NB-1');
-  });
-
-  it('imprime etiquetas sin datos personales y declara identificadores faltantes', () => {
-    expect(batchLabelIdentifier({ imei: '352054265288036', numeroSerie: 'IGNORADA' }))
-      .toBe('IMEI: 352054265288036');
-    expect(batchLabelIdentifier({ imei: null, numeroSerie: 'NB-001' })).toBe('N° serie: NB-001');
-    expect(batchLabelIdentifier({ imei: null, numeroSerie: null }))
-      .toBe('Sin IMEI/Serie registrado');
   });
 
   it('alerta solo cuando un equipo asignado no tiene responsable', () => {

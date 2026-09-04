@@ -27,6 +27,14 @@ export const quickSearchMode = (query: string): 'DEVICE_CODE' | 'FILTER' | 'EMPT
   return /^\d+$/.test(normalized) ? 'DEVICE_CODE' : 'FILTER';
 };
 
+export const quickSearchNotFoundMessage =
+  'No se encontró ningún equipo con ese código, IMEI, serie, marca o modelo.';
+
+export const extractQuickSearchCode = (query: string): number | null => {
+  const match = query.trim().match(/^\/q\/(\d+)\/?$/i);
+  return match ? Number(match[1]) : null;
+};
+
 export const inventoryStateCount = (
   items: readonly Pick<Dispositivo, 'estado'>[],
   code: string
@@ -274,15 +282,47 @@ export class DispositivosList implements OnInit {
   protected selectState(code:string):void{this.filters.estado=code;void this.router.navigate([], {relativeTo:this.route,queryParams:{estado:code||null},queryParamsHandling:'merge',replaceUrl:true});this.load();}
   protected quickSearch(): void {
     const query = this.quickQuery.trim();
-    const mode = quickSearchMode(query);
-    if (mode === 'EMPTY') return;
-    if (mode === 'DEVICE_CODE') {
+    const qrCode = extractQuickSearchCode(query);
+    if (qrCode !== null) {
       this.quickLoading.set(true);
-      this.service.buscarPorCodigoInventario(Number(query)).subscribe({ next: (item) => { this.quickLoading.set(false); void this.router.navigate(['/dispositivos', item.codigoInventario]); }, error: (error) => { this.quickLoading.set(false); this.toast.error('Activo no encontrado', errorMessage(error)); } });
+      this.service.buscarPorCodigoInventario(qrCode).subscribe({
+        next: (item) => {
+          this.quickLoading.set(false);
+          void this.router.navigate(['/dispositivos', item.codigoInventario]);
+        },
+        error: () => this.searchDevicesByQuickQuery(query)
+      });
       return;
     }
-    this.filters.q = query;
-    this.load();
+    const mode = quickSearchMode(query);
+    if (mode === 'EMPTY') return;
+    this.quickLoading.set(true);
+    if (mode === 'DEVICE_CODE') {
+      this.service.buscarPorCodigoInventario(Number(query)).subscribe({
+        next: (item) => {
+          this.quickLoading.set(false);
+          void this.router.navigate(['/dispositivos', item.codigoInventario]);
+        },
+        error: () => this.searchDevicesByQuickQuery(query)
+      });
+      return;
+    }
+    this.searchDevicesByQuickQuery(query);
+  }
+  private searchDevicesByQuickQuery(query: string): void {
+    this.service.listar({ q: query }).subscribe({
+      next: (items) => {
+        this.quickLoading.set(false);
+        this.items.set(items);
+        const visible = new Set(items.map((item) => item.id));
+        this.selectedIds.update((selected) => new Set([...selected].filter((id) => visible.has(id))));
+        if (!items.length) this.toast.error('Activo no encontrado', quickSearchNotFoundMessage);
+      },
+      error: (error) => {
+        this.quickLoading.set(false);
+        this.toast.error('No se pudo buscar el activo', errorMessage(error));
+      }
+    });
   }
   protected openScannedAsset(target: ItamQrTarget): void {
     this.scannerOpen.set(false);
