@@ -115,7 +115,7 @@ type DeviceAction = 'assign-person' | 'assign-department' | 'return' | 'state' |
             <div><dt>Fecha histórica de entrega</dt><dd>{{ historicalDateLabel() }}</dd></div>
             <div><dt>Registrado en ITAM</dt><dd>{{ device.creadoEn | date:'dd/MM/yyyy HH:mm' }}</dd></div>
           </dl>
-          <section class="physical-label"><span>ETIQUETA FÍSICA</span><app-asset-label [code]="device.codigoInventario" [assetType]="device.tipo.nombre" printLabel="Reimprimir etiqueta" /></section>
+          <section class="physical-label"><span>ETIQUETA FÍSICA</span><app-asset-label [code]="device.codigoInventario" [assetType]="device.tipo.nombre" [brandModel]="(device.marca || '') + (device.modelo ? ' ' + device.modelo : '')" [identifierLabel]="isSmartphone(device) ? 'IMEI' : 'N° serie'" [identifier]="isSmartphone(device) ? device.imei || '' : device.numeroSerie || ''" [detail]="true" printLabel="Reimprimir etiqueta" /></section>
           @if(device.simAsociada){<section class="associated-sim"><strong>SIM asociada #{{ device.simAsociada.codigoInventario }}</strong><span>{{ device.simAsociada.numeroAsociado || 'Sin número telefónico asociado' }} · {{ device.simAsociada.compania || 'Sin operador' }}</span></section>}
         </article>
         <article class="panoramic-column audit-column">
