@@ -46,27 +46,27 @@ interface EmployeeResult {
   template: `
     <app-page-header
       title="Offboarding & Recuperación"
-      subtitle="Busque al colaborador por RUT o nombre para gestionar la devolución de su hardware."
-      eyebrow="Desvinculación y cadena de custodia"
+      subtitle="Busque a la persona por RUT o nombre para recibir sus equipos."
+      eyebrow="Salida de personal y recepción de equipos"
     />
     <section class="offboarding-hero">
       <div class="offboarding-hero__copy">
         <span><svg lucideUserMinus></svg></span>
         <div>
-          <h2>Recuperación de activos tecnológicos</h2>
+          <h2>Recepción de equipos tecnológicos</h2>
           <p>
-            Identifique al colaborador y gestione individualmente cada activo bajo su custodia.
-            Todas las devoluciones quedan registradas en el historial del activo y del colaborador.
+            Identifique a la persona y gestione cada equipo pendiente.
+            Todas las recepciones quedan registradas en el historial del equipo y de la persona.
           </p>
         </div>
       </div>
       <form class="employee-search" [formGroup]="searchForm" (ngSubmit)="search()">
         <svg lucideSearch></svg
-        ><label class="sr-only" for="employee-search">Buscar empleado por RUT o nombre</label
+        ><label class="sr-only" for="employee-search">Buscar persona por RUT o nombre</label
         ><input
           id="employee-search"
           formControlName="query"
-          placeholder="Buscar empleado por RUT o nombre..."
+          placeholder="Buscar persona por RUT o nombre..."
           autocomplete="off"
         /><button class="btn btn--primary" type="submit" [disabled]="searching()">
           {{ searching() ? 'Buscando…' : 'Buscar' }}
@@ -78,14 +78,14 @@ interface EmployeeResult {
       <header>
         <div>
           <span>PANORAMA GLOBAL</span>
-          <h2 id="global-summary-title">Activos pendientes de recuperación</h2>
+          <h2 id="global-summary-title">Equipos pendientes de recepción</h2>
         </div>
-        <p>Custodias vigentes registradas en el inventario, antes de iniciar la búsqueda.</p>
+        <p>Equipos que siguen registrados a nombre de una persona, antes de iniciar la búsqueda.</p>
       </header>
       @if (globalLoading()) {
         <app-view-state
           kind="loading"
-          title="Calculando custodias"
+          title="Calculando equipos pendientes"
           message="Consultando el inventario real…"
         />
       } @else if (globalError()) {
@@ -98,11 +98,11 @@ interface EmployeeResult {
       } @else {
         <div class="offboarding-values global-summary__grid">
           <div>
-            <span>Colaboradores con activos pendientes</span>
+            <span>Personas con equipos pendientes</span>
             <strong>{{ pendingCollaborators() }}</strong>
           </div>
           <div>
-            <span>Activos totales a recuperar</span>
+            <span>Total de equipos por recibir</span>
             <strong>{{ pendingAssetsCount() }}</strong>
           </div>
           <div class="global-summary__value">
@@ -114,13 +114,13 @@ interface EmployeeResult {
     </section>
 
     <section class="card pending-list" aria-labelledby="pending-list-title">
-      <header><div><span>SEGUIMIENTO OPERATIVO</span><h2 id="pending-list-title">PENDIENTES DE RECUPERACIÓN</h2></div></header>
+      <header><div><span>SEGUIMIENTO OPERATIVO</span><h2 id="pending-list-title">EQUIPOS PENDIENTES DE RECEPCIÓN</h2></div></header>
       @if (!globalLoading() && !globalError()) {
         @if (!pendingRows().length) {
           <app-view-state kind="empty" title="Sin equipos por recuperar" message="No hay equipos pendientes de recuperación actualmente." />
         } @else {
           <div class="table-wrap desktop-table"><table class="data-table pending-table">
-            <thead><tr><th>Colaborador</th><th>RUT</th><th>Departamento</th><th>Activos pendientes</th><th>Valor pendiente</th><th>Estado</th><th>Acción</th></tr></thead>
+            <thead><tr><th>Persona</th><th>RUT</th><th>Departamento</th><th>Equipos pendientes</th><th>Valor pendiente</th><th>Estado</th><th>Acción</th></tr></thead>
             <tbody>@for (row of pendingRows(); track row.colaborador.id) {<tr><td><strong>{{ row.colaborador.nombre }}</strong></td><td>{{ row.colaborador.rut }}</td><td>{{ row.colaborador.departamento?.nombre || 'Sin departamento' }}</td><td>{{ row.activosPendientes }}</td><td>{{ clp(row.valorPendiente) }}</td><td><app-status-badge code="PENDIENTE" label="Pendiente" /></td><td><button class="btn btn--secondary btn--small" type="button" (click)="manage(row)">Gestionar</button></td></tr>}</tbody>
           </table></div>
           <div class="mobile-record-list pending-mobile-list">
@@ -150,8 +150,8 @@ interface EmployeeResult {
       <section class="card">
         <app-view-state
           kind="loading"
-          title="Buscando colaboradores"
-          message="Consultando personas y custodias vigentes…"
+          title="Buscando personas"
+          message="Consultando equipos pendientes…"
         />
       </section>
     } @else if (searched() && !selected()) {
@@ -159,7 +159,7 @@ interface EmployeeResult {
         <header>
           <div>
             <span>RESULTADOS</span>
-            <h2>Colaboradores encontrados</h2>
+            <h2>Personas encontradas</h2>
           </div>
           <strong>{{ results().length }}</strong>
         </header>
@@ -168,7 +168,7 @@ interface EmployeeResult {
             <app-view-state
               kind="empty"
               title="Sin coincidencias"
-              message="No encontramos colaboradores con ese nombre o RUT."
+              message="No encontramos personas con ese nombre o RUT."
             />
           </section>
         } @else {
@@ -198,8 +198,8 @@ interface EmployeeResult {
           ← Volver a resultados
         </button>
         <div>
-          <span>RECUPERACIÓN EN CURSO</span>
-          <h2>Recuperar equipos de {{ person.nombre }}</h2>
+          <span>RECEPCIÓN EN CURSO</span>
+          <h2>Recibir equipos de {{ person.nombre }}</h2>
           <p>
             {{ person.rut }} · {{ person.cargo || 'Sin cargo' }} ·
             {{ person.departamento?.nombre || 'Sin departamento' }}
@@ -207,7 +207,7 @@ interface EmployeeResult {
         </div>
         <strong
           >{{ selectedAssets().length }}
-          {{ selectedAssets().length === 1 ? 'activo pendiente' : 'activos pendientes' }}</strong
+          {{ selectedAssets().length === 1 ? 'equipo pendiente' : 'equipos pendientes' }}</strong
         >
       </section>
       <section class="offboarding-values">
@@ -226,8 +226,8 @@ interface EmployeeResult {
           <span><svg lucidePackageCheck></svg></span
           ><app-view-state
             kind="empty"
-            title="No hay colaboradores con activos pendientes"
-            message="Este colaborador no tiene equipos pendientes según el inventario actual."
+            title="No hay personas con equipos pendientes"
+            message="Esta persona no tiene equipos pendientes según el inventario actual."
           />
         </section>
       } @else {
@@ -260,7 +260,7 @@ interface EmployeeResult {
                 >
               </div>
               <button class="btn btn--primary" type="button" (click)="openReceipt(device)">
-                <svg lucideRotateCcw></svg>Resolver activo
+                <svg lucideRotateCcw></svg>Resolver equipo
               </button>
             </article>
           }
@@ -281,8 +281,8 @@ interface EmployeeResult {
           <header class="receipt-dialog__header">
             <span><svg lucideCircleAlert></svg></span>
             <div>
-              <small>CADENA DE CUSTODIA</small>
-              <h2 id="receipt-dialog-title">Resolver recepción</h2>
+              <small>RECEPCIÓN DE EQUIPO</small>
+              <h2 id="receipt-dialog-title">Registrar recepción</h2>
             </div>
             <button
               type="button"
@@ -293,7 +293,7 @@ interface EmployeeResult {
               <svg lucideX></svg>
             </button>
           </header>
-          <p>Activo en revisión:</p>
+          <p>Equipo en revisión:</p>
           <div class="receiving-device">
             <strong
               >{{ device.tipo.nombre }} {{ device.marca || '' }} {{ device.modelo || '' }}</strong
@@ -309,7 +309,7 @@ interface EmployeeResult {
               <option value="PENDIENTE">Pendiente</option>
               <option value="DANADO">Dañado</option>
               <option value="NO_ENTREGADO">No entregado</option>
-              <option value="EXTRAVIADO">Extraviado</option>
+              <option value="EXTRAVIADO">Equipo perdido</option>
               <option value="ROBADO">Reportado como robado/hurtado</option>
             </select>
           </div>

@@ -15,7 +15,7 @@ export class DispositivosService {
     return this.http.get<ApiCollectionResponse<Dispositivo>>(this.url, { params }).pipe(map((r) => r.data));
   }
   resumenGerencial(){return this.http.get<ApiItemResponse<ResumenGerencial>>(`${this.url}/resumen-gerencial`).pipe(map(r=>r.data));}
-  obtener(id: string | number) { return this.item(this.http.get<ApiItemResponse<Dispositivo>>(`${this.url}/${id}`)); }
+  obtener(codigo: string | number) { return this.item(this.http.get<ApiItemResponse<Dispositivo>>(`${this.url}/${codigo}`)); }
   buscarPorCodigoInventario(codigo: number) {
     return this.listar({ q: String(codigo) }).pipe(map((items) => {
       const item = items.find((candidate) => candidate.codigoInventario === codigo);
@@ -32,6 +32,6 @@ export class DispositivosService {
   darBaja(codigo:number,input:DarBajaInput){return this.item(this.http.post<ApiItemResponse<Dispositivo>>(`${this.url}/${codigo}/dar-baja`,input));}
   cambiarEstado(codigo: number, input: CambiarEstadoInput) { return this.item(this.http.post<ApiItemResponse<Dispositivo>>(`${this.url}/${codigo}/cambiar-estado`, input)); }
   historial(codigo: number) { return this.http.get<ApiCollectionResponse<HistorialEvento>>(`${this.url}/${codigo}/historial`).pipe(map((r) => r.data)); }
-  trazabilidad(id: string | number) { return this.http.get<ApiItemResponse<TrazabilidadDispositivo>>(`${this.url}/${id}/trazabilidad`).pipe(map((r) => r.data)); }
+  trazabilidad(codigo: string | number) { return this.http.get<ApiItemResponse<TrazabilidadDispositivo>>(`${this.url}/${codigo}/trazabilidad`).pipe(map((r) => r.data)); }
   private item(request: Observable<ApiItemResponse<Dispositivo>>) { return request.pipe(map((response) => response.data)); }
 }

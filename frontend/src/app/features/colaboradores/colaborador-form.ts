@@ -19,7 +19,7 @@ const rutValidator: ValidatorFn = (control) =>
   template: `
     <app-page-header
       [title]="id ? 'Editar colaborador' : 'Nuevo colaborador'"
-      subtitle="Información real utilizada para custodias y asignaciones."
+      subtitle="Información usada para entregar equipos y líneas corporativas."
     />
     @if (loading()) {
       <section class="card"><app-view-state kind="loading" title="Cargando colaborador" /></section>
@@ -67,7 +67,7 @@ const rutValidator: ValidatorFn = (control) =>
           </div>
           <div class="field span-2"><label for="localidad">Localidad</label><input id="localidad" formControlName="localidad" maxlength="120" /></div>
           <div class="field span-2"><label for="observaciones">Observaciones</label><textarea id="observaciones" formControlName="observaciones"></textarea></div>
-          <label class="checkbox span-2"><input type="checkbox" formControlName="activo" /> Colaborador activo</label>
+          <label class="checkbox span-2"><input type="checkbox" formControlName="activo" /> Persona habilitada</label>
         </div>
         <div class="form-actions">
           <a class="btn btn--secondary" routerLink="/colaboradores">Cancelar</a>

@@ -22,7 +22,7 @@ import { errorMessage } from '../../shared/utils/error-message';
   template: `
     <app-page-header
       title="Detalle operacional del departamento"
-      subtitle="Custodia directa y activos personales relacionados, sin mezclar responsabilidades."
+      subtitle="Equipos relacionados con el departamento, sin mezclar responsabilidades."
       ><a class="btn btn--secondary" routerLink="/departamentos">Volver</a></app-page-header
     >
     @if (loading()) {
@@ -52,10 +52,10 @@ import { errorMessage } from '../../shared/utils/error-message';
       </section>
       <section class="department-metrics">
         <article class="card">
-          <span>Custodia directa</span><strong>{{ info.resumen.custodiaDirecta }}</strong>
+          <span>Equipos bajo responsabilidad directa</span><strong>{{ info.resumen.custodiaDirecta }}</strong>
         </article>
         <article class="card">
-          <span>Con colaboradores</span><strong>{{ info.resumen.conColaboradores }}</strong>
+          <span>Con personas responsables</span><strong>{{ info.resumen.conColaboradores }}</strong>
         </article>
         <article class="card">
           <span>Total relacionado</span><strong>{{ info.resumen.totalRelacionado }}</strong>
@@ -63,39 +63,39 @@ import { errorMessage } from '../../shared/utils/error-message';
       </section>
       <section class="custody-role-guide" aria-label="Roles de la cadena de custodia">
         <article>
-          <span>01 · CUSTODIA</span>
+          <span>01 · RESPONSABILIDAD</span>
           <strong>Departamento</strong>
-          <p>Unidad institucional responsable del activo compartido.</p>
+          <p>Unidad institucional responsable del equipo compartido.</p>
         </article>
         <article>
           <span>02 · RECEPCIÓN FÍSICA</span>
           <strong>Persona que recepciona</strong>
-          <p>Colaborador que confirma la entrega física para el departamento.</p>
+          <p>Persona que confirma la entrega física para el departamento.</p>
         </article>
         <article>
           <span>03 · REGISTRO</span>
           <strong>Responsable TI</strong>
-          <p>Persona de TI que ejecuta la operación y queda registrada en la trazabilidad.</p>
+          <p>Persona de TI que realiza la operación y queda registrada en el historial.</p>
         </article>
       </section>
       <section class="card inventory-section">
         <header>
           <svg lucidePackage></svg>
           <div>
-            <h3>Activos asignados directamente al departamento</h3>
-            <p>Custodia institucional compartida o general.</p>
+            <h3>Equipos entregados directamente al departamento</h3>
+            <p>Responsabilidad institucional compartida o general.</p>
           </div>
         </header>
         @if (!info.custodiaDirecta.length) {
           <app-view-state
             kind="empty"
-            title="Sin custodia directa"
-            message="No hay activos asignados directamente a este departamento."
+            title="Sin equipos directos"
+            message="No hay equipos entregados directamente a este departamento."
           />
         } @else {
           <div class="asset-grid">
             @for (device of info.custodiaDirecta; track device.id) {
-              <a class="asset-row" [routerLink]="['/dispositivos', device.id]"
+              <a class="asset-row" [routerLink]="['/dispositivos', device.codigoInventario]"
                 ><div>
                   <strong
                     >{{ device.tipo.nombre }} {{ device.marca || '' }}
@@ -104,7 +104,7 @@ import { errorMessage } from '../../shared/utils/error-message';
                     >Código {{ device.codigoInventario }} · SN {{ device.numeroSerie || '—' }}</span
                   >
                   <div class="custody-detail">
-                    <span><b>Custodio:</b> {{ info.departamento.nombre }}</span>
+                    <span><b>Responsable:</b> {{ info.departamento.nombre }}</span>
                     <span
                       ><b>Recepciona:</b> {{ device.recibidoPor?.nombre || 'No informado' }}</span
                     >
@@ -121,15 +121,15 @@ import { errorMessage } from '../../shared/utils/error-message';
         <header>
           <svg lucideUsers></svg>
           <div>
-            <h3>Activos de colaboradores del departamento</h3>
-            <p>El custodio directo es cada colaborador; el departamento es un dato derivado.</p>
+            <h3>Equipos de las personas del departamento</h3>
+            <p>La persona responsable es quien tiene el equipo; el departamento solo sirve como referencia.</p>
           </div>
         </header>
         @if (!info.activosColaboradores.length) {
           <app-view-state
             kind="empty"
-            title="Sin activos personales"
-            message="Los colaboradores del departamento no tienen activos asignados."
+            title="Sin equipos personales"
+            message="Las personas del departamento no tienen equipos asignados."
           />
         } @else {
           @for (group of grouped(info.activosColaboradores); track group.id) {
@@ -143,7 +143,7 @@ import { errorMessage } from '../../shared/utils/error-message';
               </header>
               <div class="asset-grid">
                 @for (device of group.assets; track device.id) {
-                  <a class="asset-row" [routerLink]="['/dispositivos', device.id]"
+                  <a class="asset-row" [routerLink]="['/dispositivos', device.codigoInventario]"
                     ><div>
                       <strong
                         >{{ device.tipo.nombre }} {{ device.marca || '' }}

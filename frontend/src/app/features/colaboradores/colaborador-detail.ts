@@ -93,7 +93,7 @@ export const suggestedValidationAction = (classification: ClasificacionConciliad
                 <th>Código ITAM</th><th>Marca / modelo</th><th>IMEI o serie</th><th>Fecha de asignación</th><th>Estado</th><th>Clasificación</th><th>Motivo</th>
               </tr></thead><tbody>
                 @for (asset of inventoryData.actuales; track asset.dispositivoId) { <tr>
-                  <td><a [routerLink]="['/dispositivos', asset.dispositivoId]">{{ asset.codigoItam }}</a></td>
+                  <td><a [routerLink]="['/dispositivos', asset.codigoItam]">{{ asset.codigoItam }}</a></td>
                   <td><strong>{{ asset.marca || asset.tipoDispositivo }} {{ asset.modelo || '' }}</strong><span class="cell-secondary">{{ asset.tipoDispositivo }}</span></td>
                   <td><span class="identity-label">{{ identifier(asset).label }}</span><span class="code">{{ identifier(asset).value }}</span></td>
                   <td>{{ asset.fechaAsignacion | date: 'dd/MM/yyyy' }}</td>
@@ -114,7 +114,7 @@ export const suggestedValidationAction = (classification: ClasificacionConciliad
                 <th>Código ITAM</th><th>Marca / modelo</th><th>IMEI o serie</th><th>Fecha de asignación</th><th>Fecha de salida</th><th>Motivo histórico</th><th>Clasificación</th>
               </tr></thead><tbody>
                 @for (asset of inventoryData.historicos; track asset.dispositivoId) { <tr>
-                  <td><a [routerLink]="['/dispositivos', asset.dispositivoId]">{{ asset.codigoItam }}</a></td>
+                  <td><a [routerLink]="['/dispositivos', asset.codigoItam]">{{ asset.codigoItam }}</a></td>
                   <td><strong>{{ asset.marca || asset.tipoDispositivo }} {{ asset.modelo || '' }}</strong><span class="cell-secondary">{{ asset.tipoDispositivo }}</span></td>
                   <td><span class="identity-label">{{ identifier(asset).label }}</span><span class="code">{{ identifier(asset).value }}</span></td>
                   <td>{{ asset.fechaAsignacion | date: 'dd/MM/yyyy' }}</td>
@@ -135,7 +135,7 @@ export const suggestedValidationAction = (classification: ClasificacionConciliad
                 <th>Código ITAM / evidencia</th><th>Equipo</th><th>Problema detectado</th><th>Motivo</th><th>Acción sugerida</th>
               </tr></thead><tbody>
                 @for (asset of inventoryData.pendientes; track asset.dispositivoId) { <tr>
-                  <td><a [routerLink]="['/dispositivos', asset.dispositivoId]">{{ asset.codigoItam }}</a><span class="cell-secondary">{{ identifier(asset).value }}</span></td>
+                  <td><a [routerLink]="['/dispositivos', asset.codigoItam]">{{ asset.codigoItam }}</a><span class="cell-secondary">{{ identifier(asset).value }}</span></td>
                   <td><strong>{{ asset.marca || asset.tipoDispositivo }} {{ asset.modelo || '' }}</strong><span class="cell-secondary">{{ asset.tipoDispositivo }}</span></td>
                   <td><span class="reconciliation-badge" [class.conflict]="asset.clasificacionConciliada === 'CONFLICTO_DATOS'" [class.pending]="asset.clasificacionConciliada === 'PENDIENTE_VALIDACION'">{{ label(asset.clasificacionConciliada) }}</span></td>
                   <td class="reason-cell">{{ asset.motivoConciliacion }}</td>

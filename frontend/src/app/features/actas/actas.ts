@@ -15,10 +15,10 @@ import { errorMessage } from '../../shared/utils/error-message';
   imports: [DatePipe, RouterLink, ActaPreview, ComprobanteDevolucionPreview, PageHeader, ViewState],
   template: `<app-page-header
       title="Actas de entrega"
-      subtitle="Documentos persistidos y numerados de asignaciones."
-      eyebrow="Custodia documental"
+      subtitle="Documentos registrados y numerados de entregas."
+      eyebrow="Documentos de entrega"
       ><a class="btn btn--secondary" routerLink="/servicio-tecnico"
-        >Servicio técnico</a
+        >Revisión técnica</a
       ></app-page-header
     >
     @if (loading()) {
@@ -47,7 +47,7 @@ import { errorMessage } from '../../shared/utils/error-message';
                 <th>Equipos</th>
                 <th>Valor total</th>
                 <th>Estado</th>
-                <th>Devolución</th>
+                <th>Recepción</th>
                 <th>Documentos</th>
               </tr>
             </thead>
@@ -87,7 +87,7 @@ import { errorMessage } from '../../shared/utils/error-message';
                 <div><dt>Destinatario</dt><dd>{{ acta.colaborador?.nombre || acta.departamento?.nombre }}</dd></div>
                 <div><dt>Equipos</dt><dd>{{ acta.dispositivos.length }}</dd></div>
                 <div><dt>Valor total</dt><dd>{{ clp(acta.valorTotal) }}</dd></div>
-                <div><dt>Devolucion</dt><dd>{{ returnedCount(acta) }} de {{ acta.dispositivos.length }}</dd></div>
+                <div><dt>Recepción</dt><dd>{{ returnedCount(acta) }} de {{ acta.dispositivos.length }}</dd></div>
               </dl>
               <footer class="mobile-record-card__actions">
                 <button class="btn btn--primary" type="button" (click)="selected.set(acta)">Ver acta</button>
