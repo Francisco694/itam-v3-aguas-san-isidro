@@ -128,7 +128,7 @@ type DeviceAction = 'assign-person' | 'assign-department' | 'return' | 'state' |
           <div class="column-title"><span>03</span><div><small>GESTIÓN</small><h3>Acciones del equipo</h3></div></div>
           @if (!action()) {
             <div class="operation-list">
-              <button type="button" [disabled]="terminal() || device.tipoCustodia!=='NONE'" (click)="open('assign-person')"><svg lucideUserCheck></svg><span>Entregar equipo<small>A un trabajador habilitado</small></span></button>
+              <button type="button" [disabled]="terminal() || device.tipoCustodia!=='NONE'" (click)="open('assign-person')"><svg lucideUserCheck></svg><span>Entregar equipo<small>A un colaborador habilitado</small></span></button>
               @if((device.colaborador || device.departamento) && !terminal()){<button type="button" class="operation-return" (click)="open('return')"><svg lucideRotateCcw></svg><span>Recibir en bodega<small>Registra recepción y revisión</small></span></button>}
               <button type="button" [disabled]="terminal()" (click)="open('service')"><svg lucideWrench></svg><span>Enviar a revisión técnica<small>Crear orden y bloquear movimientos</small></span></button>
               <button type="button" [disabled]="!stateExists('EXTRAVIADO')" (click)="openState('EXTRAVIADO')"><svg lucideShieldAlert></svg><span>Reportar equipo perdido<small>Requiere confirmación</small></span></button>
@@ -195,7 +195,7 @@ export class DispositivoDetail implements OnInit {
   protected historicalDate(): string | null { return historicalDeliveryDate(this.history()); }
   protected historicalDateLabel(): string { return historicalDeliveryDateLabel(this.history()); }
   protected originLabel(origin: 'HISTORIAL'|'BAJA'|'COMPROBANTE'): string { return {HISTORIAL:'Historial',BAJA:'Registro de baja',COMPROBANTE:'Comprobante'}[origin]; }
-  protected eventLabel(event: string): string { return { ALTA_DISPOSITIVO: 'Equipo incorporado al inventario', ASIGNAR_COLABORADOR: 'Equipo entregado a un trabajador', CONCILIAR_DISPOSITIVO_EXISTENTE: 'Registro actualizado desde inventario anterior', DEVOLVER_A_BODEGA: 'Equipo recibido en bodega', CAMBIAR_ESTADO: 'Situación del equipo actualizada', REPORTAR_EXTRAVIO: 'Equipo reportado como perdido', DAR_DE_BAJA: 'Equipo retirado del inventario' }[event] || event.replaceAll('_', ' '); }
+  protected eventLabel(event: string): string { return { ALTA_DISPOSITIVO: 'Equipo incorporado al inventario', ASIGNAR_COLABORADOR: 'Equipo entregado a un colaborador', CONCILIAR_DISPOSITIVO_EXISTENTE: 'Registro actualizado desde inventario anterior', DEVOLVER_A_BODEGA: 'Equipo recibido en bodega', CAMBIAR_ESTADO: 'Situación del equipo actualizada', REPORTAR_EXTRAVIO: 'Equipo reportado como perdido', DAR_DE_BAJA: 'Equipo retirado del inventario' }[event] || event.replaceAll('_', ' '); }
   private codigo = 0;
   private id = '';
   protected readonly servicePrintRequested=signal(false);
@@ -216,7 +216,7 @@ export class DispositivoDetail implements OnInit {
     const value = event.detalle[key];
     if (!value || typeof value !== 'object') return '';
     const custody = value as { tipo?: string; nombre?: string };
-    if (custody.tipo === 'COLABORADOR') return `Trabajador: ${custody.nombre || 'sin nombre'}`;
+    if (custody.tipo === 'COLABORADOR') return `Colaborador: ${custody.nombre || 'sin nombre'}`;
     if (custody.tipo === 'DEPARTAMENTO') return `Departamento: ${custody.nombre || 'sin nombre'}`;
     return 'Sin responsable';
   }
