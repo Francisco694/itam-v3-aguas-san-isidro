@@ -127,7 +127,7 @@ export const suggestedValidationAction = (classification: ClasificacionConciliad
           </section>
 
           <section class="card collaborator-assets pending-assets">
-            <header><div><span>REVISIÓN MANUAL</span><h2>Pendientes / datos contradictorios</h2><p>Información insuficiente o contradictoria que debe ser revisada por una persona.</p></div></header>
+            <header><div><span>REVISIÓN MANUAL</span><h2>Pendientes / datos contradictorios</h2><p>Información insuficiente o contradictoria que debe ser revisada por un colaborador.</p></div></header>
             @if (!inventoryData.pendientes.length) {
               <app-view-state kind="empty" title="Sin pendientes ni datos contradictorios" />
             } @else {

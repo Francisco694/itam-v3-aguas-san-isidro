@@ -16,7 +16,7 @@ import { errorMessage } from '../../shared/utils/error-message';
   template: `
     <app-page-header
       title="Colaboradores"
-      subtitle="Personas habilitadas para recibir equipos y líneas corporativas."
+      subtitle="Colaboradores habilitados para recibir equipos y líneas corporativas."
     >
       <a class="btn btn--primary" routerLink="nuevo">+ Nuevo colaborador</a>
     </app-page-header>
@@ -65,7 +65,7 @@ import { errorMessage } from '../../shared/utils/error-message';
       } @else {
         <div class="table-wrap desktop-table">
           <table class="data-table">
-            <thead><tr><th>Persona</th><th>RUT</th><th>Cargo</th><th>Departamento</th><th>Estado</th><th></th></tr></thead>
+            <thead><tr><th>Colaborador</th><th>RUT</th><th>Cargo</th><th>Departamento</th><th>Estado</th><th></th></tr></thead>
             <tbody>
               @for (item of items(); track item.id) {
                 <tr>
