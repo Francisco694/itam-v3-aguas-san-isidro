@@ -65,7 +65,7 @@ import { errorMessage } from '../../shared/utils/error-message';
       } @else {
         <div class="table-wrap desktop-table">
           <table class="data-table">
-            <thead><tr><th>Colaborador</th><th>RUT</th><th>Cargo</th><th>Departamento</th><th>Estado</th><th></th></tr></thead>
+            <thead><tr><th>Nombre</th><th>RUT</th><th>Cargo</th><th>Departamento</th><th class="status-column">Estado</th><th class="actions-column">Acciones</th></tr></thead>
             <tbody>
               @for (item of items(); track item.id) {
                 <tr>
@@ -73,8 +73,8 @@ import { errorMessage } from '../../shared/utils/error-message';
                   <td>{{ item.rut }}</td>
                   <td>{{ item.cargo || 'Sin cargo' }}</td>
                   <td>{{ item.departamento?.nombre || 'Sin departamento' }}</td>
-                  <td><app-status-badge [code]="item.activo" [label]="item.activo ? 'Activo' : 'Inactivo'" /></td>
-                  <td><div class="actions"><a class="btn btn--ghost btn--small" [routerLink]="[item.id]">Ver</a><a class="btn btn--ghost btn--small" [routerLink]="[item.id,'editar']">Editar</a>@if (item.activo) { <button class="btn btn--danger btn--small" type="button" (click)="deactivate(item)">Desactivar</button> }</div></td>
+                  <td class="status-column"><app-status-badge [code]="item.activo" [label]="item.activo ? 'Activo' : 'Inactivo'" /></td>
+                  <td class="actions-column"><div class="actions"><a class="btn btn--ghost btn--small" [routerLink]="[item.id]">Ver</a><a class="btn btn--ghost btn--small" [routerLink]="[item.id,'editar']">Editar</a>@if (item.activo) { <button class="btn btn--danger btn--small" type="button" (click)="deactivate(item)">Desactivar</button> }</div></td>
                 </tr>
               }
             </tbody>
@@ -103,7 +103,7 @@ import { errorMessage } from '../../shared/utils/error-message';
       }
     </section>
   `,
-  styles: [`.link{color:var(--color-primary);text-decoration:none}@media(max-width:767px){.mobile-record-card__actions:has(.btn--danger){grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:560px){.mobile-record-card__actions:has(.btn--danger){grid-template-columns:1fr}}`]
+  styles: [`.link{color:var(--color-primary);text-decoration:none}.data-table th:first-child,.data-table td:first-child{text-align:left}.data-table th:nth-child(2),.data-table td:nth-child(2){min-width:8rem}.data-table th:nth-child(3),.data-table td:nth-child(3){min-width:10rem}.data-table th:nth-child(4),.data-table td:nth-child(4){min-width:11rem}.data-table .status-column{text-align:center;white-space:nowrap}.data-table .actions-column{text-align:right;white-space:nowrap}.actions{justify-content:flex-end}@media(max-width:767px){.mobile-record-card__actions:has(.btn--danger){grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:560px){.mobile-record-card__actions:has(.btn--danger){grid-template-columns:1fr}}`]
 })
 export class ColaboradoresList implements OnInit {
   private readonly service = inject(ColaboradoresService);
