@@ -6,6 +6,7 @@ import { LucideTriangleAlert } from '@lucide/angular';
 import { EstadoOrdenServicio, OrdenServicio } from '../../core/models/itam.models';
 import { ServicioTecnicoService } from '../../core/services/servicio-tecnico.service';
 import { AuthService } from '../../core/services/auth.service';
+import { ConfirmationService } from '../../core/services/confirmation.service';
 import { ToastService } from '../../core/services/toast.service';
 import { PageHeader } from '../../shared/components/page-header/page-header';
 import { ViewState } from '../../shared/components/view-state/view-state';
@@ -43,18 +44,18 @@ interface FlowStage {
   selector: 'app-servicio-tecnico',
   imports: [DatePipe, ReactiveFormsModule, RouterLink, PageHeader, ViewState, LucideTriangleAlert],
   template: `<app-page-header
-      title="Servicio Técnico"
-      subtitle="Diagnóstico, cotización, decisión y recepción de reparaciones."
-      eyebrow="Ciclo de vida técnico"
+      title="Revisión técnica"
+      subtitle="Seguimiento de equipos enviados, diagnóstico, resultado y finalización."
+      eyebrow="Seguimiento de equipos"
       ><a class="btn btn--secondary" routerLink="/actas">Ver actas</a></app-page-header
     >
     @if (loading()) {
-      <section class="card"><app-view-state kind="loading" title="Cargando órdenes" /></section>
+      <section class="card"><app-view-state kind="loading" title="Cargando revisiones" /></section>
     } @else if (error()) {
       <section class="card">
         <app-view-state
           kind="error"
-          title="No se pudieron cargar las órdenes"
+          title="No se pudieron cargar las revisiones"
           [message]="error()"
           (retry)="load()"
         />
@@ -65,15 +66,15 @@ interface FlowStage {
           <header>
             <div>
               <span>SEGUIMIENTO</span>
-              <h2>Órdenes de servicio</h2>
+              <h2>Revisiones técnicas</h2>
             </div>
             <strong>{{ orders().length }}</strong>
           </header>
           @if (!orders().length) {
             <app-view-state
               kind="empty"
-              title="Sin órdenes técnicas"
-              message="Las órdenes se crean desde la ficha del equipo."
+              title="Sin revisiones técnicas"
+              message="Los envíos se registran desde la ficha del equipo."
             />
           }
           @for (order of orders(); track order.id) {
@@ -98,14 +99,14 @@ interface FlowStage {
           <article class="card order-detail">
             <header>
               <div>
-                <span>ORDEN #{{ order.id }}</span>
+                <span>REVISIÓN #{{ order.id }}</span>
                 <h2>{{ order.dispositivo.tipo }} {{ order.dispositivo.codigoInventario }}</h2>
               </div>
               <b [class]="'state-pill state-pill--' + statusTone(order.estado)">{{
                 statusLabel(order.estado)
               }}</b>
             </header>
-            <ol class="stage-flow" aria-label="Progreso de la orden técnica">
+            <ol class="stage-flow" aria-label="Progreso de la revisión técnica">
               @for (stage of stages(order.estado); track stage.label) {
                 <li [class]="'service-stage service-stage--' + stage.tone">
                   <span aria-hidden="true"></span>
@@ -115,15 +116,15 @@ interface FlowStage {
             </ol>
             <dl class="order-data">
               <div>
-                <dt>Falla reportada</dt>
+                <dt>Motivo del envío</dt>
                 <dd>{{ order.fallaReportada }}</dd>
               </div>
               <div>
-                <dt>Proveedor</dt>
+                <dt>Taller / proveedor</dt>
                 <dd>{{ order.proveedor || '—' }}</dd>
               </div>
               <div>
-                <dt>Fecha envío</dt>
+                <dt>Fecha de envío</dt>
                 <dd>{{ order.fechaEnvio | date: 'dd/MM/yyyy HH:mm' }}</dd>
               </div>
               <div>
@@ -181,8 +182,8 @@ interface FlowStage {
               }
             </section>
             <section class="temporary-panel">
-              <header><div><span>CUSTODIA Y CONTINUIDAD</span><h3>Equipo temporal</h3></div></header>
-              <p>Responsable al ingreso: <strong>{{ order.custodiaAlIngreso?.colaborador?.nombre || order.custodiaAlIngreso?.departamento?.nombre || 'Sin responsable' }}</strong>. La recepción física por TI no crea una segunda entrega.</p>
+              <header><div><span>CONTINUIDAD OPERATIVA</span><h3>Equipo temporal</h3></div></header>
+              <p>Responsable al momento del envío: <strong>{{ order.custodiaAlIngreso?.colaborador?.nombre || order.custodiaAlIngreso?.departamento?.nombre || 'Sin responsable' }}</strong>. La recepción física por TI no crea una segunda entrega.</p>
               @if(order.entregasTemporales.length){@for(delivery of order.entregasTemporales;track delivery.id){<article class="temporary-item"><div><strong>{{delivery.dispositivo.tipo}} {{delivery.dispositivo.codigoInventario}}</strong><small>{{delivery.colaborador.nombre}} · {{delivery.fechaEntrega|date:'dd/MM/yyyy HH:mm'}}</small></div><span class="state-pill">{{delivery.estado==='ABIERTA'?'En uso':'Devuelto'}}</span></article>@if(delivery.estado==='ABIERTA'){<form [formGroup]="temporaryCloseForm" (ngSubmit)="closeTemporary(order,delivery.id)"><div class="field"><label>Responsable TI *</label><input formControlName="responsable" readonly /></div><div class="field"><label>Observaciones de devolución</label><textarea formControlName="observaciones"></textarea></div><button class="btn btn--secondary" [disabled]="submitting()">Registrar devolución temporal</button></form>}}}
               @if(!openTemporary(order) && order.custodiaAlIngreso?.colaborador && technicalStage(order.estado)!=='READ_ONLY'){
                 <form [formGroup]="temporaryForm" (ngSubmit)="deliverTemporary(order)"><div class="notice notice--info">Este equipo temporal conserva su propio código y debe estar disponible.</div><div class="field"><label>Código ITAM del equipo temporal *</label><input type="number" min="1" formControlName="dispositivoCodigo" /></div><div class="field"><label>Responsable TI *</label><input formControlName="responsable" readonly /></div><div class="field"><label>Observaciones</label><textarea formControlName="observaciones"></textarea></div><button class="btn btn--secondary" [disabled]="submitting()">Entregar equipo temporal</button></form>
@@ -190,38 +191,38 @@ interface FlowStage {
             </section>
             @if (order.estado === 'PENDIENTE_DIAGNOSTICO') {
               <form [formGroup]="quoteForm" (ngSubmit)="quote(order)">
-                <h3>Registrar cotización</h3>
+                <h3>Registrar diagnóstico</h3>
                 <div class="field">
-                  <label>Proveedor</label><input formControlName="proveedor" />
+                  <label>Taller / proveedor</label><input formControlName="proveedor" />
                 </div>
                 <div class="field">
                   <label>Diagnóstico *</label><textarea formControlName="diagnostico"></textarea>
                 </div>
                 <div class="field">
-                  <label>Descripción reparación *</label
+                  <label>Resultado o reparación propuesta *</label
                   ><textarea formControlName="descripcionReparacion"></textarea>
                 </div>
                 <div class="field">
-                  <label>Monto cotizado CLP *</label
+                  <label>Costo estimado de reparación CLP *</label
                   ><input type="number" min="0" formControlName="montoCotizacion" />
                 </div>
                 <div class="field">
                   <label>Responsable TI *</label><input formControlName="responsable" readonly />
                 </div>
                 <button class="btn btn--primary" [disabled]="submitting()">
-                  Guardar cotización
+                  Registrar diagnóstico
                 </button>
               </form>
             }
             @if (order.estado === 'COTIZACION_RECIBIDA') {
               <section class="quote-summary">
-                <span>Cotización recibida</span><strong>{{ clp(order.montoCotizacion) }}</strong>
+                <span>Diagnóstico registrado</span><strong>{{ clp(order.montoCotizacion) }}</strong>
                 <p>{{ order.diagnostico }}</p>
               </section>
               <form [formGroup]="decisionForm" (ngSubmit)="decide(order)">
-                <h3>Decisión responsable</h3>
+                <h3>Registrar resultado</h3>
                 <div class="field">
-                  <label>Decisión *</label
+                  <label>Resultado *</label
                   ><select formControlName="decision" (change)="decisionChanged()">
                     <option value="APROBAR">Aprobar reparación</option>
                     <option value="RECHAZAR">Rechazar reparación</option>
@@ -260,7 +261,7 @@ interface FlowStage {
                   <label>Responsable TI *</label><input formControlName="responsable" readonly />
                 </div>
                 <button class="btn btn--primary" [disabled]="submitting()">
-                  Registrar decisión
+                  Registrar resultado
                 </button>
               </form>
             }
@@ -270,22 +271,23 @@ interface FlowStage {
               order.estado === 'REPARACION_TERMINADA'
             ) {
               <form [formGroup]="closeForm" (ngSubmit)="close(order)">
-                <h3>Recepción y cierre</h3>
+                <h3>Finalizar revisión</h3>
                 <div class="field">
-                  <label>Costo final CLP *</label
+                  <label>Costo de reparación CLP *</label
                   ><input type="number" min="0" formControlName="costoFinal" />
                 </div>
                 <div class="field">
-                  <label>Fecha retorno</label
+                  <label>Fecha de retorno</label
                   ><input type="datetime-local" formControlName="fechaRetorno" />
                 </div>
                 <div class="field">
-                  <label>Resultado *</label><textarea formControlName="resultado"></textarea>
+                  <label>Resultado final *</label><textarea formControlName="resultado"></textarea>
                 </div>
                 <div class="field">
                   <label>Responsable TI *</label><input formControlName="responsable" readonly />
                 </div>
-                <button class="btn btn--primary" [disabled]="submitting()">Cerrar y recibir</button>
+                <div class="notice notice--info">La revisión técnica quedará registrada en el historial del equipo.</div>
+                <button class="btn btn--primary" [disabled]="submitting()">Finalizar revisión</button>
               </form>
             }
             @if (technicalStage(order.estado) === 'READ_ONLY') {
@@ -295,7 +297,7 @@ interface FlowStage {
                   {{
                     order.resultado ||
                       order.observacionDecision ||
-                      'La orden no requiere acciones pendientes.'
+                      'La revisión no requiere acciones pendientes.'
                   }}
                 </p>
               </section>
