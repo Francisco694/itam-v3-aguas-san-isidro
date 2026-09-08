@@ -182,16 +182,17 @@ interface FlowStage {
               }
             </section>
             <section class="temporary-panel">
-              <header><div><span>CONTINUIDAD OPERATIVA</span><h3>Equipo temporal</h3></div></header>
+              <header><div><span>CONTINUIDAD OPERATIVA</span><h3>Equipo de reemplazo</h3></div></header>
+              <p>Solo si es necesario.</p>
               <p>Responsable al momento del envío: <strong>{{ order.custodiaAlIngreso?.colaborador?.nombre || order.custodiaAlIngreso?.departamento?.nombre || 'Sin responsable' }}</strong>. La recepción física por TI no crea una segunda entrega.</p>
-              @if(order.entregasTemporales.length){@for(delivery of order.entregasTemporales;track delivery.id){<article class="temporary-item"><div><strong>{{delivery.dispositivo.tipo}} {{delivery.dispositivo.codigoInventario}}</strong><small>{{delivery.colaborador.nombre}} · {{delivery.fechaEntrega|date:'dd/MM/yyyy HH:mm'}}</small></div><span class="state-pill">{{delivery.estado==='ABIERTA'?'En uso':'Devuelto'}}</span></article>@if(delivery.estado==='ABIERTA'){<form [formGroup]="temporaryCloseForm" (ngSubmit)="closeTemporary(order,delivery.id)"><div class="field"><label>Responsable TI *</label><input formControlName="responsable" readonly /></div><div class="field"><label>Observaciones de devolución</label><textarea formControlName="observaciones"></textarea></div><button class="btn btn--secondary" [disabled]="submitting()">Registrar devolución temporal</button></form>}}}
+              @if(order.entregasTemporales.length){@for(delivery of order.entregasTemporales;track delivery.id){<article class="temporary-item"><div><strong>{{delivery.dispositivo.tipo}} {{delivery.dispositivo.codigoInventario}}</strong><small>{{delivery.colaborador.nombre}} · {{delivery.fechaEntrega|date:'dd/MM/yyyy HH:mm'}}</small></div><span class="state-pill">{{delivery.estado==='ABIERTA'?'En uso':'Devuelto'}}</span></article>@if(delivery.estado==='ABIERTA'){<form [formGroup]="temporaryCloseForm" (ngSubmit)="closeTemporary(order,delivery.id)"><div class="field"><label>Responsable TI *</label><input formControlName="responsable" readonly /></div><div class="field"><label>Observaciones de devolución</label><textarea formControlName="observaciones"></textarea></div><button class="btn btn--secondary" [disabled]="submitting()">Registrar devolución de reemplazo</button></form>}}}
               @if(!openTemporary(order) && order.custodiaAlIngreso?.colaborador && technicalStage(order.estado)!=='READ_ONLY'){
-                <form [formGroup]="temporaryForm" (ngSubmit)="deliverTemporary(order)"><div class="notice notice--info">Este equipo temporal conserva su propio código y debe estar disponible.</div><div class="field"><label>Código ITAM del equipo temporal *</label><input type="number" min="1" formControlName="dispositivoCodigo" /></div><div class="field"><label>Responsable TI *</label><input formControlName="responsable" readonly /></div><div class="field"><label>Observaciones</label><textarea formControlName="observaciones"></textarea></div><button class="btn btn--secondary" [disabled]="submitting()">Entregar equipo temporal</button></form>
+                <form [formGroup]="temporaryForm" (ngSubmit)="deliverTemporary(order)"><div class="notice notice--info">Este equipo de reemplazo conserva su propio código y debe estar disponible.</div><div class="field"><label>Código ITAM del equipo de reemplazo *</label><input type="number" min="1" formControlName="dispositivoCodigo" /></div><div class="field"><label>Responsable TI *</label><input formControlName="responsable" readonly /></div><div class="field"><label>Observaciones</label><textarea formControlName="observaciones"></textarea></div><button class="btn btn--secondary" [disabled]="submitting()">Entregar equipo de reemplazo</button></form>
               }
             </section>
             @if (order.estado === 'PENDIENTE_DIAGNOSTICO') {
               <form [formGroup]="quoteForm" (ngSubmit)="quote(order)">
-                <h3>Registrar diagnóstico</h3>
+                <h3>Diagnóstico y cotización</h3>
                 <div class="field">
                   <label>Taller / proveedor</label><input formControlName="proveedor" />
                 </div>
@@ -220,7 +221,7 @@ interface FlowStage {
                 <p>{{ order.diagnostico }}</p>
               </section>
               <form [formGroup]="decisionForm" (ngSubmit)="decide(order)">
-                <h3>Registrar resultado</h3>
+                <h3>Resultado de la revisión</h3>
                 <div class="field">
                   <label>Resultado *</label
                   ><select formControlName="decision" (change)="decisionChanged()">

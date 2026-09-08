@@ -1,27 +1,27 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseDispositivoId } from "./dispositivos.controller";
+import { parseCodigoItam } from "./dispositivos.controller";
 import { construirTrazabilidadDispositivo } from "./dispositivos.service";
 import type {
   DispositivoResumen,
   EvidenciaResponsableRow
 } from "./dispositivos.types";
 
-test("detalle: acepta solamente un identificador interno válido", () => {
-  assert.equal(parseDispositivoId("1285"), 1285);
+test("detalle: acepta un código ITAM válido", () => {
+  assert.equal(parseCodigoItam("1001"), 1001);
 });
 
 test("detalle: rechaza un IMEI antes de consultar PostgreSQL", () => {
   assert.throws(
-    () => parseDispositivoId("3578597107238037"),
-    /Identificador de dispositivo inválido/
+    () => parseCodigoItam("3578597107238037"),
+    /Código ITAM inválido\./
   );
 });
 
 test("detalle: rechaza identificadores no enteros", () => {
   assert.throws(
-    () => parseDispositivoId("12.5"),
-    /Identificador de dispositivo inválido/
+    () => parseCodigoItam("12.5"),
+    /Código ITAM inválido\./
   );
 });
 

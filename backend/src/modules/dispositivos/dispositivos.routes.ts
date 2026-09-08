@@ -20,8 +20,8 @@ const router = Router();
 router.get("/", listarDispositivosController);
 router.get("/resumen-gerencial", resumenGerencialController);
 router.get("/:codigo/historial", historialDispositivoController);
-router.get("/:id/trazabilidad", trazabilidadDispositivoController);
-router.get("/:id", obtenerDispositivoController);
+router.get("/:codigo/trazabilidad", trazabilidadDispositivoController);
+router.get("/:codigo", obtenerDispositivoController);
 router.post("/", crearDispositivoController);
 router.patch("/:codigo", actualizarDispositivoController);
 router.post(
