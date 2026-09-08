@@ -39,8 +39,18 @@ export const assetIdentifier = (
 
 export const suggestedValidationAction = (classification: ClasificacionConciliada): string =>
   classification === 'CONFLICTO_DATOS'
-    ? 'Revisar evidencia física y confirmar el custodio correcto.'
+    ? 'Revisar la evidencia física y confirmar el responsable correcto.'
     : 'Verificar IMEI o serie y completar la identificación del activo.';
+
+export const visibleReconciliationLabel = (classification: ClasificacionConciliada): string =>
+  ({
+    ACTUAL_CONFIRMADO: 'Equipo actual',
+    ACTUAL_PROBABLE: 'Equipo actual probable',
+    HISTORICO_CONFIRMADO: 'Equipo anterior',
+    HISTORICO_PROBABLE: 'Equipo anterior probable',
+    PENDIENTE_VALIDACION: 'Requiere revisión',
+    CONFLICTO_DATOS: 'Datos contradictorios',
+  })[classification];
 
 @Component({
   selector: 'app-colaborador-detail',
@@ -48,7 +58,7 @@ export const suggestedValidationAction = (classification: ClasificacionConciliad
   template: `
     <app-page-header
       title="Detalle del colaborador"
-      subtitle="Dispositivo vigente, historial y casos que requieren revisión."
+      subtitle="Equipos actuales, historial y registros que requieren revisión."
     >
       @if (item()) { <a class="btn btn--secondary" [routerLink]="['editar']">Editar</a> }
     </app-page-header>
@@ -67,69 +77,70 @@ export const suggestedValidationAction = (classification: ClasificacionConciliad
           <app-status-badge [code]="collaborator.activo" [label]="collaborator.activo ? 'Activo' : 'Inactivo'" />
         </div>
         <dl class="detail-grid">
+          <div class="detail-item"><dt>Nombre</dt><dd>{{ collaborator.nombre }}</dd></div>
+          <div class="detail-item"><dt>RUT</dt><dd>{{ rut(collaborator.rut) }}</dd></div>
           <div class="detail-item"><dt>Cargo</dt><dd>{{ collaborator.cargo || '—' }}</dd></div>
           <div class="detail-item"><dt>Departamento</dt><dd>{{ collaborator.departamento?.nombre || 'Sin departamento' }}</dd></div>
           <div class="detail-item"><dt>Localidad</dt><dd>{{ collaborator.localidad || '—' }}</dd></div>
-          <div class="detail-item"><dt>Creado</dt><dd>{{ collaborator.creadoEn | date: 'dd-MM-yyyy HH:mm' }}</dd></div>
+          <div class="detail-item"><dt>Estado</dt><dd>{{ collaborator.activo ? 'Activo' : 'Inactivo' }}</dd></div>
         </dl>
       </section>
 
       @if (inventory(); as inventoryData) {
         <section class="custody-summary" aria-label="Resumen del inventario conciliado">
-          <div><span>Dispositivo vigente</span><strong>{{ inventoryData.actuales.length }}</strong></div>
-          <div><span>Valor actual en custodia</span><strong>{{ clp(inventoryData.valorTotalActual) }}</strong></div>
-          <div class="summary-warning"><span>Pendientes / datos contradictorios</span><strong>{{ inventoryData.pendientes.length }}</strong></div>
+          <div><span>Equipos actuales</span><strong>{{ inventoryData.actuales.length }}</strong></div>
+          <div><span>Valor de equipos actuales</span><strong>{{ clp(inventoryData.valorTotalActual) }}</strong></div>
+          <div class="summary-warning"><span>Registros que requieren revisión</span><strong>{{ inventoryData.pendientes.length }}</strong></div>
         </section>
 
         @if (!inventoryData.actuales.length && !inventoryData.historicos.length && !inventoryData.pendientes.length) {
-          <section class="card"><app-view-state kind="empty" title="Sin dispositivos vinculados" message="No existe evidencia de dispositivos asociada a este RUT en las tablas actuales." /></section>
+          <section class="card"><app-view-state kind="empty" title="Sin equipos vinculados" message="No hay equipos actuales ni registros históricos para este colaborador." /></section>
         } @else {
           <section class="card collaborator-assets current-assets">
-            <header><div><span>CUSTODIA CONCILIADA</span><h2>Dispositivo vigente</h2><p>Activo vigente o actual probable según la evidencia disponible.</p></div></header>
+            <header><div><span>EQUIPOS ACTUALES</span><h2>Equipos actuales</h2><p>Equipos que actualmente aparecen bajo responsabilidad de este colaborador.</p></div></header>
             @if (!inventoryData.actuales.length) {
-              <app-view-state kind="empty" title="Sin dispositivo vigente confirmado" />
+              <app-view-state kind="empty" title="Sin equipos asignados actualmente" message="Este colaborador no tiene equipos asignados actualmente." />
             } @else {
               <div class="table-wrap"><table class="data-table reconciled-table"><thead><tr>
-                <th>Código ITAM</th><th>Marca / modelo</th><th>IMEI o serie</th><th>Fecha de asignación</th><th>Estado</th><th>Clasificación</th><th>Motivo</th>
+                <th>Código ITAM</th><th>Equipo</th><th>IMEI o serie</th><th>Fecha de entrega</th><th>Estado</th><th>Acciones</th>
               </tr></thead><tbody>
                 @for (asset of inventoryData.actuales; track asset.dispositivoId) { <tr>
-                  <td><a [routerLink]="['/dispositivos', asset.codigoItam]">{{ asset.codigoItam }}</a></td>
+                  <td><strong>{{ asset.codigoItam }}</strong></td>
                   <td><strong>{{ asset.marca || asset.tipoDispositivo }} {{ asset.modelo || '' }}</strong><span class="cell-secondary">{{ asset.tipoDispositivo }}</span></td>
                   <td><span class="identity-label">{{ identifier(asset).label }}</span><span class="code">{{ identifier(asset).value }}</span></td>
                   <td>{{ asset.fechaAsignacion | date: 'dd/MM/yyyy' }}</td>
                   <td><app-status-badge [code]="asset.estadoOriginal.codigo" [label]="asset.estadoOriginal.nombre" /></td>
-                  <td><span class="reconciliation-badge current">{{ label(asset.clasificacionConciliada) }}</span></td>
-                  <td class="reason-cell">{{ asset.motivoConciliacion }}</td>
+                  <td><a class="btn btn--ghost btn--small" [routerLink]="['/dispositivos', asset.codigoItam]">Ver equipo</a></td>
                 </tr> }
               </tbody></table></div>
             }
           </section>
 
           <section class="card collaborator-assets historical-assets">
-            <header><div><span>TRAZABILIDAD</span><h2>Historial de dispositivos</h2><p>Equipos que el colaborador tuvo anteriormente, sin convertirlos en custodia vigente.</p></div></header>
+            <header><div><span>HISTORIAL DE EQUIPOS</span><h2>Historial de equipos</h2><p>Equipos que estuvieron asociados anteriormente a este colaborador.</p></div></header>
             @if (!inventoryData.historicos.length) {
-              <app-view-state kind="empty" title="Sin dispositivos históricos" />
+              <app-view-state kind="empty" title="Sin historial de equipos" />
             } @else {
               <div class="table-wrap"><table class="data-table reconciled-table"><thead><tr>
-                <th>Código ITAM</th><th>Marca / modelo</th><th>IMEI o serie</th><th>Fecha de asignación</th><th>Fecha de salida</th><th>Motivo histórico</th><th>Clasificación</th>
+                <th>Código ITAM</th><th>Equipo</th><th>IMEI o serie</th><th>Fecha de entrega</th><th>Fecha de devolución</th><th>Estado histórico</th><th>Acciones</th>
               </tr></thead><tbody>
                 @for (asset of inventoryData.historicos; track asset.dispositivoId) { <tr>
-                  <td><a [routerLink]="['/dispositivos', asset.codigoItam]">{{ asset.codigoItam }}</a></td>
+                  <td><strong>{{ asset.codigoItam }}</strong></td>
                   <td><strong>{{ asset.marca || asset.tipoDispositivo }} {{ asset.modelo || '' }}</strong><span class="cell-secondary">{{ asset.tipoDispositivo }}</span></td>
                   <td><span class="identity-label">{{ identifier(asset).label }}</span><span class="code">{{ identifier(asset).value }}</span></td>
                   <td>{{ asset.fechaAsignacion | date: 'dd/MM/yyyy' }}</td>
-                  <td>{{ asset.fechaSalida ? (asset.fechaSalida | date: 'dd/MM/yyyy') : 'Sin salida registrada' }}</td>
-                  <td class="reason-cell">{{ asset.motivoConciliacion }}</td>
-                  <td><span class="reconciliation-badge historical">{{ label(asset.clasificacionConciliada) }}</span></td>
+                  <td>{{ asset.fechaSalida ? (asset.fechaSalida | date: 'dd/MM/yyyy') : 'No hay devolución registrada' }}</td>
+                  <td><span class="reconciliation-badge historical">{{ visibleLabel(asset.clasificacionConciliada) }}</span></td>
+                  <td><a class="btn btn--ghost btn--small" [routerLink]="['/dispositivos', asset.codigoItam]">Ver equipo</a></td>
                 </tr> }
               </tbody></table></div>
             }
           </section>
 
           <section class="card collaborator-assets pending-assets">
-            <header><div><span>REVISIÓN MANUAL</span><h2>Pendientes / datos contradictorios</h2><p>Información insuficiente o contradictoria que debe ser revisada por un colaborador.</p></div></header>
+            <header><div><span>REQUIERE REVISIÓN</span><h2>Registros que requieren revisión</h2><p>Registros con datos contradictorios o información insuficiente.</p></div></header>
             @if (!inventoryData.pendientes.length) {
-              <app-view-state kind="empty" title="Sin pendientes ni datos contradictorios" />
+              <app-view-state kind="empty" title="Sin registros que requieran revisión" />
             } @else {
               <div class="table-wrap"><table class="data-table reconciled-table pending-table"><thead><tr>
                 <th>Código ITAM / evidencia</th><th>Equipo</th><th>Problema detectado</th><th>Motivo</th><th>Acción sugerida</th>
@@ -137,7 +148,7 @@ export const suggestedValidationAction = (classification: ClasificacionConciliad
                 @for (asset of inventoryData.pendientes; track asset.dispositivoId) { <tr>
                   <td><a [routerLink]="['/dispositivos', asset.codigoItam]">{{ asset.codigoItam }}</a><span class="cell-secondary">{{ identifier(asset).value }}</span></td>
                   <td><strong>{{ asset.marca || asset.tipoDispositivo }} {{ asset.modelo || '' }}</strong><span class="cell-secondary">{{ asset.tipoDispositivo }}</span></td>
-                  <td><span class="reconciliation-badge" [class.conflict]="asset.clasificacionConciliada === 'CONFLICTO_DATOS'" [class.pending]="asset.clasificacionConciliada === 'PENDIENTE_VALIDACION'">{{ label(asset.clasificacionConciliada) }}</span></td>
+                  <td><span class="reconciliation-badge" [class.conflict]="asset.clasificacionConciliada === 'CONFLICTO_DATOS'" [class.pending]="asset.clasificacionConciliada === 'PENDIENTE_VALIDACION'">{{ visibleLabel(asset.clasificacionConciliada) }}</span></td>
                   <td class="reason-cell">{{ asset.motivoConciliacion }}</td>
                   <td>{{ action(asset.clasificacionConciliada) }}</td>
                 </tr> }
@@ -166,6 +177,7 @@ export class ColaboradorDetail implements OnInit {
   protected readonly rut = formatRut;
   protected readonly identifier = assetIdentifier;
   protected readonly label = reconciliationLabel;
+  protected readonly visibleLabel = visibleReconciliationLabel;
   protected readonly action = suggestedValidationAction;
 
   ngOnInit(): void {
