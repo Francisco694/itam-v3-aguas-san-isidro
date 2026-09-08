@@ -181,15 +181,46 @@ interface FlowStage {
                 <p>Comparación informativa; la decisión continúa bajo responsabilidad de TI.</p>
               }
             </section>
-            <section class="temporary-panel">
-              <header><div><span>CONTINUIDAD OPERATIVA</span><h3>Equipo de reemplazo</h3></div></header>
-              <p>Solo si es necesario.</p>
-              <p>Responsable al momento del envío: <strong>{{ order.custodiaAlIngreso?.colaborador?.nombre || order.custodiaAlIngreso?.departamento?.nombre || 'Sin responsable' }}</strong>. La recepción física por TI no crea una segunda entrega.</p>
-              @if(order.entregasTemporales.length){@for(delivery of order.entregasTemporales;track delivery.id){<article class="temporary-item"><div><strong>{{delivery.dispositivo.tipo}} {{delivery.dispositivo.codigoInventario}}</strong><small>{{delivery.colaborador.nombre}} · {{delivery.fechaEntrega|date:'dd/MM/yyyy HH:mm'}}</small></div><span class="state-pill">{{delivery.estado==='ABIERTA'?'En uso':'Devuelto'}}</span></article>@if(delivery.estado==='ABIERTA'){<form [formGroup]="temporaryCloseForm" (ngSubmit)="closeTemporary(order,delivery.id)"><div class="field"><label>Responsable TI *</label><input formControlName="responsable" readonly /></div><div class="field"><label>Observaciones de devolución</label><textarea formControlName="observaciones"></textarea></div><button class="btn btn--secondary" [disabled]="submitting()">Registrar devolución de reemplazo</button></form>}}}
-              @if(!openTemporary(order) && order.custodiaAlIngreso?.colaborador && technicalStage(order.estado)!=='READ_ONLY'){
-                <form [formGroup]="temporaryForm" (ngSubmit)="deliverTemporary(order)"><div class="notice notice--info">Este equipo de reemplazo conserva su propio código y debe estar disponible.</div><div class="field"><label>Código ITAM del equipo de reemplazo *</label><input type="number" min="1" formControlName="dispositivoCodigo" /></div><div class="field"><label>Responsable TI *</label><input formControlName="responsable" readonly /></div><div class="field"><label>Observaciones</label><textarea formControlName="observaciones"></textarea></div><button class="btn btn--secondary" [disabled]="submitting()">Entregar equipo de reemplazo</button></form>
-              }
-            </section>
+            @if (order.entregasTemporales.length) {
+              <section class="temporary-panel">
+                <header><div><span>CONTINUIDAD OPERATIVA</span><h3>Equipo de reemplazo</h3></div></header>
+                @for (delivery of order.entregasTemporales; track delivery.id) {
+                  <article class="temporary-item">
+                    <div>
+                      <strong>{{ delivery.dispositivo.tipo }} · {{ delivery.dispositivo.codigoInventario }}</strong>
+                      <small>Entregado el {{ delivery.fechaEntrega | date: 'dd/MM/yyyy HH:mm' }} · {{ delivery.colaborador.nombre }}</small>
+                    </div>
+                    <span class="state-pill">{{ delivery.estado === 'ABIERTA' ? 'En uso' : 'Devuelto' }}</span>
+                  </article>
+                  @if (delivery.estado === 'ABIERTA') {
+                    <form [formGroup]="temporaryCloseForm" (ngSubmit)="closeTemporary(order, delivery.id)">
+                      <div class="field"><label>Responsable TI *</label><input formControlName="responsable" readonly /></div>
+                      <div class="field"><label>Observaciones de devolución</label><textarea formControlName="observaciones"></textarea></div>
+                      <button class="btn btn--secondary" [disabled]="submitting()">Registrar devolución de reemplazo</button>
+                    </form>
+                  }
+                }
+              </section>
+            } @else if (!openTemporary(order) && order.custodiaAlIngreso?.colaborador && technicalStage(order.estado) !== 'READ_ONLY') {
+              <section class="temporary-panel temporary-panel--optional">
+                <h3>¿El colaborador necesita un equipo de reemplazo?</h3>
+                <p>Use esta opción solo si necesita entregar otro equipo mientras el original está en revisión.</p>
+                @if (!temporaryFormVisible()) {
+                  <button class="btn btn--secondary" type="button" (click)="showTemporaryForm()">Entregar equipo temporal</button>
+                } @else {
+                  <form [formGroup]="temporaryForm" (ngSubmit)="deliverTemporary(order)">
+                    <div class="notice notice--info">Este equipo de reemplazo conserva su propio código y debe estar disponible.</div>
+                    <div class="field"><label>Código ITAM del equipo temporal *</label><input type="number" min="1" formControlName="dispositivoCodigo" /></div>
+                    <div class="field"><label>Responsable TI *</label><input formControlName="responsable" readonly /></div>
+                    <div class="field"><label>Observaciones</label><textarea formControlName="observaciones"></textarea></div>
+                    <div class="button-row">
+                      <button class="btn btn--secondary" type="button" (click)="hideTemporaryForm()">Cancelar</button>
+                      <button class="btn btn--primary" [disabled]="submitting()">Entregar equipo temporal</button>
+                    </div>
+                  </form>
+                }
+              </section>
+            }
             @if (order.estado === 'PENDIENTE_DIAGNOSTICO') {
               <form [formGroup]="quoteForm" (ngSubmit)="quote(order)">
                 <h3>Diagnóstico y cotización</h3>
@@ -211,7 +242,7 @@ interface FlowStage {
                   <label>Responsable TI *</label><input formControlName="responsable" readonly />
                 </div>
                 <button class="btn btn--primary" [disabled]="submitting()">
-                  Registrar diagnóstico
+                  Guardar diagnóstico y cotización
                 </button>
               </form>
             }
@@ -262,7 +293,7 @@ interface FlowStage {
                   <label>Responsable TI *</label><input formControlName="responsable" readonly />
                 </div>
                 <button class="btn btn--primary" [disabled]="submitting()">
-                  Registrar resultado
+                  Guardar resultado
                 </button>
               </form>
             }
@@ -287,7 +318,7 @@ interface FlowStage {
                 <div class="field">
                   <label>Responsable TI *</label><input formControlName="responsable" readonly />
                 </div>
-                <div class="notice notice--info">La revisión técnica quedará registrada en el historial del equipo.</div>
+                <div class="notice notice--info">La revisión quedará registrada en el historial del equipo.</div>
                 <button class="btn btn--primary" [disabled]="submitting()">Finalizar revisión</button>
               </form>
             }
@@ -571,7 +602,7 @@ interface FlowStage {
         color: var(--slate-500);
         margin: 0.35rem 0 0;
       }
-      .temporary-panel{background:var(--gray-50);border:1px solid var(--gray-200);border-radius:.9rem;margin:1rem 1.2rem;padding:1rem}.temporary-panel>header span{color:var(--blue);font-size:.6rem;font-weight:850;letter-spacing:.1em}.temporary-panel h3{margin:.2rem 0}.temporary-panel>p{color:var(--slate-600);font-size:.75rem}.temporary-item{align-items:center;background:#fff;border:1px solid var(--gray-200);border-radius:.7rem;display:flex;justify-content:space-between;margin:.7rem 0;padding:.75rem}.temporary-item small{color:var(--slate-500);display:block;margin-top:.2rem}.temporary-panel form{border-top:1px solid var(--gray-200);margin-top:.8rem;padding-top:.8rem}
+      .temporary-panel{background:var(--gray-50);border:1px solid var(--gray-200);border-radius:.9rem;margin:1rem 1.2rem;padding:1rem}.temporary-panel>header span{color:var(--blue);font-size:.6rem;font-weight:850;letter-spacing:.1em}.temporary-panel h3{margin:.2rem 0}.temporary-panel>p{color:var(--slate-600);font-size:.75rem}.temporary-item{align-items:center;background:#fff;border:1px solid var(--gray-200);border-radius:.7rem;display:flex;justify-content:space-between;margin:.7rem 0;padding:.75rem}.temporary-item small{color:var(--slate-500);display:block;margin-top:.2rem}.temporary-panel form{border-top:1px solid var(--gray-200);margin-top:.8rem;padding-top:.8rem}.temporary-panel--optional{background:#fff}.button-row{display:flex;gap:.6rem;justify-content:flex-end}
       @media (max-width: 900px) {
         .technical-layout {
           grid-template-columns: 1fr;
@@ -603,6 +634,7 @@ export class ServicioTecnico implements OnInit {
   protected readonly error = signal('');
   protected readonly actionError = signal('');
   protected readonly submitting = signal(false);
+  protected readonly temporaryFormVisible = signal(false);
   protected readonly clp = formatClp;
   protected readonly technicalStage = technicalStage;
   protected readonly quoteForm = this.fb.nonNullable.group({
@@ -665,9 +697,12 @@ export class ServicioTecnico implements OnInit {
     this.closeForm.reset({ costoFinal: 0, fechaRetorno: '', resultado: '', responsable: actor });
     this.temporaryForm.reset({dispositivoCodigo:0,responsable:actor,observaciones:''});
     this.temporaryCloseForm.reset({responsable:actor,observaciones:''});
+    this.temporaryFormVisible.set(false);
   }
 
   protected openTemporary(order:OrdenServicio){return order.entregasTemporales.find(item=>item.estado==='ABIERTA')??null;}
+  protected showTemporaryForm(): void { this.temporaryFormVisible.set(true); }
+  protected hideTemporaryForm(): void { this.temporaryFormVisible.set(false); }
   protected deliverTemporary(order:OrdenServicio){if(this.temporaryForm.invalid){this.temporaryForm.markAllAsTouched();return;}const value=this.temporaryForm.getRawValue();this.perform(this.service.entregarTemporal(order.id,{...value,observaciones:value.observaciones.trim()||null}));}
   protected closeTemporary(order:OrdenServicio,deliveryId:string){if(this.temporaryCloseForm.invalid){this.temporaryCloseForm.markAllAsTouched();return;}const value=this.temporaryCloseForm.getRawValue();this.perform(this.service.cerrarTemporal(order.id,deliveryId,{...value,observaciones:value.observaciones.trim()||null}));}
 
@@ -693,16 +728,16 @@ export class ServicioTecnico implements OnInit {
   }
 
   protected stages(state: EstadoOrdenServicio): FlowStage[] {
-    const labels = ['Ingreso', 'Cotización', 'Decisión', 'Reparación', 'Finalización'];
+    const labels = ['Ingreso', 'Diagnóstico', 'Resultado', 'Finalización'];
     const terminal = state === 'REPARACION_RECHAZADA' || state === 'BAJA';
     const currentIndex: Record<EstadoOrdenServicio, number> = {
       PENDIENTE_DIAGNOSTICO: 1,
       COTIZACION_RECIBIDA: 2,
-      REPARACION_APROBADA: 3,
+      REPARACION_APROBADA: 2,
       REPARACION_RECHAZADA: 2,
-      EN_REPARACION: 3,
-      REPARACION_TERMINADA: 4,
-      CERRADA: 5,
+      EN_REPARACION: 2,
+      REPARACION_TERMINADA: 3,
+      CERRADA: 4,
       BAJA: 2,
     };
     const current = currentIndex[state];
