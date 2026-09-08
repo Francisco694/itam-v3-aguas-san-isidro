@@ -4,6 +4,22 @@ import { LucideCheckCircle2, LucideTag, LucideUserCheck, LucideX } from '@lucide
 import { AssetLabel } from '../asset-label/asset-label';
 
 @Component({selector:'app-asset-created-dialog',imports:[RouterLink,AssetLabel,LucideCheckCircle2,LucideTag,LucideUserCheck,LucideX],template:`
-<div class="dialog-backdrop"><section class="dialog created-dialog" role="dialog" aria-modal="true" aria-labelledby="created-title"><header><span><svg lucideCheckCircle2></svg></span><div><small>ALTA COMPLETADA</small><h2 id="created-title">{{entityLabel()}} registrado correctamente</h2></div><button class="icon-button" type="button" aria-label="Cerrar" (click)="close.emit()"><svg lucideX></svg></button></header><div class="created-code"><small>CÓDIGO ITAM</small><strong>{{code()}}</strong><p>Identificador permanente generado por el backend.</p></div><app-asset-label [code]="code()" [assetType]="assetType()" printLabel="Imprimir etiqueta de prueba"/><footer><a class="btn btn--ghost" [routerLink]="detailLink()"><svg lucideTag></svg>Ver ficha</a>@if(canAssign()){<a class="btn btn--secondary" [routerLink]="detailLink()" [queryParams]="{action:'assign'}"><svg lucideUserCheck></svg>Asignar ahora</a>}<button class="btn btn--primary" type="button" (click)="close.emit()">Terminar</button></footer></section></div>
+<div class="dialog-backdrop"><section class="dialog created-dialog" role="dialog" aria-modal="true" aria-labelledby="created-title"><header><span><svg lucideCheckCircle2></svg></span><div><small>ALTA COMPLETADA</small><h2 id="created-title">{{entityLabel()}} registrado correctamente</h2></div><button class="icon-button" type="button" aria-label="Cerrar" (click)="close.emit()"><svg lucideX></svg></button></header><div class="created-code"><small>CÓDIGO ITAM</small><strong>{{code()}}</strong><p>Código único asignado al equipo.</p></div><app-asset-label [code]="code()" [assetType]="assetType()" [brandModel]="brandModel()" [identifierLabel]="identifierLabel()" [identifier]="identifier()" [detail]="true" printLabel="Imprimir etiqueta"/><footer><a class="btn btn--ghost" [routerLink]="detailLink()"><svg lucideTag></svg>Ver ficha</a>@if(canAssign()){<a class="btn btn--secondary" [routerLink]="detailLink()" [queryParams]="{action:'assign'}"><svg lucideUserCheck></svg>Asignar ahora</a>}<button class="btn btn--primary" type="button" (click)="close.emit()">Terminar</button></footer></section></div>
 `,styles:[`.created-dialog{max-width:31rem}.created-dialog>header{align-items:center;background:var(--navy);color:#fff;display:flex;gap:.8rem;margin:-1.5rem -1.5rem 1.2rem;padding:1rem 1.5rem}.created-dialog>header>span{align-items:center;background:rgba(0,180,216,.2);border-radius:50%;color:var(--cyan);display:flex;height:2.5rem;justify-content:center;width:2.5rem}.created-dialog h2{font-size:1rem;margin:.15rem 0 0}.created-dialog small{font-size:.64rem;font-weight:800;letter-spacing:.1em}.created-code{text-align:center}.created-code strong{color:var(--navy);display:block;font-family:var(--font-mono,"SFMono-Regular",Consolas,monospace);font-size:2.4rem;letter-spacing:.1em}.created-code p{color:var(--slate-500);font-size:.75rem;margin:.2rem 0 1rem}.created-dialog app-asset-label{margin:auto;width:50mm}.created-dialog footer{display:flex;flex-wrap:wrap;gap:.5rem;justify-content:flex-end;margin-top:1.2rem}`]})
-export class AssetCreatedDialog{readonly code=input.required<number>();readonly assetType=input.required<string>();readonly entityLabel=input('Equipo');readonly detailLink=input.required<(string|number)[]>();readonly canAssign=input(false);readonly close=output<void>()}
+export class AssetCreatedDialog{
+  readonly code=input.required<number>();
+  readonly assetType=input.required<string>();
+  readonly brandModel=input('');
+  readonly imei=input('');
+  readonly numeroSerie=input('');
+  readonly entityLabel=input('Equipo');
+  readonly detailLink=input.required<(string|number)[]>();
+  readonly canAssign=input(false);
+  readonly close=output<void>();
+  protected identifierLabel(): string {
+    return this.assetType().trim().toUpperCase().includes('SMARTPHONE') ? 'IMEI' : 'N° serie';
+  }
+  protected identifier(): string {
+    return this.assetType().trim().toUpperCase().includes('SMARTPHONE') ? this.imei() : this.numeroSerie();
+  }
+}
