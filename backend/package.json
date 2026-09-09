@@ -14,7 +14,9 @@
     "import:inventory:dry-run": "tsx src/scripts/import-real-inventory.ts --dry-run",
     "import:inventory": "tsx src/scripts/import-real-inventory.ts",
     "import:reconciled-inventory:dry-run": "tsx src/scripts/import-reconciled-inventory.ts --dry-run",
-    "import:reconciled-inventory": "tsx src/scripts/import-reconciled-inventory.ts"
+    "import:reconciled-inventory": "tsx src/scripts/import-reconciled-inventory.ts",
+    "backfill:device-verification:dry-run": "tsx src/scripts/backfill-device-verification.ts --dry-run",
+    "backfill:device-verification": "tsx src/scripts/backfill-device-verification.ts --apply"
   },
   "keywords": [],
   "author": "",
