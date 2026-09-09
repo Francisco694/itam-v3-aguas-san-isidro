@@ -91,6 +91,9 @@ const dispositivoSelect = `
       AS ultimo_responsable_rut,
     ultimo_responsable.fecha_movimiento AS ultimo_responsable_fecha,
     offboarding.resultado AS ultimo_resultado_offboarding
+    ,verificacion.resultado AS ultima_verificacion_resultado
+    ,verificacion.fecha_verificacion AS ultima_verificacion_fecha
+    ,verificacion.observacion AS ultima_verificacion_observacion
   FROM itam.dispositivos d
   INNER JOIN itam.estados e
     ON e.id = d.estado_id
@@ -183,6 +186,13 @@ const dispositivoSelect = `
     ORDER BY h.fecha_evento DESC,h.id DESC
     LIMIT 1
   ) offboarding ON TRUE
+  LEFT JOIN LATERAL (
+    SELECT v.resultado, v.fecha_verificacion, v.observacion
+    FROM itam.verificaciones_fisicas_dispositivo v
+    WHERE v.dispositivo_id = d.id
+    ORDER BY v.fecha_verificacion DESC, v.id DESC
+    LIMIT 1
+  ) verificacion ON TRUE
 `;
 
 export const listarDispositivos = async (
@@ -243,6 +253,11 @@ export const listarDispositivos = async (
   if (filters.localidad !== undefined) {
     values.push(`%${filters.localidad}%`);
     where.push(`d.localidad ILIKE $${values.length}`);
+  }
+
+  if (filters.verificacion !== undefined) {
+    values.push(filters.verificacion);
+    where.push(`COALESCE(verificacion.resultado, 'PENDIENTE') = $${values.length}`);
   }
 
   const result = await pool.query<DispositivoRow>(

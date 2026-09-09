@@ -305,6 +305,14 @@ const mapDispositivo = (
         }
       : null,
   ultimoResultadoOffboarding: row.ultimo_resultado_offboarding
+  ,
+  verificacionFisica: row.ultima_verificacion_resultado
+    ? {
+        resultado: row.ultima_verificacion_resultado,
+        fechaVerificacion: toIsoDateTime(row.ultima_verificacion_fecha!),
+        observacion: row.ultima_verificacion_observacion
+      }
+    : null
 });
 
 const custodySnapshot = (row: DispositivoRow) => {

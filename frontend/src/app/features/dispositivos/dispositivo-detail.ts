@@ -74,7 +74,7 @@ export const lastKnownPersonalResponsible = (events: readonly HistorialEvento[])
   return null;
 };
 
-type DeviceAction = 'assign-person' | 'assign-department' | 'return' | 'state' | 'recover' | 'service' | 'retire';
+type DeviceAction = 'assign-person' | 'assign-department' | 'return' | 'state' | 'recover' | 'service' | 'retire' | 'verify';
 
 @Component({
   selector: 'app-dispositivo-detail',
@@ -122,7 +122,7 @@ type DeviceAction = 'assign-person' | 'assign-department' | 'return' | 'state' |
           <div class="column-title"><span>02</span><div><small>TRAZABILIDAD</small><h3>Historial del equipo</h3></div><svg lucideHistory></svg></div>
           @if(traceability()?.historialResponsables?.length){<section class="responsible-history"><strong>Colaboradores responsables anteriormente</strong>@for(movement of traceability()?.historialResponsables || [];track movement.fechaUltimoMovimiento+movement.tipoEvento+movement.id){<article><div><b>{{movement.nombre}}</b><small>{{movement.tipo==='COLABORADOR' ? ('RUT '+(movement.rut||'no informado')) : 'Departamento'}}</small></div><div><time>{{movement.fechaUltimoMovimiento|date:'dd/MM/yyyy HH:mm'}}</time><small>{{eventLabel(movement.tipoEvento)}}@if(movement.estadoResultante){ · {{movement.estadoResultante.nombre}}}</small></div>@if(movement.observacion){<p>{{movement.observacion}}</p>}</article>}</section>}
           @if (!history().length) { <app-view-state kind="empty" title="Sin movimientos" message="Este equipo aún no registra movimientos." /> }
-          @else { <div class="audit-timeline">@for(event of history(); track event.id){<article class="audit-event"><span class="audit-event__node"></span><div><strong>{{ eventLabel(event.tipoEvento) }}</strong><p><span>{{ event.estadoAnterior?.nombre || 'Sin estado' }}</span><b>→</b><span>{{ event.estadoNuevo?.nombre || 'Sin cambio' }}</span></p>          @if(custodyText(event,'custodiaAnterior');as before){<p><span>{{before}}</span><b>→</b><span>{{custodyText(event,'custodiaNueva')||'Sin responsable'}}</span></p>}@if(event.observaciones){<blockquote>{{ event.observaciones }}</blockquote>}<footer><time>{{ event.fechaEvento | date:'dd/MM/yyyy HH:mm' }}</time><span>{{ event.responsable }}</span></footer></div></article>}</div> }
+          @else { <div class="audit-timeline">@for(event of history(); track event.id){<article class="audit-event"><span class="audit-event__node"></span><div><strong>{{ eventLabel(event.tipoEvento) }}</strong>@if(event.tipoEvento==='VERIFICACION_FISICA'){<p>{{ verificationEventLabel(event) }}</p>}<p><span>{{ event.estadoAnterior?.nombre || 'Sin estado' }}</span><b>→</b><span>{{ event.estadoNuevo?.nombre || 'Sin cambio' }}</span></p>          @if(custodyText(event,'custodiaAnterior');as before){<p><span>{{before}}</span><b>→</b><span>{{custodyText(event,'custodiaNueva')||'Sin responsable'}}</span></p>}@if(event.observaciones){<blockquote>{{ event.observaciones }}</blockquote>}<footer><time>{{ event.fechaEvento | date:'dd/MM/yyyy HH:mm' }}</time><span>{{ event.responsable }}</span></footer></div></article>}</div> }
         </article>
         <aside class="panoramic-column actions-column">
           <div class="column-title"><span>03</span><div><small>GESTIÓN</small><h3>Acciones del equipo</h3></div></div>
@@ -134,6 +134,7 @@ type DeviceAction = 'assign-person' | 'assign-department' | 'return' | 'state' |
               <button type="button" [disabled]="!stateExists('EXTRAVIADO')" (click)="openState('EXTRAVIADO')"><svg lucideShieldAlert></svg><span>Reportar equipo perdido<small>Requiere confirmación</small></span></button>
               <button type="button" (click)="open('assign-department')" [disabled]="terminal() || device.tipoCustodia!=='NONE'"><svg lucideBuilding></svg><span>Entregar a departamento<small>Responsabilidad institucional</small></span></button>
               <button type="button" (click)="open('state')"><svg lucidePackageCheck></svg><span>Cambiar situación del equipo<small>Ver opciones disponibles</small></span></button>
+              <button type="button" (click)="open('verify')"><svg lucidePackageCheck></svg><span>Verificar<small>Confirmar existencia física e identificador</small></span></button>
               @if(device.estado.codigo==='EXTRAVIADO' || device.estado.codigo==='DADO_BAJA'){<button type="button" (click)="open('recover')"><svg lucideRotateCcw></svg><span>Registrar equipo encontrado<small>Reactivar con trazabilidad</small></span></button>}
               <button type="button" class="operation-danger" [disabled]="!stateExists('DADO_BAJA')" (click)="open('retire')"><svg lucideCircleAlert></svg><span>Retirar del inventario<small>Motivo obligatorio</small></span></button>
             </div>
@@ -147,6 +148,7 @@ type DeviceAction = 'assign-person' | 'assign-department' | 'return' | 'state' |
               @if(action()==='recover'){<div class="field"><label for="recovery-reason">Motivo *</label><textarea id="recovery-reason" formControlName="motivoRecuperacion" required></textarea></div>}
               @if(action()==='service'){<div class="field"><label for="service-date">Fecha de envío</label><input id="service-date" type="datetime-local" formControlName="fechaEnvio" /></div><div class="field"><label for="provider">Proveedor / técnico / destino</label><input id="provider" formControlName="proveedor" maxlength="180" /></div><div class="field"><label for="failure">Falla reportada *</label><textarea id="failure" formControlName="fallaReportada"></textarea></div>}
               @if(action()==='retire'){<div class="notice notice--info">La baja conservará el motivo, el valor comercial vigente y el responsable TI en la trazabilidad.</div><div class="field"><label for="retire-reason">Motivo *</label><select id="retire-reason" formControlName="motivoBaja"><option value="">Seleccionar</option><option value="IRREPARABLE">Irreparable</option><option value="REPARACION_NO_CONVENIENTE">Reparación no conveniente</option><option value="MULTIPLES_REPARACIONES">Múltiples reparaciones</option><option value="OBSOLESCENCIA">Obsolescencia</option><option value="DANO_FISICO">Daño físico</option><option value="SIN_REPUESTOS">Sin repuestos</option><option value="OTRO">Otro</option></select></div>}
+              @if(action()==='verify'){<div class="verification-context"><strong>Verificar equipo</strong><span>ITAM {{ item()?.codigoInventario }} · {{ item()?.tipo?.nombre }}</span><span>{{ item()?.marca || 'Sin marca' }} {{ item()?.modelo || '' }}</span><span>{{ isSmartphone(item()!) ? 'IMEI: ' + (item()?.imei || 'Sin IMEI registrado') : 'N° serie: ' + (item()?.numeroSerie || 'Sin número de serie registrado') }}</span><span>Estado actual: {{ item()?.estado?.nombre }}</span>@if(item()?.colaborador){<span>Responsable actual: {{ item()?.colaborador?.nombre }}</span>}</div><div class="field"><label for="found">¿Encontraste físicamente el equipo? *</label><select id="found" formControlName="verificacionEncontrado"><option value="">Seleccionar</option><option value="SI">Sí</option><option value="NO">No</option></select></div>@if(actionForm.controls.verificacionEncontrado.value==='SI'){<div class="field"><label for="checked-identifier">{{ isSmartphone(item()!) ? 'IMEI encontrado' : 'Número de serie encontrado' }} *</label><input id="checked-identifier" class="code" formControlName="identificadorComprobado" /></div>}}
               <div class="field"><label for="responsible">Responsable TI *</label><input id="responsible" formControlName="responsable" maxlength="150" readonly /></div>
               <div class="field"><label for="action-notes">Observaciones</label><textarea id="action-notes" formControlName="observaciones" placeholder="Motivo, condición o antecedentes relevantes"></textarea></div>
               <div class="action-form__buttons"><button class="btn btn--ghost" type="button" (click)="action.set(null)">Cancelar</button>@if(action()==='service'){<button class="btn btn--secondary" type="submit" [disabled]="submitting()" (click)="servicePrintRequested.set(true)">Registrar e imprimir</button>}<button class="btn btn--primary" type="submit" [disabled]="submitting()" (click)="servicePrintRequested.set(false)">{{ submitting() ? 'Procesando…' : (action()==='service'?'Registrar envío':'Confirmar operación') }}</button></div>
@@ -195,11 +197,12 @@ export class DispositivoDetail implements OnInit {
   protected historicalDate(): string | null { return historicalDeliveryDate(this.history()); }
   protected historicalDateLabel(): string { return historicalDeliveryDateLabel(this.history()); }
   protected originLabel(origin: 'HISTORIAL'|'BAJA'|'COMPROBANTE'): string { return {HISTORIAL:'Historial',BAJA:'Registro de baja',COMPROBANTE:'Comprobante'}[origin]; }
-  protected eventLabel(event: string): string { return { ALTA_DISPOSITIVO: 'Equipo incorporado al inventario', ASIGNAR_COLABORADOR: 'Equipo entregado a un colaborador', CONCILIAR_DISPOSITIVO_EXISTENTE: 'Registro actualizado desde inventario anterior', DEVOLVER_A_BODEGA: 'Equipo recibido en bodega', CAMBIAR_ESTADO: 'Situación del equipo actualizada', REPORTAR_EXTRAVIO: 'Equipo reportado como perdido', DAR_DE_BAJA: 'Equipo retirado del inventario' }[event] || event.replaceAll('_', ' '); }
+  protected eventLabel(event: string): string { return { ALTA_DISPOSITIVO: 'Equipo incorporado al inventario', ASIGNAR_COLABORADOR: 'Equipo entregado a un colaborador', CONCILIAR_DISPOSITIVO_EXISTENTE: 'Registro actualizado desde inventario anterior', DEVOLVER_A_BODEGA: 'Equipo recibido en bodega', CAMBIAR_ESTADO: 'Situación del equipo actualizada', REPORTAR_EXTRAVIO: 'Equipo reportado como perdido', DAR_DE_BAJA: 'Equipo retirado del inventario', VERIFICACION_FISICA: 'Verificación física' }[event] || event.replaceAll('_', ' '); }
+  protected verificationEventLabel(event: HistorialEvento): string { const result = event.detalle['resultado']; return result === 'VERIFICADO' ? '✓ Equipo verificado' : result === 'NO_ENCONTRADO' ? '✕ Equipo no encontrado' : '! Datos por revisar'; }
   private codigo = 0;
   private id = '';
   protected readonly servicePrintRequested=signal(false);
-  protected readonly actionForm = this.fb.nonNullable.group({ colaboradorId: [''], departamentoId: [''], recibidoPorId:[''], localidad: [''], ubicacionDetalle: [''], estadoId: [''], proveedor:[''], fechaEnvio:[''], fallaReportada:[''], motivoBaja:[''], motivoRecuperacion:[''], responsable: ['', [Validators.required, Validators.maxLength(150)]], observaciones: [''] });
+  protected readonly actionForm = this.fb.nonNullable.group({ colaboradorId: [''], departamentoId: [''], recibidoPorId:[''], localidad: [''], ubicacionDetalle: [''], estadoId: [''], proveedor:[''], fechaEnvio:[''], fallaReportada:[''], motivoBaja:[''], motivoRecuperacion:[''], verificacionEncontrado:[''], identificadorComprobado:[''], responsable: ['', [Validators.required, Validators.maxLength(150)]], observaciones: [''] });
 
   ngOnInit(): void { this.id = this.route.snapshot.paramMap.get('codigo') || ''; this.load(); }
   protected load(): void {
@@ -208,9 +211,9 @@ export class DispositivoDetail implements OnInit {
   }
   protected terminal(): boolean { return this.states().find((state) => state.id === this.item()?.estado.id)?.esTerminal ?? false; }
   protected stateExists(code: string): boolean { return this.states().some((state) => state.codigo === code); }
-  protected open(action: DeviceAction): void { const actor=this.auth.user();if(!actor){this.actionError.set('La sesión no permite identificar al responsable TI.');this.toast.error('Sesión no válida','Vuelva a iniciar sesión antes de registrar una operación.');return;}this.servicePrintRequested.set(false);this.actionForm.reset({ colaboradorId: '', departamentoId: '',recibidoPorId:'', localidad: this.item()?.localidad || '', ubicacionDetalle: this.item()?.ubicacionDetalle || '', estadoId: '',proveedor:'',fechaEnvio:'',fallaReportada:'',motivoBaja:'',motivoRecuperacion:'', responsable: actor.nombre, observaciones: '' }); this.actionError.set(''); this.action.set(action); }
+  protected open(action: DeviceAction): void { const actor=this.auth.user();if(!actor){this.actionError.set('La sesión no permite identificar al responsable TI.');this.toast.error('Sesión no válida','Vuelva a iniciar sesión antes de registrar una operación.');return;}this.servicePrintRequested.set(false);this.actionForm.reset({ colaboradorId: '', departamentoId: '',recibidoPorId:'', localidad: this.item()?.localidad || '', ubicacionDetalle: this.item()?.ubicacionDetalle || '', estadoId: '',proveedor:'',fechaEnvio:'',fallaReportada:'',motivoBaja:'',motivoRecuperacion:'',verificacionEncontrado:'',identificadorComprobado:'', responsable: actor.nombre, observaciones: '' }); this.actionError.set(''); this.action.set(action); }
   protected openState(code: string): void { const state = this.states().find((item) => item.codigo === code); if (!state) return; this.open('state'); this.actionForm.controls.estadoId.setValue(state.id); }
-  protected actionTitle(): string { return { 'assign-person': 'Registrar entrega', 'assign-department': 'Entregar a departamento', return: 'Registrar recepción', state: 'Cambiar situación del equipo', recover: 'Registrar equipo encontrado', service:'Enviar a revisión técnica',retire:'Retirar del inventario' }[this.action() || 'return']; }
+  protected actionTitle(): string { return { 'assign-person': 'Registrar entrega', 'assign-department': 'Entregar a departamento', return: 'Registrar recepción', state: 'Cambiar situación del equipo', recover: 'Registrar equipo encontrado', service:'Enviar a revisión técnica',retire:'Retirar del inventario',verify:'Verificar equipo' }[this.action() || 'return']; }
   protected departmentReceivers():Colaborador[]{return receiversForDepartment(this.collaborators(),this.actionForm.controls.departamentoId.value);}
   protected custodyText(event: HistorialEvento, key: 'custodiaAnterior'|'custodiaNueva'): string {
     const value = event.detalle[key];
@@ -233,11 +236,29 @@ export class DispositivoDetail implements OnInit {
     if (action === 'recover' && (!value.estadoId || !value.motivoRecuperacion.trim())) { this.actionError.set(!value.estadoId ? 'Selecciona el estado de recuperación.' : 'Ingresa el motivo de recuperación.'); return; }
     if (action === 'service' && !value.fallaReportada.trim()) { this.actionError.set('Describe la falla reportada.'); return; }
     if (action === 'retire' && !value.motivoBaja) { this.actionError.set('Selecciona el motivo de baja.'); return; }
+    if (action === 'verify' && !value.verificacionEncontrado) { this.actionError.set('Indica si encontraste físicamente el equipo.'); return; }
     if (action === 'return' && !await this.confirmation.confirm('Se registrará la recepción y el equipo quedará retenido para revisión.', { title: 'Confirmar recepción', confirmLabel: 'Confirmar recepción' })) return;
     if (action === 'retire' && !await this.confirmation.confirm('El equipo será retirado del inventario y el motivo quedará guardado para revisión.', { title: 'Confirmar retiro', confirmLabel: 'Retirar del inventario', tone: 'danger' })) return;
     const target = this.states().find((state) => state.id === value.estadoId);
     if (action === 'state' && target?.esTerminal && !await this.confirmation.confirm(`El equipo cambiará a la situación “${target.nombre}”.`, { title: 'Confirmar cambio de situación', confirmLabel: 'Cambiar situación', tone: 'danger' })) return;
     if (action === 'state' && target?.codigo === 'EXTRAVIADO' && !await this.confirmation.confirm('Esta acción marcará el equipo como perdido y quedará registrada en su historial.', { title: 'Reportar equipo perdido', confirmLabel: 'Reportar', tone: 'danger' })) return;
+    if (action === 'verify') {
+      this.submitting.set(true);
+      this.service.verificar(this.codigo, {
+        encontrado: value.verificacionEncontrado === 'SI',
+        identificadorComprobado: value.identificadorComprobado.trim() || null,
+        observacion: value.observaciones.trim() || null
+      }).subscribe({
+        next: (verification) => {
+          this.action.set(null);
+          this.submitting.set(false);
+          this.toast.success('Verificación registrada', verification.resultado === 'VERIFICADO' ? 'Equipo verificado.' : verification.resultado === 'NO_ENCONTRADO' ? 'Equipo no encontrado.' : 'Datos por revisar.');
+          this.load();
+        },
+        error: (error) => { this.actionError.set(deviceActionErrorMessage(error)); this.submitting.set(false); }
+      });
+      return;
+    }
     const common = { responsable: actor.nombre, observaciones: value.observaciones.trim() || null };
     let request: Observable<Dispositivo|OrdenServicio|ResultadoDevolucion>;
     if (action === 'assign-person') request = this.service.asignarColaborador(this.codigo, { ...common, colaboradorId: Number(value.colaboradorId) });

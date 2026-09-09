@@ -302,6 +302,18 @@
   height: 0.9rem;
   width: 0.9rem;
 }
+.verification-badge {
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 0.7rem;
+  font-weight: 800;
+  padding: 0.28rem 0.48rem;
+  white-space: nowrap;
+}
+.verification-badge--PENDIENTE { background: var(--gray-100); color: var(--slate-600); }
+.verification-badge--VERIFICADO { background: #dcfce7; color: #166534; }
+.verification-badge--REVISAR_DATOS { background: #fef3c7; color: #92400e; }
+.verification-badge--NO_ENCONTRADO { background: #fee2e2; color: #991b1b; }
 .mobile-record-card__details small {
   color: var(--slate-500);
   display: block;

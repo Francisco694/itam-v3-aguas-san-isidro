@@ -43,8 +43,27 @@ export interface Dispositivo {
   colaborador: ColaboradorResumen | null; departamento: DepartamentoResumen | null; recibidoPor: ColaboradorResumen | null; simAsociada: SimAsociadaResumen | null; tipoCustodia: 'NONE'|'COLABORADOR'|'DEPARTAMENTO';
   ultimoResponsableConocido?:{tipo:'COLABORADOR'|'DEPARTAMENTO';nombre:string;rut:string|null;fechaMovimiento:string}|null;
   ultimoResultadoOffboarding: ResultadoOffboarding | null;
+  verificacionFisica: VerificacionFisicaResumen | null;
 }
-export interface DispositivoFilters { q?: string; tipo?: string; tipoDispositivoId?: number; familiaCodigoInventarioId?: number; estado?: string; colaboradorId?: number; departamentoId?: number; localidad?: string; }
+
+export type ResultadoVerificacionFisica = 'PENDIENTE' | 'VERIFICADO' | 'REVISAR_DATOS' | 'NO_ENCONTRADO';
+export interface VerificacionFisicaResumen {
+  resultado: ResultadoVerificacionFisica;
+  fechaVerificacion: string;
+  observacion: string | null;
+}
+export interface VerificacionFisica {
+  id: string;
+  dispositivoId: string;
+  encontrado: boolean;
+  identificadorComprobado: string | null;
+  identificadorEsperado: string | null;
+  resultado: ResultadoVerificacionFisica;
+  observacion: string | null;
+  usuario: { id: string; nombre: string; email: string } | null;
+  fechaVerificacion: string;
+}
+export interface DispositivoFilters { q?: string; tipo?: string; tipoDispositivoId?: number; familiaCodigoInventarioId?: number; estado?: string; colaboradorId?: number; departamentoId?: number; localidad?: string; verificacion?: ResultadoVerificacionFisica; }
 export interface IndicadorEconomico { cantidad:number;valor:number; }
 export interface ResumenGerencial {inventarioOperacional:IndicadorEconomico;disponibles:IndicadorEconomico;asignados:IndicadorEconomico;servicioTecnico:IndicadorEconomico;extraviados:IndicadorEconomico;bajas:IndicadorEconomico;}
 export interface ReporteInventario {

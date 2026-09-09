@@ -71,6 +71,11 @@ export interface DispositivoResumen {
   tipoCustodia: "NONE" | "COLABORADOR" | "DEPARTAMENTO";
   ultimoResponsableConocido: UltimoResponsableConocido | null;
   ultimoResultadoOffboarding: ResultadoOffboarding | null;
+  verificacionFisica: {
+    resultado: "PENDIENTE" | "VERIFICADO" | "REVISAR_DATOS" | "NO_ENCONTRADO";
+    fechaVerificacion: string;
+    observacion: string | null;
+  } | null;
 }
 
 export interface UltimoResponsableConocido {
@@ -149,6 +154,9 @@ export interface DispositivoRow {
   ultimo_responsable_rut: string | null;
   ultimo_responsable_fecha: Date | string | null;
   ultimo_resultado_offboarding: ResultadoOffboarding | null;
+  ultima_verificacion_resultado: "PENDIENTE" | "VERIFICADO" | "REVISAR_DATOS" | "NO_ENCONTRADO" | null;
+  ultima_verificacion_fecha: Date | string | null;
+  ultima_verificacion_observacion: string | null;
 }
 
 export interface DispositivoFilters {
@@ -161,6 +169,7 @@ export interface DispositivoFilters {
   departamentoId?: number;
   departamentoColaboradorId?: number;
   localidad?: string;
+  verificacion?: "PENDIENTE" | "VERIFICADO" | "REVISAR_DATOS" | "NO_ENCONTRADO";
 }
 
 export interface CrearDispositivoInput {

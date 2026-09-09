@@ -5,7 +5,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { LucideCamera, LucideDownload, LucidePrinter, LucidePlus, LucideScanBarcode, LucideSearch, LucideSlidersHorizontal, LucideTriangleAlert, LucideX } from '@lucide/angular';
 import QRCode from 'qrcode';
 import { catchError, forkJoin, of } from 'rxjs';
-import { Departamento, Dispositivo, Estado, TipoDispositivo } from '../../core/models/itam.models';
+import { Departamento, Dispositivo, Estado, ResultadoVerificacionFisica, TipoDispositivo } from '../../core/models/itam.models';
 import { DepartamentosService } from '../../core/services/departamentos.service';
 import { DispositivosService } from '../../core/services/dispositivos.service';
 import { EstadosService } from '../../core/services/estados.service';
@@ -50,6 +50,9 @@ export const inventoryPhysicalIdentifier = (
     ? `N° serie: ${item.numeroSerie.trim()}`
     : 'Sin número de serie';
 };
+
+export const verificationLabel = (result: ResultadoVerificacionFisica | undefined): string =>
+  ({ PENDIENTE: '○ Pendiente', VERIFICADO: '✓ Verificado', REVISAR_DATOS: '! Revisar datos', NO_ENCONTRADO: '✕ No encontrado' }[result || 'PENDIENTE']);
 
 export const isAssignedWithoutResponsible = (
   item: Pick<Dispositivo, 'estado' | 'colaborador' | 'departamento'>,
@@ -175,6 +178,7 @@ const printableDocument = (
         <div class="field"><label for="estado">Estado</label><select id="estado" name="estado" [(ngModel)]="filters.estado"><option value="">Todos</option>@for(e of states(); track e.id){<option [value]="e.codigo">{{ e.nombre }}</option>}</select></div>
         <div class="field"><label for="department">Departamento</label><select id="department" name="department" [(ngModel)]="filters.departamentoId"><option value="">Todos</option>@for(d of departments(); track d.id){<option [value]="d.id">{{ d.nombre }}</option>}</select></div>
         <div class="field"><label for="location">Localidad</label><input id="location" name="location" [(ngModel)]="filters.localidad" /></div>
+        <div class="field"><label for="verification">Verificación</label><select id="verification" name="verification" [(ngModel)]="filters.verificacion"><option value="">Todos</option><option value="PENDIENTE">Pendientes</option><option value="VERIFICADO">Verificados</option><option value="REVISAR_DATOS">Revisar datos</option><option value="NO_ENCONTRADO">No encontrados</option></select></div>
         <div class="filter-panel__actions"><button class="btn btn--primary" type="submit">Aplicar</button><button class="btn btn--ghost" type="button" (click)="clear()">Limpiar</button></div>
       </form>
       @if (loading()) { <app-view-state kind="loading" title="Cargando dispositivos" message="Consultando el inventario real…" /> }
@@ -189,7 +193,7 @@ const printableDocument = (
             <button class="btn btn--primary btn--small" type="button" [disabled]="!selectedCount()" (click)="printOptionsOpen.set(true)"><svg lucidePrinter></svg> Imprimir etiquetas</button>
           </div>
         </div>
-        <div class="table-wrap desktop-table"><table class="data-table inventory-table"><thead><tr><th class="select-column"><input type="checkbox" aria-label="Seleccionar dispositivos visibles" [checked]="allVisibleSelected()" (change)="toggleVisible($event)" /></th><th>ID / Código</th><th>Equipo</th><th>Estado</th><th>Responsable</th><th>Ubicación</th><th><span class="sr-only">Acciones</span></th></tr></thead><tbody>
+        <div class="table-wrap desktop-table"><table class="data-table inventory-table"><thead><tr><th class="select-column"><input type="checkbox" aria-label="Seleccionar dispositivos visibles" [checked]="allVisibleSelected()" (change)="toggleVisible($event)" /></th><th>ID / Código</th><th>Equipo</th><th>Estado</th><th>Responsable</th><th>Verificación</th><th>Ubicación</th><th><span class="sr-only">Acciones</span></th></tr></thead><tbody>
           @for(item of items(); track item.id){<tr><td class="select-column"><input type="checkbox" [attr.aria-label]="'Seleccionar ITAM ' + item.codigoInventario" [checked]="selected(item.id)" (change)="toggleItem(item.id, $event)" /></td><td><a class="asset-code-link" [routerLink]="[item.codigoInventario]">{{ item.codigoInventario }}</a><span class="cell-secondary mono">{{ physicalIdentifier(item) }}</span></td><td><span class="cell-primary">{{ item.marca || item.tipo.nombre }} {{ item.modelo || '' }}</span><span class="cell-secondary">{{ item.tipo.nombre }}</span></td><td><app-status-badge [code]="item.estado.codigo" [label]="item.estado.nombre" /></td><td>
             @if (assignedWithoutResponsible(item)) {
               <span class="custody-warning"><svg lucideTriangleAlert></svg>Asignado sin responsable</span><span class="cell-secondary">Requiere revisión del responsable</span>
@@ -199,7 +203,7 @@ const printableDocument = (
             } @else {
               <span class="cell-primary">{{ custody(item) }}</span><span class="cell-secondary">{{ item.colaborador?.rut ? rut(item.colaborador!.rut) : item.departamento?.nombre || 'Sin responsable actual' }}</span>
             }
-          </td><td>{{ item.localidad || '—' }}<span class="cell-secondary">{{ item.ubicacionDetalle || '' }}</span></td><td><div class="actions"><a class="btn btn--secondary btn--small" [routerLink]="[item.codigoInventario]">Gestionar ficha</a><a class="btn btn--ghost btn--small" [routerLink]="[item.codigoInventario,'editar']">Editar</a></div></td></tr>}
+          </td><td><span class="verification-badge verification-badge--{{ item.verificacionFisica?.resultado || 'PENDIENTE' }}">{{ verification(item.verificacionFisica?.resultado) }}</span></td><td>{{ item.localidad || '—' }}<span class="cell-secondary">{{ item.ubicacionDetalle || '' }}</span></td><td><div class="actions"><a class="btn btn--secondary btn--small" [routerLink]="[item.codigoInventario]">Gestionar ficha</a><a class="btn btn--ghost btn--small" [routerLink]="[item.codigoInventario,'editar']">Editar</a></div></td></tr>}
         </tbody></table></div>
         <div class="mobile-record-list inventory-mobile-list">
           @for(item of items(); track item.id) {
@@ -214,6 +218,7 @@ const printableDocument = (
                 <app-status-badge [code]="item.estado.codigo" [label]="item.estado.nombre" />
               </header>
               <dl class="mobile-record-card__details">
+                <div><dt>Verificación</dt><dd><span class="verification-badge verification-badge--{{ item.verificacionFisica?.resultado || 'PENDIENTE' }}">{{ verification(item.verificacionFisica?.resultado) }}</span></dd></div>
                 <div><dt>Responsable</dt><dd>@if(assignedWithoutResponsible(item)){<span class="custody-warning"><svg lucideTriangleAlert></svg>Asignado sin responsable</span><small>Revisar custodia</small>}@else if(closedCustody(item)){<span>Último responsable: {{ lastResponsibleName(item) }}</span>@if(item.ultimoResponsableConocido;as previous){<small>{{ previous.tipo === 'COLABORADOR' ? 'Colaborador' : 'Departamento' }} · {{ previous.fechaMovimiento | date:'dd/MM/yyyy' }}</small>}}@else{<span>{{ custody(item) }}</span>}</dd></div>
                 <div><dt>Ubicaci&oacute;n</dt><dd>{{ item.localidad || item.ubicacionDetalle || 'Sin ubicaci&oacute;n' }}</dd></div>
               </dl>
@@ -266,9 +271,10 @@ export class DispositivosList implements OnInit {
   protected readonly physicalIdentifier = inventoryPhysicalIdentifier;
   protected readonly assignedWithoutResponsible = isAssignedWithoutResponsible;
   protected readonly labelIdentifier = batchLabelIdentifier;
+  protected readonly verification = verificationLabel;
   protected readonly rut = formatRut;
   protected quickQuery = '';
-  protected filters = { q: '', tipoDispositivoId: '', estado: '', departamentoId: '', localidad: '' };
+  protected filters: { q: string; tipoDispositivoId: string; estado: string; departamentoId: string; localidad: string; verificacion: '' | ResultadoVerificacionFisica } = { q: '', tipoDispositivoId: '', estado: '', departamentoId: '', localidad: '', verificacion: '' };
 
   ngOnInit(): void {
     this.filters.estado=this.route.snapshot.queryParamMap.get('estado')||'';
@@ -372,7 +378,7 @@ export class DispositivosList implements OnInit {
   }
   protected load(): void {
     this.loading.set(true); this.error.set('');
-    this.service.listar({ q: this.filters.q || undefined, tipoDispositivoId: this.filters.tipoDispositivoId ? Number(this.filters.tipoDispositivoId) : undefined, estado: this.filters.estado || undefined, departamentoId: this.filters.departamentoId ? Number(this.filters.departamentoId) : undefined, localidad: this.filters.localidad || undefined }).subscribe({ next: (items) => { this.items.set(items); const visible = new Set(items.map((item) => item.id)); this.selectedIds.update((selected) => new Set([...selected].filter((id) => visible.has(id)))); this.loading.set(false); }, error: (error) => { this.error.set(errorMessage(error)); this.loading.set(false); } });
+    this.service.listar({ q: this.filters.q || undefined, tipoDispositivoId: this.filters.tipoDispositivoId ? Number(this.filters.tipoDispositivoId) : undefined, estado: this.filters.estado || undefined, departamentoId: this.filters.departamentoId ? Number(this.filters.departamentoId) : undefined, localidad: this.filters.localidad || undefined, verificacion: this.filters.verificacion || undefined }).subscribe({ next: (items) => { this.items.set(items); const visible = new Set(items.map((item) => item.id)); this.selectedIds.update((selected) => new Set([...selected].filter((id) => visible.has(id)))); this.loading.set(false); }, error: (error) => { this.error.set(errorMessage(error)); this.loading.set(false); } });
   }
   protected selected(id: string): boolean { return this.selectedIds().has(id); }
   protected selectedCount(): number { return this.selectedIds().size; }
@@ -422,7 +428,7 @@ export class DispositivosList implements OnInit {
       this.toast.error('No se pudieron generar las etiquetas', errorMessage(error));
     }
   }
-  protected clear(): void { this.quickQuery = ''; this.filters = { q: '', tipoDispositivoId: '', estado: '', departamentoId: '', localidad: '' }; this.load(); }
+  protected clear(): void { this.quickQuery = ''; this.filters = { q: '', tipoDispositivoId: '', estado: '', departamentoId: '', localidad: '', verificacion: '' }; this.load(); }
   protected custody(item: Dispositivo): string { return item.colaborador?.nombre || item.departamento?.nombre || 'Sin responsable actual'; }
   protected closedCustody(item: Dispositivo): boolean { return isClosedCustodyState(item.estado.codigo); }
   protected lastResponsibleName(item: Dispositivo): string {

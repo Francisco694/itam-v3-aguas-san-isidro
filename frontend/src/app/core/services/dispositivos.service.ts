@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { ApiCollectionResponse, ApiItemResponse } from '../models/api.models';
-import { AsignarDispositivoColaboradorInput, AsignarDispositivoDepartamentoInput, CambiarEstadoInput, DarBajaInput, DevolverDispositivoInput, Dispositivo, DispositivoFilters, DispositivoInput, HistorialEvento, ResultadoDevolucion, ResultadoOffboardingInput, ResumenGerencial, TrazabilidadDispositivo } from '../models/itam.models';
+import { AsignarDispositivoColaboradorInput, AsignarDispositivoDepartamentoInput, CambiarEstadoInput, DarBajaInput, DevolverDispositivoInput, Dispositivo, DispositivoFilters, DispositivoInput, HistorialEvento, ResultadoDevolucion, ResultadoOffboardingInput, ResumenGerencial, TrazabilidadDispositivo, VerificacionFisica, VerificacionFisicaResumen } from '../models/itam.models';
 
 @Injectable({ providedIn: 'root' })
 export class DispositivosService {
@@ -32,6 +32,8 @@ export class DispositivosService {
   darBaja(codigo:number,input:DarBajaInput){return this.item(this.http.post<ApiItemResponse<Dispositivo>>(`${this.url}/${codigo}/dar-baja`,input));}
   cambiarEstado(codigo: number, input: CambiarEstadoInput) { return this.item(this.http.post<ApiItemResponse<Dispositivo>>(`${this.url}/${codigo}/cambiar-estado`, input)); }
   historial(codigo: number) { return this.http.get<ApiCollectionResponse<HistorialEvento>>(`${this.url}/${codigo}/historial`).pipe(map((r) => r.data)); }
+  verificar(codigo: number, input: { encontrado: boolean; identificadorComprobado?: string | null; observacion?: string | null }) { return this.http.post<ApiItemResponse<VerificacionFisica>>(`${this.url}/${codigo}/verificaciones-fisicas`, input).pipe(map((r) => r.data)); }
+  verificaciones(codigo: number) { return this.http.get<ApiCollectionResponse<VerificacionFisica>>(`${this.url}/${codigo}/verificaciones-fisicas`).pipe(map((r) => r.data)); }
   trazabilidad(codigo: string | number) { return this.http.get<ApiItemResponse<TrazabilidadDispositivo>>(`${this.url}/${codigo}/trazabilidad`).pipe(map((r) => r.data)); }
   private item(request: Observable<ApiItemResponse<Dispositivo>>) { return request.pipe(map((response) => response.data)); }
 }

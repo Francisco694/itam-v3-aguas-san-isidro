@@ -28,6 +28,10 @@ import {
   obtenerHistorialDispositivo,
   obtenerTrazabilidadDispositivo
 } from "./dispositivos.service";
+export {
+  listarVerificacionesFisicasController,
+  registrarVerificacionFisicaController
+} from "./physical-verifications.controller";
 import type {
   ActualizarDispositivoInput,
   AsignarColaboradorInput,
@@ -158,6 +162,12 @@ export const listarDispositivosController = asyncHandler(
           req.query.localidad,
           "localidad",
           120
+        ) ?? undefined,
+      verificacion:
+        parseOptionalEnum(
+          req.query.verificacion,
+          "verificacion",
+          ["PENDIENTE", "VERIFICADO", "REVISAR_DATOS", "NO_ENCONTRADO"] as const
         ) ?? undefined
     };
 
