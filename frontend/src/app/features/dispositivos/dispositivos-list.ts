@@ -52,7 +52,7 @@ export const inventoryPhysicalIdentifier = (
 };
 
 export const verificationLabel = (result: ResultadoVerificacionFisica | undefined): string =>
-  ({ PENDIENTE: '○ Pendiente', VERIFICADO: '✓ Verificado', REVISAR_DATOS: '! Revisar datos', NO_ENCONTRADO: '✕ No encontrado' }[result || 'PENDIENTE']);
+  ({ PENDIENTE: '○ Pendiente', VERIFICADO: '✓ Verificado', REVISAR: '! Revisar' }[result || 'PENDIENTE']);
 
 export const isAssignedWithoutResponsible = (
   item: Pick<Dispositivo, 'estado' | 'colaborador' | 'departamento'>,
@@ -178,7 +178,7 @@ const printableDocument = (
         <div class="field"><label for="estado">Estado</label><select id="estado" name="estado" [(ngModel)]="filters.estado"><option value="">Todos</option>@for(e of states(); track e.id){<option [value]="e.codigo">{{ e.nombre }}</option>}</select></div>
         <div class="field"><label for="department">Departamento</label><select id="department" name="department" [(ngModel)]="filters.departamentoId"><option value="">Todos</option>@for(d of departments(); track d.id){<option [value]="d.id">{{ d.nombre }}</option>}</select></div>
         <div class="field"><label for="location">Localidad</label><input id="location" name="location" [(ngModel)]="filters.localidad" /></div>
-        <div class="field"><label for="verification">Verificación</label><select id="verification" name="verification" [(ngModel)]="filters.verificacion"><option value="">Todos</option><option value="PENDIENTE">Pendientes</option><option value="VERIFICADO">Verificados</option><option value="REVISAR_DATOS">Revisar datos</option><option value="NO_ENCONTRADO">No encontrados</option></select></div>
+        <div class="field"><label for="verification">Verificación</label><select id="verification" name="verification" [(ngModel)]="filters.verificacion"><option value="">Todos</option><option value="PENDIENTE">Pendientes</option><option value="VERIFICADO">Verificados</option><option value="REVISAR">Revisar</option></select></div>
         <div class="filter-panel__actions"><button class="btn btn--primary" type="submit">Aplicar</button><button class="btn btn--ghost" type="button" (click)="clear()">Limpiar</button></div>
       </form>
       @if (loading()) { <app-view-state kind="loading" title="Cargando dispositivos" message="Consultando el inventario real…" /> }

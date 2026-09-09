@@ -1,8 +1,7 @@
 export type ResultadoVerificacionFisica =
   | "PENDIENTE"
   | "VERIFICADO"
-  | "REVISAR_DATOS"
-  | "NO_ENCONTRADO";
+  | "REVISAR";
 
 export interface RegistrarVerificacionFisicaInput {
   encontrado: boolean;
@@ -32,6 +31,16 @@ export interface DispositivoVerificacionRow {
   imei: string | null;
   colaborador_id: string | null;
   departamento_id: string | null;
+}
+
+export interface VerificacionFisicaInsert {
+  encontrado: boolean;
+  identificadorComprobado: string | null;
+  identificadorEsperado: string | null;
+  resultado: ResultadoVerificacionFisica;
+  observacion: string | null;
+  responsable: string;
+  motivo?: string | null;
 }
 
 export interface VerificacionFisicaRow {

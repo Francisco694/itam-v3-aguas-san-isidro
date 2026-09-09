@@ -24,7 +24,8 @@ export const registrarVerificacionFisicaController = asyncHandler(
         "identificadorComprobado",
         150
       ),
-      observacion: parseOptionalString(body.observacion, "observacion"),
+      observacion: parseOptionalString(body.observacion, "observacion")
+        ?? (body.encontrado ? null : "Equipo no localizado durante revisión."),
       responsable: authenticatedActorName(req)
     };
     sendItem(

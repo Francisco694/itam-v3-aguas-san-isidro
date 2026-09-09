@@ -46,7 +46,7 @@ export interface Dispositivo {
   verificacionFisica: VerificacionFisicaResumen | null;
 }
 
-export type ResultadoVerificacionFisica = 'PENDIENTE' | 'VERIFICADO' | 'REVISAR_DATOS' | 'NO_ENCONTRADO';
+export type ResultadoVerificacionFisica = 'PENDIENTE' | 'VERIFICADO' | 'REVISAR';
 export interface VerificacionFisicaResumen {
   resultado: ResultadoVerificacionFisica;
   fechaVerificacion: string;

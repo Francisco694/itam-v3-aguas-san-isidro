@@ -1,9 +1,10 @@
-import { NotFoundError, ConflictError } from "../../shared/errors";
+import { ConflictError, NotFoundError } from "../../shared/errors";
 import { toIsoDateTime } from "../../shared/dates";
 import {
   insertarVerificacionFisica,
   listarVerificacionesFisicas,
-  obtenerDispositivoParaVerificacion
+  obtenerDispositivoParaVerificacion,
+  obtenerUltimaVerificacionFisica
 } from "./physical-verifications.repository";
 import type {
   DispositivoVerificacionRow,
@@ -20,7 +21,7 @@ export const clasificarVerificacionFisica = (
 ): { resultado: ResultadoVerificacionFisica; identificadorEsperado: string | null } => {
   const esSmartphone = dispositivo.tipo_nombre.trim().toUpperCase() === "SMARTPHONE";
   const identificadorEsperado = esSmartphone ? dispositivo.imei : dispositivo.numero_serie;
-  if (!encontrado) return { resultado: "NO_ENCONTRADO", identificadorEsperado };
+  if (!encontrado) return { resultado: "REVISAR", identificadorEsperado };
   if (
     identificadorComprobado !== null &&
     identificadorEsperado !== null &&
@@ -33,13 +34,11 @@ export const clasificarVerificacionFisica = (
         !dispositivo.colaborador_id &&
         !dispositivo.departamento_id)
     ) {
-      throw new ConflictError(
-        "La verificación coincide, pero el equipo requiere regularización de estado o custodia antes de verificarse."
-      );
+      return { resultado: "REVISAR", identificadorEsperado };
     }
     return { resultado: "VERIFICADO", identificadorEsperado };
   }
-  return { resultado: "REVISAR_DATOS", identificadorEsperado };
+  return { resultado: "REVISAR", identificadorEsperado };
 };
 
 const toVerification = (row: VerificacionFisicaRow): VerificacionFisica => ({
@@ -62,6 +61,10 @@ export const registrarVerificacionFisica = async (
 ): Promise<VerificacionFisica> => {
   const dispositivo = await obtenerDispositivoParaVerificacion(codigo);
   if (!dispositivo) throw new NotFoundError("Dispositivo no encontrado.");
+  const ultima = await obtenerUltimaVerificacionFisica(dispositivo.id);
+  if (ultima && ultima !== "PENDIENTE") {
+    throw new ConflictError("El equipo ya cuenta con evidencia de verificación.");
+  }
 
   const comprobado = input.identificadorComprobado?.trim() || null;
   const { resultado, identificadorEsperado } = clasificarVerificacionFisica(
@@ -73,13 +76,46 @@ export const registrarVerificacionFisica = async (
   return toVerification(
     await insertarVerificacionFisica(
       dispositivo,
-      input.encontrado,
-      comprobado,
-      identificadorEsperado,
-      resultado,
-      input.observacion ?? null,
-      input.responsable
+      {
+        encontrado: input.encontrado,
+        identificadorComprobado: comprobado,
+        identificadorEsperado,
+        resultado,
+        observacion: input.observacion ?? null,
+        responsable: input.responsable,
+        motivo: "revisión manual"
+      }
     )
+  );
+};
+
+export const registrarVerificacionAutomaticaPorOperacion = async (
+  codigo: number,
+  motivo: string,
+  responsable: string,
+  client: import("pg").PoolClient
+): Promise<void> => {
+  const dispositivo = await obtenerDispositivoParaVerificacion(codigo, client);
+  if (!dispositivo) throw new NotFoundError("Dispositivo no encontrado.");
+  const ultima = await obtenerUltimaVerificacionFisica(dispositivo.id, client);
+  if (ultima && ultima !== "PENDIENTE") return;
+
+  const identificadorEsperado =
+    dispositivo.tipo_nombre.trim().toUpperCase() === "SMARTPHONE"
+      ? dispositivo.imei
+      : dispositivo.numero_serie;
+  await insertarVerificacionFisica(
+    dispositivo,
+    {
+      encontrado: true,
+      identificadorComprobado: identificadorEsperado,
+      identificadorEsperado,
+      resultado: "VERIFICADO",
+      observacion: `Equipo verificado mediante operación física: ${motivo}.`,
+      responsable,
+      motivo
+    },
+    client
   );
 };
 

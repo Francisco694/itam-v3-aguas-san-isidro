@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ConflictError } from "../../shared/errors";
 import { clasificarVerificacionFisica } from "./physical-verifications.service";
 import type { DispositivoVerificacionRow } from "./physical-verifications.types";
 
@@ -15,8 +14,8 @@ const dispositivo = (estado = "DISPONIBLE"): DispositivoVerificacionRow => ({
   departamento_id: null
 });
 
-test("verificación física: equipo no encontrado", () => {
-  assert.equal(clasificarVerificacionFisica(dispositivo(), false, null).resultado, "NO_ENCONTRADO");
+test("verificación física: equipo no localizado requiere revisión", () => {
+  assert.equal(clasificarVerificacionFisica(dispositivo(), false, null).resultado, "REVISAR");
 });
 
 test("verificación física: identificador exacto verifica", () => {
@@ -24,26 +23,26 @@ test("verificación física: identificador exacto verifica", () => {
 });
 
 test("verificación física: identificador vacío o distinto requiere revisar datos", () => {
-  assert.equal(clasificarVerificacionFisica(dispositivo(), true, null).resultado, "REVISAR_DATOS");
-  assert.equal(clasificarVerificacionFisica(dispositivo(), true, "OTRO").resultado, "REVISAR_DATOS");
+  assert.equal(clasificarVerificacionFisica(dispositivo(), true, null).resultado, "REVISAR");
+  assert.equal(clasificarVerificacionFisica(dispositivo(), true, "OTRO").resultado, "REVISAR");
 });
 
 test("verificación física: smartphone compara exclusivamente el IMEI", () => {
   const smartphone = { ...dispositivo(), tipo_nombre: "Smartphone", imei: "359158762297938" };
   assert.equal(clasificarVerificacionFisica(smartphone, true, "359158762297938").resultado, "VERIFICADO");
-  assert.equal(clasificarVerificacionFisica(smartphone, true, "SER-001").resultado, "REVISAR_DATOS");
+  assert.equal(clasificarVerificacionFisica(smartphone, true, "SER-001").resultado, "REVISAR");
 });
 
-test("verificación física: extraviado requiere regularización", () => {
-  assert.throws(
-    () => clasificarVerificacionFisica(dispositivo("EXTRAVIADO"), true, "SER-001"),
-    ConflictError
+test("verificación física: extraviado queda para revisión", () => {
+  assert.equal(
+    clasificarVerificacionFisica(dispositivo("EXTRAVIADO"), true, "SER-001").resultado,
+    "REVISAR"
   );
 });
 
-test("verificación física: asignado sin responsable requiere regularización", () => {
-  assert.throws(
-    () => clasificarVerificacionFisica(dispositivo("ASIGNADO"), true, "SER-001"),
-    ConflictError
+test("verificación física: asignado sin responsable queda para revisión", () => {
+  assert.equal(
+    clasificarVerificacionFisica(dispositivo("ASIGNADO"), true, "SER-001").resultado,
+    "REVISAR"
   );
 });

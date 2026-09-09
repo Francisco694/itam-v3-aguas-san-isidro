@@ -187,10 +187,20 @@ const dispositivoSelect = `
     LIMIT 1
   ) offboarding ON TRUE
   LEFT JOIN LATERAL (
-    SELECT v.resultado, v.fecha_verificacion, v.observacion
-    FROM itam.verificaciones_fisicas_dispositivo v
-    WHERE v.dispositivo_id = d.id
-    ORDER BY v.fecha_verificacion DESC, v.id DESC
+    SELECT evidencia.resultado, evidencia.fecha_verificacion, evidencia.observacion
+    FROM (
+      SELECT v.resultado, v.fecha_verificacion, v.observacion
+      FROM itam.verificaciones_fisicas_dispositivo v
+      WHERE v.dispositivo_id = d.id
+      UNION ALL
+      SELECT 'VERIFICADO' AS resultado, h.fecha_evento AS fecha_verificacion,
+             'Equipo creado directamente en ITAM.' AS observacion
+      FROM itam.historial_eventos h
+      WHERE h.dispositivo_id = d.id
+        AND h.tipo_evento = 'ALTA_DISPOSITIVO'
+        AND h.detalle->>'source' IS NULL
+    ) evidencia
+    ORDER BY evidencia.fecha_verificacion DESC
     LIMIT 1
   ) verificacion ON TRUE
 `;

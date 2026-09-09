@@ -5,6 +5,7 @@ import { toIsoDateTime } from "../../shared/dates";
 import { asignarDispositivoAColaborador, cambiarEstadoDispositivo, devolverDispositivo, insertarHistorialDispositivo, obtenerDispositivoPorCodigo, obtenerEstadoDispositivoPorCodigo } from "../dispositivos/dispositivos.repository";
 import { assertAsignadoConCustodioUnico, assertColaboradorActivo, darDeBajaDispositivo } from "../dispositivos/dispositivos.service";
 import { obtenerColaboradorPorId } from "../colaboradores/colaboradores.repository";
+import { registrarVerificacionAutomaticaPorOperacion } from "../dispositivos/physical-verifications.service";
 import type { MotivoBaja } from "../dispositivos/dispositivos.types";
 import { listarEntregasTemporales, listarOrdenes, obtenerEntregaTemporal, obtenerOrden, obtenerOrdenAbiertaPorDispositivo } from "./servicio-tecnico.repository";
 import type { CerrarOrdenInput, CerrarTemporalInput, CotizacionInput, CrearOrdenServicioInput, DecisionServicioInput, EntregaTemporalRow, EntregarTemporalInput, OrdenServicioRow } from "./servicio-tecnico.types";
@@ -52,6 +53,12 @@ export const crearOrdenServicio=async(input:CrearOrdenServicioInput)=>{
   await cambiarEstadoDispositivo(input.dispositivoCodigo,Number(state.id),client);
   await insertarHistorialDispositivo(device.dispositivo_id,"ENVIAR_SERVICIO_TECNICO",device.estado_id,state.id,
     input.responsable,input.fallaReportada,{ordenServicioId:inserted.rows[0]!.id,proveedor:input.proveedor??null},client);
+  await registrarVerificacionAutomaticaPorOperacion(
+    input.dispositivoCodigo,
+    "enviado a revisión técnica",
+    input.responsable,
+    client
+  );
   const row=await obtenerOrden(Number(inserted.rows[0]!.id),client);await client.query("COMMIT");return mapOrden(row!);
  }catch(error){await client.query("ROLLBACK");if(isUniqueViolation(error))throw new ConflictError("El dispositivo ya tiene una orden de servicio abierta.");throw error}finally{client.release()}
 };
@@ -130,6 +137,12 @@ export const cerrarOrdenServicio=async(id:number,input:CerrarOrdenInput)=>{
     {ordenServicioId:id,costoFinal:input.costoFinal,fechaRetorno:input.fechaRetorno??null,
       custodioAlIngreso:{tipo:current.custodio_tipo_al_ingreso,colaboradorId:current.colaborador_id_al_ingreso,departamentoId:current.departamento_id_al_ingreso},
       retornoAlMismoCustodio:Boolean(device.colaborador_id||device.departamento_id)},client);
+  await registrarVerificacionAutomaticaPorOperacion(
+    current.codigo_inventario,
+    "recibido después de revisión técnica",
+    input.responsable,
+    client
+  );
   const row=await obtenerOrden(id,client);const temporales=await listarEntregasTemporales(String(id),client);await client.query("COMMIT");return mapOrden(row!,temporales);
  }catch(error){await client.query("ROLLBACK");throw error}finally{client.release()}
 };

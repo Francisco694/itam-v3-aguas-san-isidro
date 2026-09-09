@@ -39,6 +39,7 @@ import {
   obtenerResumenGerencial,
   registrarBajaDispositivo
 } from "./dispositivos.repository";
+import { registrarVerificacionAutomaticaPorOperacion } from "./physical-verifications.service";
 import type {
   ActualizarDispositivoInput,
   AsignarColaboradorInput,
@@ -504,7 +505,12 @@ export const crearNuevoDispositivo = async (
       },
       client
     );
-
+    await registrarVerificacionAutomaticaPorOperacion(
+      codigoInventario,
+      "equipo creado directamente en ITAM",
+      input.responsable,
+      client
+    );
     await client.query("COMMIT");
 
     return mapDispositivo(dispositivo);
@@ -791,7 +797,12 @@ export const asignarAColaborador = async (
       },
       client
     );
-
+    await registrarVerificacionAutomaticaPorOperacion(
+      codigoInventario,
+      "entregado a colaborador",
+      input.responsable,
+      client
+    );
     await client.query("COMMIT");
 
     return mapDispositivo(actualizado);
@@ -879,6 +890,12 @@ export const asignarADepartamento = async (
         localidad: actualizado.localidad,
         ubicacion: actualizado.ubicacion_detalle
       },
+      client
+    );
+    await registrarVerificacionAutomaticaPorOperacion(
+      codigoInventario,
+      "entregado a departamento",
+      input.responsable,
       client
     );
 
@@ -1011,6 +1028,12 @@ const registrarDevolucionCentral = async (
         client
       );
     }
+    await registrarVerificacionAutomaticaPorOperacion(
+      codigoInventario,
+      "recibido en bodega",
+      input.responsable,
+      client
+    );
 
     await client.query("COMMIT");
 
@@ -1184,6 +1207,14 @@ export const cambiarEstadoDispositivoExistente = async (
       },
       client
     );
+    if (input.recuperar) {
+      await registrarVerificacionAutomaticaPorOperacion(
+        codigoInventario,
+        anterior.estado_codigo === "DADO_BAJA" ? "recuperado de baja" : "recuperado de extravío",
+        input.responsable,
+        client
+      );
+    }
 
     await client.query("COMMIT");
 
