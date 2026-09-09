@@ -31,7 +31,19 @@ CREATE INDEX IF NOT EXISTS idx_verificacion_fisica_dispositivo_fecha
 COMMENT ON TABLE verificaciones_fisicas_dispositivo IS
   'Histórico append-only de verificaciones físicas y evidencias operacionales.';
 
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM schema_migrations
+        WHERE version = '025' AND nombre IS DISTINCT FROM 'physical_device_verifications'
+    ) THEN
+        RAISE EXCEPTION 'Migration 025 is registered with a different name';
+    END IF;
+END;
+$$;
+
 INSERT INTO schema_migrations (version, nombre)
-VALUES ('024', 'physical_device_verifications');
+VALUES ('025', 'physical_device_verifications')
+ON CONFLICT (version) DO NOTHING;
 
 COMMIT;
