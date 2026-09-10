@@ -9,6 +9,7 @@ import { HealthService } from '../../core/services/health.service';
 import { OffboardingService } from '../../core/services/offboarding.service';
 import { ServicioTecnicoService } from '../../core/services/servicio-tecnico.service';
 import { SimService } from '../../core/services/sim.service';
+import { StockAlertsService } from '../../core/services/stock-alerts.service';
 import type { OffboardingProcessSummary } from '../../core/models/offboarding.models';
 import type { Dispositivo } from '../../core/models/itam.models';
 import { Dashboard } from './dashboard';
@@ -58,9 +59,11 @@ describe('Dashboard QA-10 y QA-15', () => {
   let fixture: ComponentFixture<Dashboard>;
   let offboardingProcesses: OffboardingProcessSummary[];
   let devices: Dispositivo[];
+  let stockAlerts: any[];
 
   beforeEach(async () => {
     offboardingProcesses = [];
+    stockAlerts = [];
     const device = (id: string, state: string, value: number): Dispositivo => ({
       id,
       codigoInventario: Number(id),
@@ -104,6 +107,10 @@ describe('Dashboard QA-10 y QA-15', () => {
         {
           provide: OffboardingService,
           useValue: { listarAbiertos: () => of(offboardingProcesses) },
+        },
+        {
+          provide: StockAlertsService,
+          useValue: { listar: () => of(stockAlerts) },
         },
       ],
     }).compileComponents();
@@ -172,5 +179,32 @@ describe('Dashboard QA-10 y QA-15', () => {
     expect(card.textContent).toContain('3 equipos por recuperar');
     expect(card.textContent).toContain('$780.000');
     expect(card.getAttribute('href')).toBe('/offboarding');
+  });
+
+  it('no ocupa espacio cuando ningún tipo tiene una alerta real', () => {
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.stock-replenishment')).toBeNull();
+  });
+
+  it('no muestra la sección si hay controles activos sobre el mínimo', () => {
+    stockAlerts = [{
+      tipoDispositivo: { id: '7', nombre: 'Notebook' }, disponibles: 4,
+      minimoDisponible: 3, alertaActiva: true, enAlerta: false, mensaje: null
+    }];
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.stock-replenishment')).toBeNull();
+  });
+
+  it('muestra alertas y enlaza al inventario disponible filtrado por tipo', () => {
+    stockAlerts = [{
+      tipoDispositivo: { id: '7', nombre: 'Notebook' }, disponibles: 3,
+      minimoDisponible: 3, alertaActiva: true, enAlerta: true,
+      mensaje: 'Quedan 3 Notebooks disponibles · mínimo configurado: 3'
+    }];
+    fixture.detectChanges();
+    const link = fixture.nativeElement.querySelector('.stock-alert') as HTMLAnchorElement;
+    expect(link.textContent).toContain('Notebook');
+    expect(link.textContent).toContain('Quedan 3 Notebooks disponibles');
+    expect(link.getAttribute('href')).toContain('/dispositivos?tipoDispositivoId=7&estado=DISPONIBLE');
   });
 });

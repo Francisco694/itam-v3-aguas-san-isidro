@@ -24,11 +24,13 @@ import { HealthService } from '../../core/services/health.service';
 import { OffboardingService } from '../../core/services/offboarding.service';
 import { ServicioTecnicoService } from '../../core/services/servicio-tecnico.service';
 import { SimService } from '../../core/services/sim.service';
+import { StockAlertsService } from '../../core/services/stock-alerts.service';
 import { PageHeader } from '../../shared/components/page-header/page-header';
 import { ViewState } from '../../shared/components/view-state/view-state';
 import { formatClp } from '../../shared/utils/currency';
 import { errorMessage } from '../../shared/utils/error-message';
 import type { Dispositivo } from '../../core/models/itam.models';
+import type { StockAlertConfiguration } from '../../core/models/itam.models';
 
 const CURRENT_OPERATIONAL_STATE_CODES = new Set([
   'ASIGNADO',
@@ -141,6 +143,19 @@ interface OperationalMetric {
         <div><span>Histórico registrado</span><strong>{{ historicalDevices() }}</strong></div>
         <p>Total de registros en ITAM, incluyendo bajas y extravíos.</p>
       </aside>
+      @if (activeStockAlerts().length) {<section class="stock-replenishment" aria-labelledby="stock-alerts-title">
+        <div class="section-heading">
+          <div><span>CONTROL DE EXISTENCIAS</span><h2 id="stock-alerts-title">Alertas de reposición</h2></div>
+          <a routerLink="/alertas-stock">Configurar alertas</a>
+        </div>
+          <div class="stock-alert-grid">
+            @for (alert of activeStockAlerts(); track alert.tipoDispositivo.id) {
+              <a class="card stock-alert" routerLink="/dispositivos" [queryParams]="{tipoDispositivoId: alert.tipoDispositivo.id, estado: 'DISPONIBLE'}">
+                <svg lucideCircleAlert></svg><div><strong>{{alert.tipoDispositivo.nombre}}</strong><span>{{alert.mensaje}}</span></div><b aria-hidden="true">→</b>
+              </a>
+            }
+          </div>
+      </section>}
       <section class="operational-section" aria-labelledby="operational-title">
         <div class="section-heading">
           <div>
@@ -311,6 +326,7 @@ export class Dashboard implements OnInit {
   private readonly technical = inject(ServicioTecnicoService);
   private readonly actas = inject(ActasEntregaService);
   private readonly offboarding = inject(OffboardingService);
+  private readonly stockAlertsService = inject(StockAlertsService);
   protected readonly loading = signal(true);
   protected readonly error = signal('');
   protected readonly metrics = signal<Metric[]>([]);
@@ -328,6 +344,7 @@ export class Dashboard implements OnInit {
   protected readonly pendingQuotes = signal(0);
   protected readonly repairCosts = signal('$0');
   protected readonly operationalMetrics = signal<OperationalMetric[]>([]);
+  protected readonly activeStockAlerts = signal<StockAlertConfiguration[]>([]);
   protected readonly simIcon = LucideCardSim;
   protected readonly usersIcon = LucideUsers;
   protected readonly buildingIcon = LucideBuilding;
@@ -348,6 +365,7 @@ export class Dashboard implements OnInit {
       acts: this.actas.listar(),
       summary: this.dispositivos.resumenGerencial(),
       offboarding: this.offboarding.listarAbiertos(),
+      stockAlerts: this.stockAlertsService.listar(),
     }).subscribe({
       next: (r) => {
         const inventoryScope = dashboardInventoryScope(r.devices);
@@ -428,6 +446,7 @@ export class Dashboard implements OnInit {
           });
         }
         this.metrics.set(metrics);
+        this.activeStockAlerts.set(r.stockAlerts.filter((alert) => alert.enAlerta));
         this.serviceDevices.set(r.summary.servicioTecnico.cantidad);
         this.pendingDiagnostics.set(
           r.orders.filter((o) => o.estado === 'PENDIENTE_DIAGNOSTICO').length,

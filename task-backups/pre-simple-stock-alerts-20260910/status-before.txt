@@ -1,0 +1,27 @@
+﻿ M backend/src/app.ts
+ M backend/src/modules/dispositivos/dispositivos.controller.ts
+ M backend/src/modules/dispositivos/dispositivos.service.ts
+ M backend/src/modules/dispositivos/dispositivos.types.ts
+ M backend/src/modules/sim/sim.repository.ts
+ M frontend/package.json
+ M frontend/proxy.lan.json
+ M frontend/public/favicon.ico
+ M frontend/src/app/app.routes.ts
+ M frontend/src/app/core/models/itam.models.ts
+ M frontend/src/app/features/dashboard/dashboard.scss
+ M frontend/src/app/features/dashboard/dashboard.spec.ts
+ M frontend/src/app/features/dashboard/dashboard.ts
+ M frontend/src/app/features/dispositivos/dispositivo-detail.scss
+ M frontend/src/app/features/dispositivos/dispositivo-detail.ts
+ M frontend/src/app/features/dispositivos/dispositivos-list.ts
+ M frontend/src/app/layout/header/header.ts
+ M frontend/src/app/layout/sidebar/sidebar.ts
+ M frontend/src/environments/environment.ts
+ M frontend/src/index.html
+?? backend/src/modules/stock-alerts/
+?? database/migrations/026_configurable_stock_alerts.sql
+?? frontend/src/app/core/services/stock-alerts.service.spec.ts
+?? frontend/src/app/core/services/stock-alerts.service.ts
+?? frontend/src/app/features/dispositivos/delivery-ui.spec.ts
+?? frontend/src/app/features/stock-alerts/
+?? task-backups/

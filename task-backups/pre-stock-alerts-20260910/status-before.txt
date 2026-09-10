@@ -1,0 +1,16 @@
+﻿ M backend/src/modules/dispositivos/dispositivos.controller.ts
+ M backend/src/modules/dispositivos/dispositivos.service.ts
+ M backend/src/modules/dispositivos/dispositivos.types.ts
+ M backend/src/modules/sim/sim.repository.ts
+ M frontend/package.json
+ M frontend/proxy.lan.json
+ M frontend/public/favicon.ico
+ M frontend/src/app/core/models/itam.models.ts
+ M frontend/src/app/features/dispositivos/dispositivo-detail.scss
+ M frontend/src/app/features/dispositivos/dispositivo-detail.ts
+ M frontend/src/app/features/dispositivos/dispositivos-list.ts
+ M frontend/src/app/layout/header/header.ts
+ M frontend/src/environments/environment.ts
+ M frontend/src/index.html
+?? frontend/src/app/features/dispositivos/delivery-ui.spec.ts
+?? task-backups/

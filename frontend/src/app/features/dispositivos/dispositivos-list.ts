@@ -203,7 +203,7 @@ const printableDocument = (
             } @else {
               <span class="cell-primary">{{ custody(item) }}</span><span class="cell-secondary">{{ item.colaborador?.rut ? rut(item.colaborador!.rut) : item.departamento?.nombre || 'Sin responsable actual' }}</span>
             }
-          </td><td><span class="verification-badge verification-badge--{{ item.verificacionFisica?.resultado || 'PENDIENTE' }}">{{ verification(item.verificacionFisica?.resultado) }}</span></td><td>{{ item.localidad || '—' }}<span class="cell-secondary">{{ item.ubicacionDetalle || '' }}</span></td><td><div class="actions"><a class="btn btn--secondary btn--small" [routerLink]="[item.codigoInventario]">Gestionar ficha</a><a class="btn btn--ghost btn--small" [routerLink]="[item.codigoInventario,'editar']">Editar</a></div></td></tr>}
+          </td><td><span class="verification-badge" [class.verification-badge--PENDIENTE]="(item.verificacionFisica?.resultado || 'PENDIENTE') === 'PENDIENTE'" [class.verification-badge--VERIFICADO]="item.verificacionFisica?.resultado === 'VERIFICADO'" [class.verification-badge--REVISAR]="item.verificacionFisica?.resultado === 'REVISAR'">{{ verification(item.verificacionFisica?.resultado) }}</span></td><td>{{ item.localidad || '—' }}<span class="cell-secondary">{{ item.ubicacionDetalle || '' }}</span></td><td><div class="actions"><a class="btn btn--secondary btn--small" [routerLink]="[item.codigoInventario]">Gestionar ficha</a><a class="btn btn--ghost btn--small" [routerLink]="[item.codigoInventario,'editar']">Editar</a></div></td></tr>}
         </tbody></table></div>
         <div class="mobile-record-list inventory-mobile-list">
           @for(item of items(); track item.id) {
@@ -218,7 +218,7 @@ const printableDocument = (
                 <app-status-badge [code]="item.estado.codigo" [label]="item.estado.nombre" />
               </header>
               <dl class="mobile-record-card__details">
-                <div><dt>Verificación</dt><dd><span class="verification-badge verification-badge--{{ item.verificacionFisica?.resultado || 'PENDIENTE' }}">{{ verification(item.verificacionFisica?.resultado) }}</span></dd></div>
+                <div><dt>Verificación</dt><dd><span class="verification-badge" [class.verification-badge--PENDIENTE]="(item.verificacionFisica?.resultado || 'PENDIENTE') === 'PENDIENTE'" [class.verification-badge--VERIFICADO]="item.verificacionFisica?.resultado === 'VERIFICADO'" [class.verification-badge--REVISAR]="item.verificacionFisica?.resultado === 'REVISAR'">{{ verification(item.verificacionFisica?.resultado) }}</span></dd></div>
                 <div><dt>Responsable</dt><dd>@if(assignedWithoutResponsible(item)){<span class="custody-warning"><svg lucideTriangleAlert></svg>Asignado sin responsable</span><small>Revisar custodia</small>}@else if(closedCustody(item)){<span>Último responsable: {{ lastResponsibleName(item) }}</span>@if(item.ultimoResponsableConocido;as previous){<small>{{ previous.tipo === 'COLABORADOR' ? 'Colaborador' : 'Departamento' }} · {{ previous.fechaMovimiento | date:'dd/MM/yyyy' }}</small>}}@else{<span>{{ custody(item) }}</span>}</dd></div>
                 <div><dt>Ubicaci&oacute;n</dt><dd>{{ item.localidad || item.ubicacionDetalle || 'Sin ubicaci&oacute;n' }}</dd></div>
               </dl>
@@ -278,6 +278,7 @@ export class DispositivosList implements OnInit {
 
   ngOnInit(): void {
     this.filters.estado=this.route.snapshot.queryParamMap.get('estado')||'';
+    this.filters.tipoDispositivoId=this.route.snapshot.queryParamMap.get('tipoDispositivoId')||'';
     this.estados.listar('DISPOSITIVO').subscribe({ next: (items) => this.states.set(items) });
     this.deptService.listar().subscribe({ next: (items) => this.departments.set(items) });
     this.typeService.listar().subscribe({ next: (items) => this.types.set(items) });

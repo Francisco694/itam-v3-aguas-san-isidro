@@ -316,6 +316,11 @@ export const asignarColaboradorController = asyncHandler(
         body.colaboradorId,
         "colaboradorId"
       ),
+      simCodigoInventario:
+        parseOptionalPositiveInteger(
+          body.simCodigoInventario,
+          "simCodigoInventario"
+        ) ?? undefined,
       responsable: authenticatedActorName(req),
       observaciones: parseOptionalString(
         body.observaciones,

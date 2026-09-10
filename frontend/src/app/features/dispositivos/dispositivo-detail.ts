@@ -1,16 +1,18 @@
 import { DatePipe } from '@angular/common';
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, DestroyRef, OnInit, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { LucideBuilding, LucideCircleAlert, LucideDownload, LucideExternalLink, LucideFileText, LucideHistory, LucidePackageCheck, LucidePencil, LucideRotateCcw, LucideShieldAlert, LucideUserCheck, LucideWrench, LucideX } from '@lucide/angular';
 import { forkJoin, Observable, tap } from 'rxjs';
-import { ActaEntrega, Colaborador, ComprobanteDevolucion, Departamento, Dispositivo, Estado, HistorialEvento, OrdenServicio, ResultadoDevolucion, TrazabilidadDispositivo } from '../../core/models/itam.models';
+import { ActaEntrega, Colaborador, ComprobanteDevolucion, Departamento, Dispositivo, Estado, HistorialEvento, OrdenServicio, ResultadoDevolucion, Sim, TrazabilidadDispositivo } from '../../core/models/itam.models';
 import { ColaboradoresService } from '../../core/services/colaboradores.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { AuthService } from '../../core/services/auth.service';
 import { DepartamentosService } from '../../core/services/departamentos.service';
 import { DispositivosService } from '../../core/services/dispositivos.service';
 import { EstadosService } from '../../core/services/estados.service';
+import { SimService } from '../../core/services/sim.service';
 import { ToastService } from '../../core/services/toast.service';
 import { ServicioTecnicoService } from '../../core/services/servicio-tecnico.service';
 import { ActasEntregaService } from '../../core/services/actas-entrega.service';
@@ -25,6 +27,7 @@ import { ActaPreview } from '../../shared/components/acta-preview/acta-preview';
 import { errorMessage } from '../../shared/utils/error-message';
 import { formatClp } from '../../shared/utils/currency';
 
+
 export const receiversForDepartment = (
   collaborators: readonly Colaborador[],
   departmentId: string
@@ -34,6 +37,26 @@ export const receiversForDepartment = (
 
 export const isSmartphoneDevice = (device: Dispositivo): boolean =>
   device.tipo.nombre.trim().toLocaleLowerCase('es') === 'smartphone';
+
+export const collaboratorMatchesQuery = (person: Colaborador, query: string): boolean => {
+  const normalize = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es').trim();
+  const value = normalize(query);
+  if (!value || !person.activo) return false;
+  const rut = value.replace(/[.\s-]/g, '');
+  return normalize(person.nombre).includes(value)
+    || (!!rut && /^[0-9k]+$/.test(rut) && person.rut.replace(/[.\s-]/g, '').toLowerCase().includes(rut));
+};
+
+export const isSimAvailableForJointDelivery = (sim: Sim): boolean =>
+  sim.estado.codigo === 'DISPONIBLE' && !sim.dispositivo && !sim.colaborador;
+
+export const simMatchesQuery = (sim: Sim, query: string): boolean => {
+  const value = query.trim().toLocaleLowerCase('es');
+  if (!value) return false;
+  return String(sim.codigoInventario).includes(value)
+    || (sim.numeroAsociado ?? '').toLocaleLowerCase('es').includes(value)
+    || (sim.iccidCodigoFabrica ?? '').toLocaleLowerCase('es').includes(value);
+};
 
 export const deviceActionErrorMessage = (error: unknown): string =>
   errorMessage(error);
@@ -142,14 +165,63 @@ type DeviceAction = 'assign-person' | 'assign-department' | 'return' | 'state' |
             <form class="action-form" [formGroup]="actionForm" (ngSubmit)="execute()">
               <header><div><small>OPERACIÓN EN CURSO</small><h4>{{ actionTitle() }}</h4></div><button class="icon-button" type="button" aria-label="Cancelar operación" [disabled]="submitting()" (click)="action.set(null)"><svg lucideX></svg></button></header>
               @if(actionError()){<div class="notice notice--error" role="alert">{{ actionError() }}</div>}
-              @if(action()==='assign-person'){<div class="field"><label for="colaborador">Colaborador responsable *</label><select id="colaborador" formControlName="colaboradorId"><option value="">Seleccionar colaborador</option>@for(person of collaborators(); track person.id){<option [value]="person.id">{{ person.nombre }} · {{ person.rut }}</option>}</select></div>}
+              @if(action()==='assign-person'){
+                <div class="delivery-form">
+                  <div class="field delivery-field">
+                    <label for="colaborador">Colaborador responsable *</label>
+                    @if(selectedCollaborator(); as person){
+                      <div class="delivery-selection" role="status">
+                        <div><small>Colaborador seleccionado</small><strong>{{person.nombre}}</strong><span>{{person.rut}} · {{person.departamento?.nombre || 'Sin departamento'}}</span></div>
+                        <button type="button" class="btn btn--ghost btn--small" (click)="searchCollaborator('')" [disabled]="submitting()">Quitar</button>
+                      </div>
+                    } @else {
+                      <input id="colaborador" type="search" autocomplete="off" placeholder="Buscar por nombre, apellido o RUT..." [value]="collaboratorQuery()" (input)="searchCollaborator($any($event.target).value)" [disabled]="submitting()" />
+                      <small class="delivery-help">Escriba y seleccione un colaborador.</small>
+                      @if(collaboratorQuery().trim()){
+                        @if(matchingCollaborators().length){
+                          <div class="delivery-suggestions" aria-label="Colaboradores encontrados">
+                            @for(person of matchingCollaborators(); track person.id){
+                              <button type="button" class="delivery-suggestion" (click)="selectCollaborator(person)"><strong>{{person.nombre}}</strong><span>{{person.rut}} · {{person.departamento?.nombre || 'Sin departamento'}}</span></button>
+                            }
+                          </div>
+                        } @else {<p class="delivery-empty" role="status">Sin colaboradores encontrados</p>}
+                      }
+                    }
+                  </div>
+                  @if(isSmartphone(device) && !device.simAsociada){
+                    <label class="sim-delivery-toggle"><input type="checkbox" [checked]="jointDelivery()" (change)="toggleJointDelivery($any($event.target).checked)" [disabled]="submitting()" /> <span>Entregar SIM junto al equipo</span></label>
+                    @if(jointDelivery()){
+                      <div class="field delivery-field delivery-sim">
+                        <label for="delivery-sim">SIM a entregar</label>
+                        @if(selectedSim(); as sim){
+                          <div class="delivery-selection" role="status">
+                            <div><small>SIM seleccionada</small><strong>ITAM {{sim.codigoInventario}}</strong><span>{{sim.numeroAsociado || 'Sin número'}} · {{sim.compania || 'Sin operador'}}</span></div>
+                            <button type="button" class="btn btn--ghost btn--small" (click)="searchSim('')" [disabled]="submitting()">Quitar</button>
+                          </div>
+                        } @else {
+                          <input id="delivery-sim" type="search" autocomplete="off" placeholder="Buscar por código ITAM, número o ICCID..." [value]="simQuery()" (input)="searchSim($any($event.target).value)" [disabled]="submitting()" />
+                          @if(simLoading()){<p class="delivery-empty" role="status">Cargando SIM disponibles...</p>}
+                          @else if(simError()){<div class="delivery-error"><span role="alert">{{simError()}}</span><button type="button" class="btn btn--ghost btn--small" (click)="loadDeliverySims()">Reintentar</button></div>}
+                          @else if(simQuery().trim()){
+                            @if(matchingSims().length){
+                              <div class="delivery-suggestions" aria-label="SIM disponibles">
+                                @for(sim of matchingSims(); track sim.id){<button type="button" class="delivery-suggestion" (click)="selectSim(sim)"><strong>ITAM {{sim.codigoInventario}}</strong><span>{{sim.numeroAsociado || 'Sin número'}} · {{sim.iccidCodigoFabrica || 'Sin ICCID'}}</span></button>}
+                              </div>
+                            } @else {<p class="delivery-empty" role="status">Sin SIM encontradas</p>}
+                          }
+                        }
+                      </div>
+                    }
+                  }
+                </div>
+              }
               @if(action()==='assign-department'){<div class="notice notice--info">La responsabilidad será institucional; el colaborador que recibe confirma la entrega física.</div><div class="field"><label for="dept">Departamento *</label><select id="dept" formControlName="departamentoId"><option value="">Seleccionar</option>@for(department of departments(); track department.id){<option [value]="department.id">{{department.nombre}}</option>}</select></div><div class="field"><label for="receiver">Colaborador que recibe *</label><select id="receiver" formControlName="recibidoPorId"><option value="">Seleccionar colaborador del departamento</option>@for(person of departmentReceivers();track person.id){<option [value]="person.id">{{person.nombre}} · {{person.rut}} · {{person.cargo||'Sin cargo'}}</option>}</select></div><div class="field"><label for="location">Localidad</label><input id="location" formControlName="localidad" maxlength="120" /></div><div class="field"><label for="position">Ubicación</label><input id="position" formControlName="ubicacionDetalle" maxlength="250" /></div>}
               @if(action()==='state' || action()==='recover'){@if(action()==='recover'){<div class="notice notice--info">No se borrará la historia del equipo. Se registrará que el equipo fue encontrado.</div>}<div class="field"><label for="new-state">Nuevo estado *</label><select id="new-state" formControlName="estadoId"><option value="">Seleccionar</option>@for(state of states(); track state.id){@if(action()==='state' || state.codigo==='DISPONIBLE' || state.codigo==='SERVICIO_TECNICO'){<option [value]="state.id">{{ state.nombre }}{{ state.esTerminal ? ' · terminal' : '' }}</option>}}</select></div>}
               @if(action()==='recover'){<div class="field"><label for="recovery-reason">Motivo *</label><textarea id="recovery-reason" formControlName="motivoRecuperacion" required></textarea></div>}
               @if(action()==='service'){<div class="field"><label for="service-date">Fecha de envío</label><input id="service-date" type="datetime-local" formControlName="fechaEnvio" /></div><div class="field"><label for="provider">Proveedor / técnico / destino</label><input id="provider" formControlName="proveedor" maxlength="180" /></div><div class="field"><label for="failure">Falla reportada *</label><textarea id="failure" formControlName="fallaReportada"></textarea></div>}
               @if(action()==='retire'){<div class="notice notice--info">La baja conservará el motivo, el valor comercial vigente y el responsable TI en la trazabilidad.</div><div class="field"><label for="retire-reason">Motivo *</label><select id="retire-reason" formControlName="motivoBaja"><option value="">Seleccionar</option><option value="IRREPARABLE">Irreparable</option><option value="REPARACION_NO_CONVENIENTE">Reparación no conveniente</option><option value="MULTIPLES_REPARACIONES">Múltiples reparaciones</option><option value="OBSOLESCENCIA">Obsolescencia</option><option value="DANO_FISICO">Daño físico</option><option value="SIN_REPUESTOS">Sin repuestos</option><option value="OTRO">Otro</option></select></div>}
               @if(action()==='verify'){<div class="verification-context"><strong>Verificar equipo</strong><span>ITAM {{ item()?.codigoInventario }} · {{ item()?.tipo?.nombre }}</span><span>{{ item()?.marca || 'Sin marca' }} {{ item()?.modelo || '' }}</span><span>{{ isSmartphone(item()!) ? 'IMEI: ' + (item()?.imei || 'Sin IMEI registrado') : 'N° serie: ' + (item()?.numeroSerie || 'Sin número de serie registrado') }}</span></div><div class="field"><label for="found">¿Encontraste el equipo? *</label><select id="found" formControlName="verificacionEncontrado"><option value="">Seleccionar</option><option value="SI">Sí</option><option value="NO">No</option></select></div>@if(actionForm.controls.verificacionEncontrado.value==='SI'){<div class="field"><label for="checked-identifier">{{ isSmartphone(item()!) ? 'IMEI encontrado' : 'Número de serie encontrado' }} *</label><input id="checked-identifier" class="code" formControlName="identificadorComprobado" /></div>}}
-              <div class="field"><label for="action-notes">Observaciones</label><textarea id="action-notes" formControlName="observaciones" placeholder="Motivo, condición o antecedentes relevantes"></textarea></div>
+              <div class="field action-notes"><label for="action-notes">Observaciones</label><textarea id="action-notes" formControlName="observaciones" placeholder="Motivo, condición o antecedentes relevantes"></textarea></div>
               <div class="action-form__buttons"><button class="btn btn--ghost" type="button" (click)="action.set(null)">Cancelar</button>@if(action()==='service'){<button class="btn btn--secondary" type="submit" [disabled]="submitting()" (click)="servicePrintRequested.set(true)">Registrar e imprimir</button>}<button class="btn btn--primary" type="submit" [disabled]="submitting()" (click)="servicePrintRequested.set(false)">{{ submitting() ? 'Procesando…' : (action()==='service'?'Registrar envío':'Confirmar operación') }}</button></div>
             </form>
           }
@@ -166,6 +238,31 @@ type DeviceAction = 'assign-person' | 'assign-department' | 'return' | 'state' |
 })
 export class DispositivoDetail implements OnInit {
   private readonly auth = inject(AuthService);
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly simService = inject(SimService);
+  protected readonly collaboratorQuery = signal('');
+  protected readonly selectedCollaborator = signal<Colaborador | null>(null);
+  protected readonly jointDelivery = signal(false);
+  protected readonly simQuery = signal('');
+  protected readonly selectedSim = signal<Sim | null>(null);
+  protected readonly deliverySims = signal<Sim[]>([]);
+  protected readonly simLoading = signal(false);
+  protected readonly simError = signal('');
+  protected matchingCollaborators(): Colaborador[] { return this.collaborators().filter(person => collaboratorMatchesQuery(person, this.collaboratorQuery())); }
+  protected searchCollaborator(query: string): void { this.collaboratorQuery.set(query); this.selectedCollaborator.set(null); this.actionForm.controls.colaboradorId.setValue(''); }
+  protected selectCollaborator(person: Colaborador): void { this.selectedCollaborator.set(person); this.collaboratorQuery.set(person.nombre); this.actionForm.controls.colaboradorId.setValue(person.id); }
+  protected matchingSims(): Sim[] { return this.deliverySims().filter(sim => isSimAvailableForJointDelivery(sim) && simMatchesQuery(sim, this.simQuery())); }
+  protected searchSim(query: string): void { this.simQuery.set(query); this.selectedSim.set(null); }
+  protected selectSim(sim: Sim): void { this.selectedSim.set(sim); this.simQuery.set(String(sim.codigoInventario)); }
+  protected toggleJointDelivery(enabled: boolean): void { this.jointDelivery.set(enabled); this.searchSim(''); if(enabled) this.loadDeliverySims(); }
+  protected loadDeliverySims(): void {
+    if(this.simLoading()) return;
+    this.simLoading.set(true); this.simError.set(''); this.deliverySims.set([]);
+    this.simService.listar().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: sims => { this.deliverySims.set(sims.filter(isSimAvailableForJointDelivery)); this.simLoading.set(false); },
+      error: error => { this.simError.set(errorMessage(error)); this.simLoading.set(false); }
+    });
+  }
   private readonly service = inject(DispositivosService);
   private readonly estadosService = inject(EstadosService);
   private readonly colaboradoresService = inject(ColaboradoresService);
@@ -210,7 +307,7 @@ export class DispositivoDetail implements OnInit {
   }
   protected terminal(): boolean { return this.states().find((state) => state.id === this.item()?.estado.id)?.esTerminal ?? false; }
   protected stateExists(code: string): boolean { return this.states().some((state) => state.codigo === code); }
-  protected open(action: DeviceAction): void { const actor=this.auth.user();if(!actor){this.actionError.set('La sesión no permite identificar al responsable TI.');this.toast.error('Sesión no válida','Vuelva a iniciar sesión antes de registrar una operación.');return;}this.servicePrintRequested.set(false);this.actionForm.reset({ colaboradorId: '', departamentoId: '',recibidoPorId:'', localidad: this.item()?.localidad || '', ubicacionDetalle: this.item()?.ubicacionDetalle || '', estadoId: '',proveedor:'',fechaEnvio:'',fallaReportada:'',motivoBaja:'',motivoRecuperacion:'',verificacionEncontrado:'',identificadorComprobado:'', responsable: actor.nombre, observaciones: '' }); this.actionError.set(''); this.action.set(action); }
+  protected open(action: DeviceAction): void { const actor=this.auth.user();if(!actor){this.actionError.set('La sesión no permite identificar al responsable TI.');this.toast.error('Sesión no válida','Vuelva a iniciar sesión antes de registrar una operación.');return;}this.servicePrintRequested.set(false);this.actionForm.reset({ colaboradorId: '', departamentoId: '',recibidoPorId:'', localidad: this.item()?.localidad || '', ubicacionDetalle: this.item()?.ubicacionDetalle || '', estadoId: '',proveedor:'',fechaEnvio:'',fallaReportada:'',motivoBaja:'',motivoRecuperacion:'',verificacionEncontrado:'',identificadorComprobado:'', responsable: actor.nombre, observaciones: '' }); this.searchCollaborator(''); this.jointDelivery.set(false); this.searchSim(''); this.actionError.set(''); this.action.set(action); }
   protected openState(code: string): void { const state = this.states().find((item) => item.codigo === code); if (!state) return; this.open('state'); this.actionForm.controls.estadoId.setValue(state.id); }
   protected actionTitle(): string { return { 'assign-person': 'Registrar entrega', 'assign-department': 'Entregar a departamento', return: 'Registrar recepción', state: 'Cambiar situación del equipo', recover: 'Registrar equipo encontrado', service:'Enviar a revisión técnica',retire:'Retirar del inventario',verify:'Verificar equipo' }[this.action() || 'return']; }
   protected departmentReceivers():Colaborador[]{return receiversForDepartment(this.collaborators(),this.actionForm.controls.departamentoId.value);}
@@ -230,6 +327,7 @@ export class DispositivoDetail implements OnInit {
     if (!actor?.nombre.trim()) { this.actionError.set('La sesión no permite identificar al responsable TI.'); return; }
     this.actionForm.controls.responsable.setValue(actor.nombre);
     if (action === 'assign-person' && !value.colaboradorId) { this.actionError.set('Selecciona un colaborador.'); return; }
+    if (action === 'assign-person' && this.jointDelivery() && (!this.selectedSim() || !this.item() || !isSmartphoneDevice(this.item()!) || this.item()!.simAsociada)) { this.actionError.set('Selecciona una SIM disponible para este Smartphone.'); return; }
     if (action === 'assign-department' && (!value.departamentoId||!value.recibidoPorId)) { this.actionError.set('Selecciona el departamento y el colaborador que recibe.'); return; }
     if (action === 'state' && !value.estadoId) { this.actionError.set('Selecciona un estado.'); return; }
     if (action === 'recover' && (!value.estadoId || !value.motivoRecuperacion.trim())) { this.actionError.set(!value.estadoId ? 'Selecciona el estado de recuperación.' : 'Ingresa el motivo de recuperación.'); return; }
@@ -260,7 +358,7 @@ export class DispositivoDetail implements OnInit {
     }
     const common = { responsable: actor.nombre, observaciones: value.observaciones.trim() || null };
     let request: Observable<Dispositivo|OrdenServicio|ResultadoDevolucion>;
-    if (action === 'assign-person') request = this.service.asignarColaborador(this.codigo, { ...common, colaboradorId: Number(value.colaboradorId) });
+    if (action === 'assign-person') request = this.service.asignarColaborador(this.codigo, { ...common, colaboradorId: Number(value.colaboradorId), ...(this.jointDelivery() && this.selectedSim() ? { simCodigoInventario: this.selectedSim()!.codigoInventario } : {}) });
     else if (action === 'assign-department') request = this.service.asignarDepartamento(this.codigo, { ...common, departamentoId: Number(value.departamentoId),recibidoPorId:Number(value.recibidoPorId), localidad: value.localidad.trim() || null, ubicacionDetalle: value.ubicacionDetalle.trim() || null });
     else if (action === 'return') request = this.service.devolver(this.codigo, common);
     else if(action==='service')request=this.technicalService.crear({dispositivoCodigo:this.codigo,proveedor:value.proveedor.trim()||null,fechaEnvio:value.fechaEnvio||null,fallaReportada:value.fallaReportada.trim(),observaciones:value.observaciones.trim()||null,responsable:actor.nombre});

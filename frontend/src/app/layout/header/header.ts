@@ -40,7 +40,7 @@ import { AuthService } from '../../core/services/auth.service';
           <span class="brand__icon"><svg lucideDroplet></svg></span>
           <span>
             <strong>Aguas San Isidro</strong>
-            <small>SISTEMA ITAM v3.0</small>
+            <small>SISTEMA ITAM</small>
           </span>
         </a>
         <nav aria-label="Accesos rapidos">

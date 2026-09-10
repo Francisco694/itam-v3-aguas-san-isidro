@@ -64,13 +64,15 @@ export const listarSim = async (): Promise<SimRow[]> => {
 
 export const obtenerSimPorCodigo = async (
   codigoInventario: number,
-  client?: PoolClient
+  client?: PoolClient,
+  forUpdate = false
 ): Promise<SimRow | null> => {
   const result = await getDb(client).query<SimRow>(
     `
       ${simSelect}
       WHERE s.codigo_inventario = $1
       LIMIT 1
+      ${forUpdate ? "FOR UPDATE OF s" : ""}
     `,
     [codigoInventario]
   );

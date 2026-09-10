@@ -226,6 +226,7 @@ export interface ResumenGerencial {
 
 export interface AsignarColaboradorInput {
   colaboradorId: number;
+  simCodigoInventario?: number;
   responsable: string;
   observaciones?: string | null;
 }

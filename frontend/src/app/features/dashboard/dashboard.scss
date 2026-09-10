@@ -248,6 +248,7 @@
     flex-wrap: wrap;
   }
 }
+.stock-replenishment{margin-top:1.25rem}.stock-replenishment .section-heading>a{color:var(--blue);font-size:.7rem;font-weight:750;text-decoration:none}.stock-alert-grid{display:grid;gap:.75rem;grid-template-columns:repeat(auto-fit,minmax(16rem,1fr))}.stock-alert{align-items:center;border-left:4px solid #f59e0b;color:inherit;display:grid;gap:.7rem;grid-template-columns:auto minmax(0,1fr) auto;padding:.85rem 1rem;text-decoration:none}.stock-alert:hover{box-shadow:var(--shadow-md)}.stock-alert>svg{color:#d97706;height:1.1rem;width:1.1rem}.stock-alert div{display:grid;gap:.15rem}.stock-alert strong{font-size:.76rem}.stock-alert span{color:var(--slate-500);font-size:.67rem}.stock-alert>b{color:var(--blue)}@media(max-width:620px){.stock-replenishment .section-heading>a{margin-top:.2rem}.stock-alert-grid{grid-template-columns:1fr}}
 .metric {
   text-decoration: none;
 }

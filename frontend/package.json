@@ -4,11 +4,11 @@
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
-    "start:lan": "ng serve --configuration lan --host 0.0.0.0 --port 4200 --proxy-config proxy.lan.json",
+    "start:lan": "ng serve --configuration lan --host 0.0.0.0 --port 4300 --proxy-config proxy.lan.json",
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
-    "start:lan:https": "ng serve --configuration lan --host 0.0.0.0 --port 4200 --ssl --ssl-cert certs/itam-lan.pem --ssl-key certs/itam-lan-key.pem --proxy-config proxy.lan.json"
+    "start:lan:https": "ng serve --configuration lan --host 0.0.0.0 --port 4300 --ssl --ssl-cert certs/itam-lan.pem --ssl-key certs/itam-lan-key.pem --proxy-config proxy.lan.json"
   },
   "private": true,
   "packageManager": "npm@11.17.0",

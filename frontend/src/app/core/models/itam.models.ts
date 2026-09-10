@@ -19,6 +19,19 @@ export interface ConfiguracionFormularioTipo { mostrarMarca: boolean; mostrarMod
 export interface FamiliaCodigoTipoDispositivo { id: string; nombre: string; prefijo: string; activo: boolean; estrategiaCodigo: InventoryCodeStrategy; agrupaTipos: boolean; etiquetaOperativa: string | null; }
 export interface TipoDispositivo { id: string; nombre: string; descripcion: string | null; activo: boolean; requiereImei: boolean; configuracionFormulario: ConfiguracionFormularioTipo; familiaCodigoInventario: FamiliaCodigoTipoDispositivo | null; creadoEn: string; actualizadoEn: string; }
 export interface TipoDispositivoInput { nombre: string; descripcion?: string | null; familiaCodigoInventarioId?: number | null; activo?: boolean; requiereImei?: boolean; }
+export interface StockAlertConfiguration {
+  tipoDispositivo: { id: string; nombre: string };
+  disponibles: number;
+  minimoDisponible: number;
+  alertaActiva: boolean;
+  enAlerta: boolean;
+  mensaje: string | null;
+  creadoPor: { id: string; nombre: string } | null;
+  actualizadoPor: { id: string; nombre: string } | null;
+  creadoEn: string | null;
+  actualizadoEn: string | null;
+}
+export interface StockAlertInput { minimoDisponible: number; alertaActiva: boolean; }
 
 export interface Estado extends EstadoResumen { tipoEntidad: TipoEntidad; descripcion: string | null; esTerminal: boolean; activo: boolean; creadoEn: string; }
 export interface Departamento { id: string; nombre: string; activo: boolean; observaciones: string | null; dependencia_id?: number | null; dependencia_nombre?: string | null; creadoEn: string; actualizadoEn: string; }
@@ -74,7 +87,7 @@ export interface ReporteInventario {
 }
 export interface DispositivoInput { codigoInventario?: number; tipoDispositivoId: number; marca?: string | null; modelo?: string | null; numeroSerie?: string | null; imei?: string | null; valorComercial?: number; localidad?: string | null; ubicacionDetalle?: string | null; observaciones?: string | null; atributosEspecificos?: Record<string, string | number | null>; responsable?: string; }
 export interface ResponsableInput { responsable: string; observaciones?: string | null; }
-export interface AsignarDispositivoColaboradorInput extends ResponsableInput { colaboradorId: number; }
+export interface AsignarDispositivoColaboradorInput extends ResponsableInput { colaboradorId: number; simCodigoInventario?: number; }
 export interface AsignarDispositivoDepartamentoInput extends ResponsableInput { departamentoId: number; recibidoPorId: number; localidad?: string | null; ubicacionDetalle?: string | null; }
 export interface CambiarEstadoInput extends ResponsableInput { estadoId: number; recuperar?: boolean; motivoRecuperacion?: string; }
 export interface DevolverDispositivoInput extends ResponsableInput { condicion?: string | null; resultado?: 'DEVUELTO'|'DANADO'; }

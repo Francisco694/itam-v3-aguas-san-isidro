@@ -1,0 +1,822 @@
+﻿diff --git a/backend/src/app.ts b/backend/src/app.ts
+index d90a430..0229f02 100644
+--- a/backend/src/app.ts
++++ b/backend/src/app.ts
+@@ -23,6 +23,7 @@ import facturasAdquisicionRoutes from "./modules/facturas-adquisicion/facturas-a
+ import authRoutes from "./modules/auth/auth.routes";
+ import usuariosRoutes from "./modules/usuarios/usuarios.routes";
+ import offboardingRoutes from "./modules/offboarding/offboarding.routes";
++import stockAlertsRoutes from "./modules/stock-alerts/stock-alerts.routes";
+ import { auditMutations, requireAuth } from "./shared/auth.middleware";
+ 
+ const app = express();
+@@ -68,6 +69,7 @@ app.use("/api/v1/reportes",reportesRoutes);
+ app.use("/api/v1/facturas-adquisicion",facturasAdquisicionRoutes);
+ app.use("/api/v1/usuarios",usuariosRoutes);
+ app.use("/api/v1/offboarding",offboardingRoutes);
++app.use("/api/v1/alertas-stock",stockAlertsRoutes);
+ 
+ 
+ // ============================================================
+diff --git a/backend/src/modules/dispositivos/dispositivos.controller.ts b/backend/src/modules/dispositivos/dispositivos.controller.ts
+index a683856..3e7448a 100644
+--- a/backend/src/modules/dispositivos/dispositivos.controller.ts
++++ b/backend/src/modules/dispositivos/dispositivos.controller.ts
+@@ -316,6 +316,11 @@ export const asignarColaboradorController = asyncHandler(
+         body.colaboradorId,
+         "colaboradorId"
+       ),
++      simCodigoInventario:
++        parseOptionalPositiveInteger(
++          body.simCodigoInventario,
++          "simCodigoInventario"
++        ) ?? undefined,
+       responsable: authenticatedActorName(req),
+       observaciones: parseOptionalString(
+         body.observaciones,
+diff --git a/backend/src/modules/dispositivos/dispositivos.service.ts b/backend/src/modules/dispositivos/dispositivos.service.ts
+index 4f598c7..564549c 100644
+--- a/backend/src/modules/dispositivos/dispositivos.service.ts
++++ b/backend/src/modules/dispositivos/dispositivos.service.ts
+@@ -10,6 +10,16 @@ import {
+   resolverTipoActivo,
+   resolverTipoActivoParaAlta
+ } from "../tipos-dispositivo/tipos-dispositivo.service";
++import {
++  asociarSimADispositivo,
++  asignarSimAColaborador,
++  cambiarEstadoSim,
++  insertarHistorialSim,
++  obtenerEstadoSimPorCodigo,
++  obtenerSimPorCodigo,
++  obtenerSimPorDispositivoId
++} from "../sim/sim.repository";
++import type { SimRow } from "../sim/sim.types";
+ import { toIsoDate, toIsoDateTime } from "../../shared/dates";
+ import {
+   ConflictError,
+@@ -700,6 +710,18 @@ export const assertColaboradorActivo = (
+   }
+ };
+ 
++export const assertSimDisponibleParaEntrega = (sim: SimRow): void => {
++  if (
++    sim.estado_codigo !== "DISPONIBLE"
++    || sim.dispositivo_id !== null
++    || sim.colaborador_id !== null
++  ) {
++    throw new ConflictError(
++      "La SIM seleccionada ya no está disponible para entregar."
++    );
++  }
++};
++
+ export const assertAsignadoConCustodioUnico = (
+   colaboradorId: string | null,
+   departamentoId: string | null
+@@ -773,6 +795,26 @@ export const asignarAColaborador = async (
+     assertCustodiaDisponible(anterior);
+     await assertSinOrdenServicioAbierta(anterior.dispositivo_id, client);
+ 
++    let sim: SimRow | null = null;
++    let estadoSimAsignada: { id: string; codigo: string; nombre: string } | null = null;
++    if (input.simCodigoInventario !== undefined) {
++      if (anterior.tipo_dispositivo_nombre.trim().toUpperCase() !== "SMARTPHONE") {
++        throw new ValidationError(
++          "La entrega conjunta de SIM solo está disponible para Smartphones."
++        );
++      }
++      if (anterior.sim_id || await obtenerSimPorDispositivoId(anterior.dispositivo_id, client)) {
++        throw new ConflictError("El Smartphone ya tiene una SIM asociada.");
++      }
++      sim = await obtenerSimPorCodigo(input.simCodigoInventario, client, true);
++      if (!sim) throw new NotFoundError("SIM no encontrada.");
++      assertSimDisponibleParaEntrega(sim);
++      estadoSimAsignada = await obtenerEstadoSimPorCodigo("ASIGNADA", client);
++      if (!estadoSimAsignada) {
++        throw new ConflictError("No existe un estado ASIGNADA activo para SIM.");
++      }
++    }
++
+     const actualizado = await asignarDispositivoAColaborador(
+       codigoInventario,
+       input.colaboradorId,
+@@ -793,19 +835,76 @@ export const asignarAColaborador = async (
+       input.observaciones,
+       {
+         custodiaAnterior: custodySnapshot(anterior),
+-        custodiaNueva: custodySnapshot(actualizado)
++        custodiaNueva: custodySnapshot(actualizado),
++        ...(sim ? { simCodigoInventario: sim.sim_codigo_inventario } : {})
+       },
+       client
+     );
++
++    if (sim && estadoSimAsignada) {
++      const asociada = await asociarSimADispositivo(
++        sim.sim_codigo_inventario,
++        actualizado.dispositivo_id,
++        client
++      );
++      if (!asociada) throw new NotFoundError("SIM no encontrada.");
++
++      const asignada = await asignarSimAColaborador(
++        sim.sim_codigo_inventario,
++        input.colaboradorId,
++        client
++      );
++      if (!asignada) throw new NotFoundError("SIM no encontrada.");
++
++      const simActualizada = await cambiarEstadoSim(
++        sim.sim_codigo_inventario,
++        estadoSimAsignada.id,
++        client
++      );
++      if (!simActualizada) throw new NotFoundError("SIM no encontrada.");
++
++      await insertarHistorialSim(
++        simActualizada.sim_id,
++        "ASOCIAR_DISPOSITIVO",
++        sim.estado_id,
++        estadoSimAsignada.id,
++        input.responsable,
++        input.observaciones,
++        {
++          dispositivoCodigoInventario: codigoInventario,
++          estadoAutomatico: estadoSimAsignada.codigo,
++          entregaConjunta: true
++        },
++        client
++      );
++      await insertarHistorialSim(
++        simActualizada.sim_id,
++        "ASIGNAR_COLABORADOR",
++        estadoSimAsignada.id,
++        estadoSimAsignada.id,
++        input.responsable,
++        input.observaciones,
++        {
++          colaboradorId: input.colaboradorId,
++          dispositivoCodigoInventario: codigoInventario,
++          estadoAutomatico: estadoSimAsignada.codigo,
++          entregaConjunta: true
++        },
++        client
++      );
++    }
+     await registrarVerificacionAutomaticaPorOperacion(
+       codigoInventario,
+       "entregado a colaborador",
+       input.responsable,
+       client
+     );
+-    await client.query("COMMIT");
++    const resultado = sim
++      ? await obtenerDispositivoPorCodigo(codigoInventario, client)
++      : actualizado;
+ 
+-    return mapDispositivo(actualizado);
++    await client.query("COMMIT");
++    return mapDispositivo(resultado!);
+   } catch (error) {
+     await client.query("ROLLBACK");
+     return normalizarErrorDispositivo(error);
+diff --git a/backend/src/modules/dispositivos/dispositivos.types.ts b/backend/src/modules/dispositivos/dispositivos.types.ts
+index cf2e004..5f2a9b5 100644
+--- a/backend/src/modules/dispositivos/dispositivos.types.ts
++++ b/backend/src/modules/dispositivos/dispositivos.types.ts
+@@ -226,6 +226,7 @@ export interface ResumenGerencial {
+ 
+ export interface AsignarColaboradorInput {
+   colaboradorId: number;
++  simCodigoInventario?: number;
+   responsable: string;
+   observaciones?: string | null;
+ }
+diff --git a/backend/src/modules/sim/sim.repository.ts b/backend/src/modules/sim/sim.repository.ts
+index a835e9f..f768aa3 100644
+--- a/backend/src/modules/sim/sim.repository.ts
++++ b/backend/src/modules/sim/sim.repository.ts
+@@ -64,13 +64,15 @@ export const listarSim = async (): Promise<SimRow[]> => {
+ 
+ export const obtenerSimPorCodigo = async (
+   codigoInventario: number,
+-  client?: PoolClient
++  client?: PoolClient,
++  forUpdate = false
+ ): Promise<SimRow | null> => {
+   const result = await getDb(client).query<SimRow>(
+     `
+       ${simSelect}
+       WHERE s.codigo_inventario = $1
+       LIMIT 1
++      ${forUpdate ? "FOR UPDATE OF s" : ""}
+     `,
+     [codigoInventario]
+   );
+diff --git a/frontend/package.json b/frontend/package.json
+index e626774..b5906fb 100644
+--- a/frontend/package.json
++++ b/frontend/package.json
+@@ -4,11 +4,11 @@
+   "scripts": {
+     "ng": "ng",
+     "start": "ng serve",
+-    "start:lan": "ng serve --configuration lan --host 0.0.0.0 --port 4200 --proxy-config proxy.lan.json",
++    "start:lan": "ng serve --configuration lan --host 0.0.0.0 --port 4300 --proxy-config proxy.lan.json",
+     "build": "ng build",
+     "watch": "ng build --watch --configuration development",
+     "test": "ng test",
+-    "start:lan:https": "ng serve --configuration lan --host 0.0.0.0 --port 4200 --ssl --ssl-cert certs/itam-lan.pem --ssl-key certs/itam-lan-key.pem --proxy-config proxy.lan.json"
++    "start:lan:https": "ng serve --configuration lan --host 0.0.0.0 --port 4300 --ssl --ssl-cert certs/itam-lan.pem --ssl-key certs/itam-lan-key.pem --proxy-config proxy.lan.json"
+   },
+   "private": true,
+   "packageManager": "npm@11.17.0",
+diff --git a/frontend/proxy.lan.json b/frontend/proxy.lan.json
+index 06920ba..e10d130 100644
+--- a/frontend/proxy.lan.json
++++ b/frontend/proxy.lan.json
+@@ -1,6 +1,6 @@
+ {
+   "/api/v1": {
+-    "target": "http://127.0.0.1:3000",
++    "target": "http://127.0.0.1:3100",
+     "secure": false,
+     "changeOrigin": true
+   }
+diff --git a/frontend/public/favicon.ico b/frontend/public/favicon.ico
+index 57614f9c967596fad0a3989bec2b1deff33034f6..e29d276811aa97288515e7da163e7b0ea66253bc 100644
+GIT binary patch
+literal 1150
+zcma)&Z!DE@6vvN*{K+*pnK%CQN6dPo7qz@7UH7J~#j<5<wboio>qRdrh5VT)hRB~N
+zG&hQ2t|CHm-TQEvi|amI!rWrU%$E5R)m^9aJoma`YxO+){Lb?`=X}4v^Lqd+=yh@e
+zT0J3RJHT!L@F6Hg8DpLT0M&%{M)>`fB{tdyE?xk*ciX~;Q9hL|FVByaO3(Ml$GFtR
+zM%hKg$5^{0+_#3PJGNVt0BOlPL7L|dDT(%{lj3a#veNb%CdTFXN*am};;b+^!DcNb
+zaYuc|BL}~<WP8YX_{ZaUwlm~qI6{7=;7CrIgFYu+fH~=osP4|jesv+%R)%AHYYdh=
+z^TC2lK}&JoF4v-5p?QY#VmGKPakr8d2w&D#1fWL!1V1!fLbWOhRf<TIH($ZI*&ggt
+z+``vIu7-*iZr95SU7@PPjrVw4?g6q=p=Xoq@YvjJ7p|>-McqIaDw{)aSo;_ost;gm
+z{ZVYJ-jDApJ+Pt5v!+GnW!+rk#p~PZ_Cf0#cmK|ofcY^t2FHiuutzS!J|+yu1`}|g
+z>oQL3%W*^#iA<w6cD(mibvAhmDDwK=wu3<U5i`AQe%Slb7g?1UCr49JuZzanFH&4u
+z(BSvg85~iEqo)0kT%+)JAb35?1OnmAG9ner1ff<Lh*O_Z@!QfU&QI6k<Zu$MERLYz
+z=L*i~i>WTk9qN!+u#Ci{4+d@fabT5_c!I0r1bY_^KNfLnG##~y6R7J7!}0zbINEn@
+zk!4PvVwqqVR2cP~3Fk%ZAv9X07<H<%G($QLb)F$Vu?Z39T}C~2EF<R6USD{<lJ^Lq
+z8Rm?0h>;~N_iaK=eLj4zY4&wJ7qz6<D#Y8U_a?E*YZ$Y3lJ<d|mgd<g+w@I6^dH2w
+z6!Xn`MzTWQS9Pi&{+^ozTQ=r<C?y`G={9*3Qr?!U{m;YQ!{l?0Vjp?<68}7Vqc`8L
+pln5z?l85Er&R!4ze6}Gh0puJOo8j^t3)I8)t`P<gfM3Uq{05v$+sgm|
+
+literal 15086
+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
+Nr__JTFzvMr^FKp4S3v*(
+
+diff --git a/frontend/src/app/app.routes.ts b/frontend/src/app/app.routes.ts
+index 3655538..3b7643b 100644
+--- a/frontend/src/app/app.routes.ts
++++ b/frontend/src/app/app.routes.ts
+@@ -18,6 +18,7 @@ export const routes: Routes = [
+       { path: 'sim', loadChildren: () => import('./features/sim/sim.routes').then((m) => m.SIM_ROUTES) },
+       { path: 'estados', loadComponent: () => import('./features/estados/estados-list').then((m) => m.EstadosList) },
+       { path: 'tipos-dispositivo', loadComponent: () => import('./features/tipos-dispositivo/tipos-dispositivo-list').then((m) => m.TiposDispositivoList) },
++      { path: 'alertas-stock', loadComponent: () => import('./features/stock-alerts/stock-alerts').then((m) => m.StockAlerts) },
+       { path: 'familias-codigo', loadComponent: () => import('./features/familias-codigo/familias-codigo-list').then((m) => m.FamiliasCodigoList) },
+       { path: 'offboarding', loadComponent: () => import('./features/offboarding/offboarding-page').then((m) => m.OffboardingPage) },
+       { path: 'servicio-tecnico', loadComponent: () => import('./features/servicio-tecnico/servicio-tecnico').then((m) => m.ServicioTecnico) },
+diff --git a/frontend/src/app/core/models/itam.models.ts b/frontend/src/app/core/models/itam.models.ts
+index 44f9f23..997428e 100644
+--- a/frontend/src/app/core/models/itam.models.ts
++++ b/frontend/src/app/core/models/itam.models.ts
+@@ -19,6 +19,19 @@ export interface ConfiguracionFormularioTipo { mostrarMarca: boolean; mostrarMod
+ export interface FamiliaCodigoTipoDispositivo { id: string; nombre: string; prefijo: string; activo: boolean; estrategiaCodigo: InventoryCodeStrategy; agrupaTipos: boolean; etiquetaOperativa: string | null; }
+ export interface TipoDispositivo { id: string; nombre: string; descripcion: string | null; activo: boolean; requiereImei: boolean; configuracionFormulario: ConfiguracionFormularioTipo; familiaCodigoInventario: FamiliaCodigoTipoDispositivo | null; creadoEn: string; actualizadoEn: string; }
+ export interface TipoDispositivoInput { nombre: string; descripcion?: string | null; familiaCodigoInventarioId?: number | null; activo?: boolean; requiereImei?: boolean; }
++export interface StockAlertConfiguration {
++  tipoDispositivo: { id: string; nombre: string };
++  disponibles: number;
++  minimoDisponible: number;
++  alertaActiva: boolean;
++  enAlerta: boolean;
++  mensaje: string | null;
++  creadoPor: { id: string; nombre: string } | null;
++  actualizadoPor: { id: string; nombre: string } | null;
++  creadoEn: string | null;
++  actualizadoEn: string | null;
++}
++export interface StockAlertInput { minimoDisponible: number; alertaActiva: boolean; }
+ 
+ export interface Estado extends EstadoResumen { tipoEntidad: TipoEntidad; descripcion: string | null; esTerminal: boolean; activo: boolean; creadoEn: string; }
+ export interface Departamento { id: string; nombre: string; activo: boolean; observaciones: string | null; dependencia_id?: number | null; dependencia_nombre?: string | null; creadoEn: string; actualizadoEn: string; }
+@@ -74,7 +87,7 @@ export interface ReporteInventario {
+ }
+ export interface DispositivoInput { codigoInventario?: number; tipoDispositivoId: number; marca?: string | null; modelo?: string | null; numeroSerie?: string | null; imei?: string | null; valorComercial?: number; localidad?: string | null; ubicacionDetalle?: string | null; observaciones?: string | null; atributosEspecificos?: Record<string, string | number | null>; responsable?: string; }
+ export interface ResponsableInput { responsable: string; observaciones?: string | null; }
+-export interface AsignarDispositivoColaboradorInput extends ResponsableInput { colaboradorId: number; }
++export interface AsignarDispositivoColaboradorInput extends ResponsableInput { colaboradorId: number; simCodigoInventario?: number; }
+ export interface AsignarDispositivoDepartamentoInput extends ResponsableInput { departamentoId: number; recibidoPorId: number; localidad?: string | null; ubicacionDetalle?: string | null; }
+ export interface CambiarEstadoInput extends ResponsableInput { estadoId: number; recuperar?: boolean; motivoRecuperacion?: string; }
+ export interface DevolverDispositivoInput extends ResponsableInput { condicion?: string | null; resultado?: 'DEVUELTO'|'DANADO'; }
+diff --git a/frontend/src/app/features/dashboard/dashboard.scss b/frontend/src/app/features/dashboard/dashboard.scss
+index 31670d8..563537a 100644
+--- a/frontend/src/app/features/dashboard/dashboard.scss
++++ b/frontend/src/app/features/dashboard/dashboard.scss
+@@ -248,6 +248,7 @@
+     flex-wrap: wrap;
+   }
+ }
++.stock-replenishment{margin-top:1.25rem}.stock-replenishment .section-heading>a{color:var(--blue);font-size:.7rem;font-weight:750;text-decoration:none}.stock-alert-grid{display:grid;gap:.75rem;grid-template-columns:repeat(auto-fit,minmax(16rem,1fr))}.stock-alert{align-items:center;border-left:4px solid #f59e0b;color:inherit;display:grid;gap:.7rem;grid-template-columns:auto minmax(0,1fr) auto;padding:.85rem 1rem;text-decoration:none}.stock-alert:hover{box-shadow:var(--shadow-md)}.stock-alert>svg{color:#d97706;height:1.1rem;width:1.1rem}.stock-alert div{display:grid;gap:.15rem}.stock-alert strong{font-size:.76rem}.stock-alert span{color:var(--slate-500);font-size:.67rem}.stock-alert>b{color:var(--blue)}.stock-ok{align-items:center;color:#166534;display:flex;font-size:.72rem;font-weight:700;gap:.6rem;padding:.85rem 1rem}.stock-ok svg{height:1rem;width:1rem}@media(max-width:620px){.stock-replenishment .section-heading>a{margin-top:.2rem}.stock-alert-grid{grid-template-columns:1fr}}
+ .metric {
+   text-decoration: none;
+ }
+diff --git a/frontend/src/app/features/dashboard/dashboard.spec.ts b/frontend/src/app/features/dashboard/dashboard.spec.ts
+index c95e60b..b6d06fc 100644
+--- a/frontend/src/app/features/dashboard/dashboard.spec.ts
++++ b/frontend/src/app/features/dashboard/dashboard.spec.ts
+@@ -9,6 +9,7 @@ import { HealthService } from '../../core/services/health.service';
+ import { OffboardingService } from '../../core/services/offboarding.service';
+ import { ServicioTecnicoService } from '../../core/services/servicio-tecnico.service';
+ import { SimService } from '../../core/services/sim.service';
++import { StockAlertsService } from '../../core/services/stock-alerts.service';
+ import type { OffboardingProcessSummary } from '../../core/models/offboarding.models';
+ import type { Dispositivo } from '../../core/models/itam.models';
+ import { Dashboard } from './dashboard';
+@@ -58,9 +59,11 @@ describe('Dashboard QA-10 y QA-15', () => {
+   let fixture: ComponentFixture<Dashboard>;
+   let offboardingProcesses: OffboardingProcessSummary[];
+   let devices: Dispositivo[];
++  let stockAlerts: any[];
+ 
+   beforeEach(async () => {
+     offboardingProcesses = [];
++    stockAlerts = [];
+     const device = (id: string, state: string, value: number): Dispositivo => ({
+       id,
+       codigoInventario: Number(id),
+@@ -105,6 +108,10 @@ describe('Dashboard QA-10 y QA-15', () => {
+           provide: OffboardingService,
+           useValue: { listarAbiertos: () => of(offboardingProcesses) },
+         },
++        {
++          provide: StockAlertsService,
++          useValue: { listar: () => of(stockAlerts) },
++        },
+       ],
+     }).compileComponents();
+     fixture = TestBed.createComponent(Dashboard);
+@@ -173,4 +180,23 @@ describe('Dashboard QA-10 y QA-15', () => {
+     expect(card.textContent).toContain('$780.000');
+     expect(card.getAttribute('href')).toBe('/offboarding');
+   });
++
++  it('muestra el estado sin alertas de reposición', () => {
++    fixture.detectChanges();
++    expect(fixture.nativeElement.textContent).toContain('Alertas de reposición');
++    expect(fixture.nativeElement.textContent).toContain('El stock disponible está sobre los mínimos configurados.');
++  });
++
++  it('muestra alertas y enlaza al inventario disponible filtrado por tipo', () => {
++    stockAlerts = [{
++      tipoDispositivo: { id: '7', nombre: 'Notebook' }, disponibles: 3,
++      minimoDisponible: 3, alertaActiva: true, enAlerta: true,
++      mensaje: 'Quedan 3 disponibles · mínimo configurado: 3'
++    }];
++    fixture.detectChanges();
++    const link = fixture.nativeElement.querySelector('.stock-alert') as HTMLAnchorElement;
++    expect(link.textContent).toContain('Notebook');
++    expect(link.textContent).toContain('Quedan 3 disponibles');
++    expect(link.getAttribute('href')).toContain('/dispositivos?tipoDispositivoId=7&estado=DISPONIBLE');
++  });
+ });
+diff --git a/frontend/src/app/features/dashboard/dashboard.ts b/frontend/src/app/features/dashboard/dashboard.ts
+index 68f58ca..04ec433 100644
+--- a/frontend/src/app/features/dashboard/dashboard.ts
++++ b/frontend/src/app/features/dashboard/dashboard.ts
+@@ -24,11 +24,13 @@ import { HealthService } from '../../core/services/health.service';
+ import { OffboardingService } from '../../core/services/offboarding.service';
+ import { ServicioTecnicoService } from '../../core/services/servicio-tecnico.service';
+ import { SimService } from '../../core/services/sim.service';
++import { StockAlertsService } from '../../core/services/stock-alerts.service';
+ import { PageHeader } from '../../shared/components/page-header/page-header';
+ import { ViewState } from '../../shared/components/view-state/view-state';
+ import { formatClp } from '../../shared/utils/currency';
+ import { errorMessage } from '../../shared/utils/error-message';
+ import type { Dispositivo } from '../../core/models/itam.models';
++import type { StockAlertConfiguration } from '../../core/models/itam.models';
+ 
+ const CURRENT_OPERATIONAL_STATE_CODES = new Set([
+   'ASIGNADO',
+@@ -141,6 +143,23 @@ interface OperationalMetric {
+         <div><span>Histórico registrado</span><strong>{{ historicalDevices() }}</strong></div>
+         <p>Total de registros en ITAM, incluyendo bajas y extravíos.</p>
+       </aside>
++      <section class="stock-replenishment" aria-labelledby="stock-alerts-title">
++        <div class="section-heading">
++          <div><span>CONTROL DE EXISTENCIAS</span><h2 id="stock-alerts-title">Alertas de reposición</h2></div>
++          <a routerLink="/alertas-stock">Configurar alertas</a>
++        </div>
++        @if (activeStockAlerts().length) {
++          <div class="stock-alert-grid">
++            @for (alert of activeStockAlerts(); track alert.tipoDispositivo.id) {
++              <a class="card stock-alert" routerLink="/dispositivos" [queryParams]="{tipoDispositivoId: alert.tipoDispositivo.id, estado: 'DISPONIBLE'}">
++                <svg lucideCircleAlert></svg><div><strong>{{alert.tipoDispositivo.nombre}}</strong><span>{{alert.mensaje}}</span></div><b aria-hidden="true">→</b>
++              </a>
++            }
++          </div>
++        } @else {
++          <div class="card stock-ok"><svg lucideCircleCheck></svg><span>El stock disponible está sobre los mínimos configurados.</span></div>
++        }
++      </section>
+       <section class="operational-section" aria-labelledby="operational-title">
+         <div class="section-heading">
+           <div>
+@@ -311,6 +330,7 @@ export class Dashboard implements OnInit {
+   private readonly technical = inject(ServicioTecnicoService);
+   private readonly actas = inject(ActasEntregaService);
+   private readonly offboarding = inject(OffboardingService);
++  private readonly stockAlertsService = inject(StockAlertsService);
+   protected readonly loading = signal(true);
+   protected readonly error = signal('');
+   protected readonly metrics = signal<Metric[]>([]);
+@@ -328,6 +348,7 @@ export class Dashboard implements OnInit {
+   protected readonly pendingQuotes = signal(0);
+   protected readonly repairCosts = signal('$0');
+   protected readonly operationalMetrics = signal<OperationalMetric[]>([]);
++  protected readonly activeStockAlerts = signal<StockAlertConfiguration[]>([]);
+   protected readonly simIcon = LucideCardSim;
+   protected readonly usersIcon = LucideUsers;
+   protected readonly buildingIcon = LucideBuilding;
+@@ -348,6 +369,7 @@ export class Dashboard implements OnInit {
+       acts: this.actas.listar(),
+       summary: this.dispositivos.resumenGerencial(),
+       offboarding: this.offboarding.listarAbiertos(),
++      stockAlerts: this.stockAlertsService.listar(),
+     }).subscribe({
+       next: (r) => {
+         const inventoryScope = dashboardInventoryScope(r.devices);
+@@ -428,6 +450,7 @@ export class Dashboard implements OnInit {
+           });
+         }
+         this.metrics.set(metrics);
++        this.activeStockAlerts.set(r.stockAlerts.filter((alert) => alert.enAlerta));
+         this.serviceDevices.set(r.summary.servicioTecnico.cantidad);
+         this.pendingDiagnostics.set(
+           r.orders.filter((o) => o.estado === 'PENDIENTE_DIAGNOSTICO').length,
+diff --git a/frontend/src/app/features/dispositivos/dispositivo-detail.scss b/frontend/src/app/features/dispositivos/dispositivo-detail.scss
+index 5962958..d619cba 100644
+--- a/frontend/src/app/features/dispositivos/dispositivo-detail.scss
++++ b/frontend/src/app/features/dispositivos/dispositivo-detail.scss
+@@ -1 +1,3 @@
+-:host{display:block}.device-banner{align-items:center;background:linear-gradient(135deg, var(--navy), #07147c);border-bottom:4px solid var(--cyan);border-radius:var(--radius-xl) var(--radius-xl) 0 0;color:#fff;display:flex;justify-content:space-between;padding:1.3rem 1.5rem}.device-banner>div:first-child>span{color:var(--cyan);font-size:.62rem;font-weight:850;letter-spacing:.14em}.device-banner h2{font-size:1.3rem;margin:.3rem 0}.device-banner p{color:#cbd5e1;margin:0}.device-banner>div:last-child{align-items:flex-end;display:flex;flex-direction:column;gap:.65rem}.device-banner .btn{background:hsla(0,0%,100%,.1);border-color:hsla(0,0%,100%,.2);color:#fff}.panoramic-card{background:#fff;border:1px solid var(--gray-200);border-radius:0 0 var(--radius-xl) var(--radius-xl);box-shadow:var(--shadow-md);display:grid;grid-template-columns:1.05fr 1.25fr .9fr;min-height:620px;overflow:hidden}.panoramic-column{min-width:0;padding:1.25rem}.panoramic-column+.panoramic-column{border-left:1px solid var(--gray-200)}.column-title{align-items:center;display:flex;gap:.65rem;margin-bottom:1.15rem}.column-title>span{align-items:center;background:var(--cyan-soft);border-radius:.55rem;color:var(--blue);display:flex;font-size:.65rem;font-weight:850;height:2rem;justify-content:center;width:2rem}.column-title div{display:grid}.column-title small{color:var(--slate-400);font-size:.55rem;font-weight:800;letter-spacing:.12em}.column-title h3{font-size:1rem;margin:.1rem 0 0}.column-title>svg{color:var(--cyan);height:1.05rem;margin-left:auto;width:1.05rem}.equipment-identity{border-left:3px solid var(--cyan);padding-left:.85rem}.equipment-identity span{color:var(--blue);font-size:.62rem;font-weight:850;letter-spacing:.12em}.equipment-identity strong{display:block;font-size:1.25rem;margin-top:.25rem}.equipment-identity h4{color:var(--slate-500);font-size:.85rem;margin:.15rem 0}.technical-list{display:grid;gap:0;margin:1.15rem 0}.technical-list div{display:grid;gap:.5rem;grid-template-columns:5.5rem 1fr;border-bottom:1px solid var(--gray-200);padding:.55rem 0}.technical-list dt{color:var(--slate-500);font-size:.65rem;font-weight:750;text-transform:uppercase}.technical-list dd{font-size:.75rem;font-weight:650;margin:0;overflow-wrap:anywhere}.physical-label{background:linear-gradient(145deg, #f8fafc, #fff);border:1px solid var(--gray-200);border-radius:.8rem;display:grid;padding:.9rem;text-align:center}.physical-label>span,.physical-label>small{color:var(--slate-400);font-size:.53rem;font-weight:850;letter-spacing:.14em}.physical-label strong{border-block:1px solid var(--slate-900);font:850 1.45rem var(--font-mono);letter-spacing:.18em;margin:.55rem 0;padding:.55rem}.custody-panel{background:var(--cyan-soft);border:1px solid #bae6fd;border-radius:.8rem;margin-top:.85rem;padding:.8rem}.custody-panel>span{color:var(--blue);font-size:.55rem;font-weight:850;letter-spacing:.1em}.custody-panel>div{align-items:center;display:flex;gap:.6rem;margin-top:.5rem}.custody-panel svg{color:var(--blue);height:1.15rem;width:1.15rem}.custody-panel p{display:grid;margin:0}.custody-panel strong{font-size:.76rem}.custody-panel small{color:var(--slate-500);font-size:.65rem;margin-top:.1rem}.asset-unassigned-alert{align-items:flex-start;margin:.8rem 0}.asset-unassigned-alert>div{display:grid;gap:.15rem}.asset-unassigned-alert strong{font-size:.8rem}.asset-unassigned-alert span{font-size:.72rem}.custody-panel .previous-custodian{border-top:1px solid #bae6fd;margin-top:.7rem;padding-top:.7rem}.previous-custodian p>span{color:var(--blue);font-size:.55rem;font-weight:850;letter-spacing:.08em;text-transform:uppercase}.no-previous-custodian{border-top:1px solid #bae6fd;color:var(--slate-500);font-size:.67rem;margin:.65rem 0 0;padding-top:.65rem}.associated-sim{border:1px solid var(--gray-200);border-radius:.7rem;display:grid;margin-top:.7rem;padding:.7rem}.associated-sim strong{color:var(--navy);font-size:.73rem}.associated-sim span{color:var(--slate-500);font-size:.65rem;margin-top:.2rem}.audit-column{background:#fbfdff}.audit-timeline{max-height:550px;overflow:auto;padding:.2rem .6rem .5rem .45rem}.audit-event{border-left:2px solid #7dd3fc;padding:0 0 1.2rem 1rem;position:relative}.audit-event__node{background:var(--cyan);border:3px solid #fff;border-radius:50%;box-shadow:0 0 0 1px #67e8f9;height:.72rem;left:-0.43rem;position:absolute;top:.12rem;width:.72rem}.audit-event>div{background:#fff;border:1px solid var(--gray-200);border-radius:.75rem;box-shadow:var(--shadow-sm);padding:.75rem}.audit-event strong{font-size:.74rem;text-transform:capitalize}.audit-event p{align-items:center;color:var(--slate-500);display:flex;font-size:.65rem;gap:.35rem;margin:.35rem 0}.audit-event p b{color:var(--cyan)}.audit-event blockquote{border-left:2px solid var(--gray-200);color:var(--slate-500);font-size:.66rem;margin:.45rem 0;padding-left:.55rem}.audit-event footer{display:flex;justify-content:space-between;color:var(--slate-400);font-size:.59rem}.operation-list{display:grid;gap:.55rem}.operation-list>button{align-items:center;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:.75rem;color:var(--slate-800);cursor:pointer;display:flex;gap:.65rem;padding:.7rem;text-align:left;transition:.2s ease;width:100%}.operation-list>button:hover:not(:disabled){background:var(--cyan-soft);border-color:#7dd3fc;transform:translateX(2px)}.operation-list>button:disabled{cursor:not-allowed;opacity:.42}.operation-list svg{color:var(--blue);height:1rem;width:1rem}.operation-list span{display:grid;font-size:.73rem;font-weight:750}.operation-list small{color:var(--slate-500);font-size:.59rem;font-weight:500;margin-top:.1rem}.operation-list .operation-return{border-color:#a7f3d0;background:#f0fdf4}.operation-list .operation-danger{background:#fef2f2;border-color:#fecaca;color:#991b1b;margin-top:.65rem}.operation-list .operation-danger svg{color:#dc2626}.action-form{animation:slide-up .22s ease;display:grid;gap:.8rem}.action-form header{align-items:flex-start;border-bottom:1px solid var(--gray-200);display:flex;justify-content:space-between;padding-bottom:.7rem}.action-form header small{color:var(--blue);font-size:.55rem;font-weight:850;letter-spacing:.1em}.action-form h4{font-size:.95rem;margin:.15rem 0}.action-form .field label{font-size:.66rem}.action-form__buttons{display:grid;gap:.45rem;margin-top:.35rem}.device-notes{margin-top:1rem;padding:1rem 1.2rem}.device-notes strong{font-size:.75rem}.device-notes p{color:var(--slate-500);font-size:.78rem;margin:.4rem 0 0}.notice svg{height:1rem;flex:none;width:1rem}@media(max-width: 1100px){.panoramic-card{grid-template-columns:1fr 1fr}.actions-column{border-left:0 !important;border-top:1px solid var(--gray-200);grid-column:1/-1}.operation-list{grid-template-columns:repeat(2, 1fr)}.operation-list .operation-danger{margin-top:0}}@media(max-width: 760px){.device-banner{align-items:flex-start;flex-direction:column}.device-banner>div:last-child{align-items:flex-start}.panoramic-card{grid-template-columns:1fr}.panoramic-column+.panoramic-column{border-left:0;border-top:1px solid var(--gray-200)}.actions-column{grid-column:auto}.operation-list{grid-template-columns:1fr}.audit-timeline{max-height:none}}.traceability-overview{background:#fff;border:1px solid var(--gray-200);border-top:0;display:grid;grid-template-columns:repeat(3, 1fr)}.traceability-overview article{display:grid;gap:.24rem;padding:.95rem 1.15rem}.traceability-overview article+article{border-left:1px solid var(--gray-200)}.traceability-overview small{color:var(--blue);font-size:.55rem;font-weight:850;letter-spacing:.1em}.traceability-overview strong{font-size:.78rem}.traceability-overview span{color:var(--slate-500);font-size:.64rem}.traceability-alert{align-items:flex-start;margin:.75rem 0}.traceability-alert>div{display:grid;gap:.15rem}.traceability-alert strong{font-size:.78rem}.traceability-alert span{font-size:.7rem}.responsible-history{background:#fff;border:1px solid var(--gray-200);border-radius:.75rem;display:grid;gap:.55rem;margin-bottom:1rem;padding:.8rem}.responsible-history>strong{color:var(--navy);font-size:.7rem}.responsible-history article{border-top:1px solid var(--gray-200);display:grid;gap:.25rem;grid-template-columns:1fr auto;padding-top:.55rem}.responsible-history article>div{display:grid;gap:.1rem}.responsible-history article>div:last-of-type{text-align:right}.responsible-history b{font-size:.68rem}.responsible-history small,.responsible-history time,.responsible-history p{color:var(--slate-500);font-size:.59rem}.responsible-history p{grid-column:1/-1;margin:0}@media(max-width: 1100px){.traceability-overview{grid-template-columns:1fr}.traceability-overview article+article{border-left:0;border-top:1px solid var(--gray-200)}}@media(max-width: 760px){.responsible-history article{grid-template-columns:1fr}.responsible-history article>div:last-of-type{text-align:left}}
++:host{display:block}.device-banner{align-items:center;background:linear-gradient(135deg, var(--navy), #07147c);border-bottom:4px solid var(--cyan);border-radius:var(--radius-xl) var(--radius-xl) 0 0;color:#fff;display:flex;justify-content:space-between;padding:1.3rem 1.5rem}.device-banner>div:first-child>span{color:var(--cyan);font-size:.62rem;font-weight:850;letter-spacing:.14em}.device-banner h2{font-size:1.3rem;margin:.3rem 0}.device-banner p{color:#cbd5e1;margin:0}.device-banner>div:last-child{align-items:flex-end;display:flex;flex-direction:column;gap:.65rem}.device-banner .btn{background:hsla(0,0%,100%,.1);border-color:hsla(0,0%,100%,.2);color:#fff}.panoramic-card{background:#fff;border:1px solid var(--gray-200);border-radius:0 0 var(--radius-xl) var(--radius-xl);box-shadow:var(--shadow-md);display:grid;grid-template-columns:1.05fr 1.25fr .9fr;min-height:620px;overflow:hidden}.panoramic-column{min-width:0;padding:1.25rem}.panoramic-column+.panoramic-column{border-left:1px solid var(--gray-200)}.column-title{align-items:center;display:flex;gap:.65rem;margin-bottom:1.15rem}.column-title>span{align-items:center;background:var(--cyan-soft);border-radius:.55rem;color:var(--blue);display:flex;font-size:.65rem;font-weight:850;height:2rem;justify-content:center;width:2rem}.column-title div{display:grid}.column-title small{color:var(--slate-400);font-size:.55rem;font-weight:800;letter-spacing:.12em}.column-title h3{font-size:1rem;margin:.1rem 0 0}.column-title>svg{color:var(--cyan);height:1.05rem;margin-left:auto;width:1.05rem}.equipment-identity{border-left:3px solid var(--cyan);padding-left:.85rem}.equipment-identity span{color:var(--blue);font-size:.62rem;font-weight:850;letter-spacing:.12em}.equipment-identity strong{display:block;font-size:1.25rem;margin-top:.25rem}.equipment-identity h4{color:var(--slate-500);font-size:.85rem;margin:.15rem 0}.technical-list{display:grid;gap:0;margin:1.15rem 0}.technical-list div{display:grid;gap:.5rem;grid-template-columns:5.5rem 1fr;border-bottom:1px solid var(--gray-200);padding:.55rem 0}.technical-list dt{color:var(--slate-500);font-size:.65rem;font-weight:750;text-transform:uppercase}.technical-list dd{font-size:.75rem;font-weight:650;margin:0;overflow-wrap:anywhere}.physical-label{background:linear-gradient(145deg, #f8fafc, #fff);border:1px solid var(--gray-200);border-radius:.8rem;display:grid;padding:.9rem;text-align:center}.physical-label>span,.physical-label>small{color:var(--slate-400);font-size:.53rem;font-weight:850;letter-spacing:.14em}.physical-label strong{border-block:1px solid var(--slate-900);font:850 1.45rem var(--font-mono);letter-spacing:.18em;margin:.55rem 0;padding:.55rem}.associated-sim{border:1px solid var(--gray-200);border-radius:.7rem;display:grid;margin-top:.7rem;padding:.7rem}.associated-sim strong{color:var(--navy);font-size:.73rem}.associated-sim span{color:var(--slate-500);font-size:.65rem;margin-top:.2rem}.audit-column{background:#fbfdff}.audit-timeline{max-height:550px;overflow:auto;padding:.2rem .6rem .5rem .45rem}.audit-event{border-left:2px solid #7dd3fc;padding:0 0 1.2rem 1rem;position:relative}.audit-event__node{background:var(--cyan);border:3px solid #fff;border-radius:50%;box-shadow:0 0 0 1px #67e8f9;height:.72rem;left:-0.43rem;position:absolute;top:.12rem;width:.72rem}.audit-event>div{background:#fff;border:1px solid var(--gray-200);border-radius:.75rem;box-shadow:var(--shadow-sm);padding:.75rem}.audit-event strong{font-size:.74rem;text-transform:capitalize}.audit-event p{align-items:center;color:var(--slate-500);display:flex;font-size:.65rem;gap:.35rem;margin:.35rem 0}.audit-event p b{color:var(--cyan)}.audit-event blockquote{border-left:2px solid var(--gray-200);color:var(--slate-500);font-size:.66rem;margin:.45rem 0;padding-left:.55rem}.audit-event footer{display:flex;justify-content:space-between;color:var(--slate-400);font-size:.59rem}.operation-list{display:grid;gap:.55rem}.operation-list>button{align-items:center;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:.75rem;color:var(--slate-800);cursor:pointer;display:flex;gap:.65rem;padding:.7rem;text-align:left;transition:.2s ease;width:100%}.operation-list>button:hover:not(:disabled){background:var(--cyan-soft);border-color:#7dd3fc;transform:translateX(2px)}.operation-list>button:disabled{cursor:not-allowed;opacity:.42}.operation-list svg{color:var(--blue);height:1rem;width:1rem}.operation-list span{display:grid;font-size:.73rem;font-weight:750}.operation-list small{color:var(--slate-500);font-size:.59rem;font-weight:500;margin-top:.1rem}.operation-list .operation-return{border-color:#a7f3d0;background:#f0fdf4}.operation-list .operation-danger{background:#fef2f2;border-color:#fecaca;color:#991b1b;margin-top:.65rem}.operation-list .operation-danger svg{color:#dc2626}.action-form{animation:slide-up .22s ease;display:grid;gap:.8rem}.action-form header{align-items:flex-start;border-bottom:1px solid var(--gray-200);display:flex;justify-content:space-between;padding-bottom:.7rem}.action-form header small{color:var(--blue);font-size:.55rem;font-weight:850;letter-spacing:.1em}.action-form h4{font-size:.95rem;margin:.15rem 0}.action-form .field label{font-size:.66rem}.action-form__buttons{display:grid;gap:.45rem;margin-top:.35rem}.device-notes{margin-top:1rem;padding:1rem 1.2rem}.device-notes strong{font-size:.75rem}.device-notes p{color:var(--slate-500);font-size:.78rem;margin:.4rem 0 0}.notice svg{height:1rem;flex:none;width:1rem}@media(max-width: 1100px){.panoramic-card{grid-template-columns:1fr 1fr}.actions-column{border-left:0 !important;border-top:1px solid var(--gray-200);grid-column:1/-1}.operation-list{grid-template-columns:repeat(2, 1fr)}.operation-list .operation-danger{margin-top:0}}@media(max-width: 760px){.device-banner{align-items:flex-start;flex-direction:column}.device-banner>div:last-child{align-items:flex-start}.panoramic-card{grid-template-columns:1fr}.panoramic-column+.panoramic-column{border-left:0;border-top:1px solid var(--gray-200)}.actions-column{grid-column:auto}.operation-list{grid-template-columns:1fr}.audit-timeline{max-height:none}}.traceability-overview{background:#fff;border:1px solid var(--gray-200);border-top:0;display:grid;grid-template-columns:repeat(3, 1fr)}.traceability-overview article{display:grid;gap:.24rem;padding:.95rem 1.15rem}.traceability-overview article+article{border-left:1px solid var(--gray-200)}.traceability-overview small{color:var(--blue);font-size:.55rem;font-weight:850;letter-spacing:.1em}.traceability-overview strong{font-size:.78rem}.traceability-overview span{color:var(--slate-500);font-size:.64rem}.traceability-alert{align-items:flex-start;margin:.75rem 0}.traceability-alert>div{display:grid;gap:.15rem}.traceability-alert strong{font-size:.78rem}.traceability-alert span{font-size:.7rem}.responsible-history{background:#fff;border:1px solid var(--gray-200);border-radius:.75rem;display:grid;gap:.55rem;margin-bottom:1rem;padding:.8rem}.responsible-history>strong{color:var(--navy);font-size:.7rem}.responsible-history article{border-top:1px solid var(--gray-200);display:grid;gap:.25rem;grid-template-columns:1fr auto;padding-top:.55rem}.responsible-history article>div{display:grid;gap:.1rem}.responsible-history article>div:last-of-type{text-align:right}.responsible-history b{font-size:.68rem}.responsible-history small,.responsible-history time,.responsible-history p{color:var(--slate-500);font-size:.59rem}.responsible-history p{grid-column:1/-1;margin:0}@media(max-width: 1100px){.traceability-overview{grid-template-columns:1fr}.traceability-overview article+article{border-left:0;border-top:1px solid var(--gray-200)}}@media(max-width: 760px){.responsible-history article{grid-template-columns:1fr}.responsible-history article>div:last-of-type{text-align:left}}
++
++.delivery-form{display:grid;min-width:0}.delivery-help,.delivery-empty,.delivery-suggestion span,.delivery-selection span{color:var(--slate-500);font-size:.61rem}.delivery-suggestions{background:#fff;border:1px solid var(--gray-200);border-radius:.7rem;box-shadow:0 6px 18px #0f172417;display:grid;max-height:220px;overflow-y:auto;padding:.2rem}.delivery-suggestion{background:none;border:0;border-radius:.5rem;cursor:pointer;display:grid;gap:.12rem;padding:.5rem .6rem;text-align:left;width:100%}.delivery-suggestion:hover{background:var(--gray-50)}.delivery-suggestion strong{font-size:.69rem}.delivery-empty{margin:0;padding:.25rem .1rem}.delivery-selection{align-items:center;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:.7rem;display:grid;gap:.5rem;grid-template-columns:minmax(0,1fr) auto;padding:.6rem .7rem}.delivery-selection>div{display:grid;gap:.12rem;min-width:0}.delivery-selection small{color:var(--blue);font-size:.54rem;font-weight:800;text-transform:uppercase}.delivery-selection strong{font-size:.7rem}.sim-delivery-toggle{align-items:center;color:var(--slate-700);cursor:pointer;display:flex;font-size:.66rem;gap:.5rem;margin-top:12px;width:fit-content}.sim-delivery-toggle input{accent-color:var(--blue);height:1rem;margin:0;min-height:0;padding:0;width:1rem}.delivery-sim{margin-top:12px}.delivery-error{color:var(--danger);display:flex;font-size:.62rem;justify-content:space-between}.delivery-form+.action-notes{margin-top:.45rem}@media(max-width:1100px) and (min-width:761px){.actions-column .action-form{max-width:32rem}}
+diff --git a/frontend/src/app/features/dispositivos/dispositivo-detail.ts b/frontend/src/app/features/dispositivos/dispositivo-detail.ts
+index 47adfc2..b94a541 100644
+--- a/frontend/src/app/features/dispositivos/dispositivo-detail.ts
++++ b/frontend/src/app/features/dispositivos/dispositivo-detail.ts
+@@ -1,16 +1,18 @@
+ import { DatePipe } from '@angular/common';
+-import { Component, OnInit, inject, signal } from '@angular/core';
++import { Component, DestroyRef, OnInit, inject, signal } from '@angular/core';
++import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+ import { ActivatedRoute, RouterLink } from '@angular/router';
+ import { LucideBuilding, LucideCircleAlert, LucideDownload, LucideExternalLink, LucideFileText, LucideHistory, LucidePackageCheck, LucidePencil, LucideRotateCcw, LucideShieldAlert, LucideUserCheck, LucideWrench, LucideX } from '@lucide/angular';
+ import { forkJoin, Observable, tap } from 'rxjs';
+-import { ActaEntrega, Colaborador, ComprobanteDevolucion, Departamento, Dispositivo, Estado, HistorialEvento, OrdenServicio, ResultadoDevolucion, TrazabilidadDispositivo } from '../../core/models/itam.models';
++import { ActaEntrega, Colaborador, ComprobanteDevolucion, Departamento, Dispositivo, Estado, HistorialEvento, OrdenServicio, ResultadoDevolucion, Sim, TrazabilidadDispositivo } from '../../core/models/itam.models';
+ import { ColaboradoresService } from '../../core/services/colaboradores.service';
+ import { ConfirmationService } from '../../core/services/confirmation.service';
+ import { AuthService } from '../../core/services/auth.service';
+ import { DepartamentosService } from '../../core/services/departamentos.service';
+ import { DispositivosService } from '../../core/services/dispositivos.service';
+ import { EstadosService } from '../../core/services/estados.service';
++import { SimService } from '../../core/services/sim.service';
+ import { ToastService } from '../../core/services/toast.service';
+ import { ServicioTecnicoService } from '../../core/services/servicio-tecnico.service';
+ import { ActasEntregaService } from '../../core/services/actas-entrega.service';
+@@ -25,6 +27,7 @@ import { ActaPreview } from '../../shared/components/acta-preview/acta-preview';
+ import { errorMessage } from '../../shared/utils/error-message';
+ import { formatClp } from '../../shared/utils/currency';
+ 
++
+ export const receiversForDepartment = (
+   collaborators: readonly Colaborador[],
+   departmentId: string
+@@ -35,6 +38,26 @@ export const receiversForDepartment = (
+ export const isSmartphoneDevice = (device: Dispositivo): boolean =>
+   device.tipo.nombre.trim().toLocaleLowerCase('es') === 'smartphone';
+ 
++export const collaboratorMatchesQuery = (person: Colaborador, query: string): boolean => {
++  const normalize = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es').trim();
++  const value = normalize(query);
++  if (!value || !person.activo) return false;
++  const rut = value.replace(/[.\s-]/g, '');
++  return normalize(person.nombre).includes(value)
++    || (!!rut && /^[0-9k]+$/.test(rut) && person.rut.replace(/[.\s-]/g, '').toLowerCase().includes(rut));
++};
++
++export const isSimAvailableForJointDelivery = (sim: Sim): boolean =>
++  sim.estado.codigo === 'DISPONIBLE' && !sim.dispositivo && !sim.colaborador;
++
++export const simMatchesQuery = (sim: Sim, query: string): boolean => {
++  const value = query.trim().toLocaleLowerCase('es');
++  if (!value) return false;
++  return String(sim.codigoInventario).includes(value)
++    || (sim.numeroAsociado ?? '').toLocaleLowerCase('es').includes(value)
++    || (sim.iccidCodigoFabrica ?? '').toLocaleLowerCase('es').includes(value);
++};
++
+ export const deviceActionErrorMessage = (error: unknown): string =>
+   errorMessage(error);
+ 
+@@ -142,14 +165,63 @@ type DeviceAction = 'assign-person' | 'assign-department' | 'return' | 'state' |
+             <form class="action-form" [formGroup]="actionForm" (ngSubmit)="execute()">
+               <header><div><small>OPERACIÓN EN CURSO</small><h4>{{ actionTitle() }}</h4></div><button class="icon-button" type="button" aria-label="Cancelar operación" [disabled]="submitting()" (click)="action.set(null)"><svg lucideX></svg></button></header>
+               @if(actionError()){<div class="notice notice--error" role="alert">{{ actionError() }}</div>}
+-              @if(action()==='assign-person'){<div class="field"><label for="colaborador">Colaborador responsable *</label><select id="colaborador" formControlName="colaboradorId"><option value="">Seleccionar colaborador</option>@for(person of collaborators(); track person.id){<option [value]="person.id">{{ person.nombre }} · {{ person.rut }}</option>}</select></div>}
++              @if(action()==='assign-person'){
++                <div class="delivery-form">
++                  <div class="field delivery-field">
++                    <label for="colaborador">Colaborador responsable *</label>
++                    @if(selectedCollaborator(); as person){
++                      <div class="delivery-selection" role="status">
++                        <div><small>Colaborador seleccionado</small><strong>{{person.nombre}}</strong><span>{{person.rut}} · {{person.departamento?.nombre || 'Sin departamento'}}</span></div>
++                        <button type="button" class="btn btn--ghost btn--small" (click)="searchCollaborator('')" [disabled]="submitting()">Quitar</button>
++                      </div>
++                    } @else {
++                      <input id="colaborador" type="search" autocomplete="off" placeholder="Buscar por nombre, apellido o RUT..." [value]="collaboratorQuery()" (input)="searchCollaborator($any($event.target).value)" [disabled]="submitting()" />
++                      <small class="delivery-help">Escriba y seleccione un colaborador.</small>
++                      @if(collaboratorQuery().trim()){
++                        @if(matchingCollaborators().length){
++                          <div class="delivery-suggestions" aria-label="Colaboradores encontrados">
++                            @for(person of matchingCollaborators(); track person.id){
++                              <button type="button" class="delivery-suggestion" (click)="selectCollaborator(person)"><strong>{{person.nombre}}</strong><span>{{person.rut}} · {{person.departamento?.nombre || 'Sin departamento'}}</span></button>
++                            }
++                          </div>
++                        } @else {<p class="delivery-empty" role="status">Sin colaboradores encontrados</p>}
++                      }
++                    }
++                  </div>
++                  @if(isSmartphone(device) && !device.simAsociada){
++                    <label class="sim-delivery-toggle"><input type="checkbox" [checked]="jointDelivery()" (change)="toggleJointDelivery($any($event.target).checked)" [disabled]="submitting()" /> <span>Entregar SIM junto al equipo</span></label>
++                    @if(jointDelivery()){
++                      <div class="field delivery-field delivery-sim">
++                        <label for="delivery-sim">SIM a entregar</label>
++                        @if(selectedSim(); as sim){
++                          <div class="delivery-selection" role="status">
++                            <div><small>SIM seleccionada</small><strong>ITAM {{sim.codigoInventario}}</strong><span>{{sim.numeroAsociado || 'Sin número'}} · {{sim.compania || 'Sin operador'}}</span></div>
++                            <button type="button" class="btn btn--ghost btn--small" (click)="searchSim('')" [disabled]="submitting()">Quitar</button>
++                          </div>
++                        } @else {
++                          <input id="delivery-sim" type="search" autocomplete="off" placeholder="Buscar por código ITAM, número o ICCID..." [value]="simQuery()" (input)="searchSim($any($event.target).value)" [disabled]="submitting()" />
++                          @if(simLoading()){<p class="delivery-empty" role="status">Cargando SIM disponibles...</p>}
++                          @else if(simError()){<div class="delivery-error"><span role="alert">{{simError()}}</span><button type="button" class="btn btn--ghost btn--small" (click)="loadDeliverySims()">Reintentar</button></div>}
++                          @else if(simQuery().trim()){
++                            @if(matchingSims().length){
++                              <div class="delivery-suggestions" aria-label="SIM disponibles">
++                                @for(sim of matchingSims(); track sim.id){<button type="button" class="delivery-suggestion" (click)="selectSim(sim)"><strong>ITAM {{sim.codigoInventario}}</strong><span>{{sim.numeroAsociado || 'Sin número'}} · {{sim.iccidCodigoFabrica || 'Sin ICCID'}}</span></button>}
++                              </div>
++                            } @else {<p class="delivery-empty" role="status">Sin SIM encontradas</p>}
++                          }
++                        }
++                      </div>
++                    }
++                  }
++                </div>
++              }
+               @if(action()==='assign-department'){<div class="notice notice--info">La responsabilidad será institucional; el colaborador que recibe confirma la entrega física.</div><div class="field"><label for="dept">Departamento *</label><select id="dept" formControlName="departamentoId"><option value="">Seleccionar</option>@for(department of departments(); track department.id){<option [value]="department.id">{{department.nombre}}</option>}</select></div><div class="field"><label for="receiver">Colaborador que recibe *</label><select id="receiver" formControlName="recibidoPorId"><option value="">Seleccionar colaborador del departamento</option>@for(person of departmentReceivers();track person.id){<option [value]="person.id">{{person.nombre}} · {{person.rut}} · {{person.cargo||'Sin cargo'}}</option>}</select></div><div class="field"><label for="location">Localidad</label><input id="location" formControlName="localidad" maxlength="120" /></div><div class="field"><label for="position">Ubicación</label><input id="position" formControlName="ubicacionDetalle" maxlength="250" /></div>}
+               @if(action()==='state' || action()==='recover'){@if(action()==='recover'){<div class="notice notice--info">No se borrará la historia del equipo. Se registrará que el equipo fue encontrado.</div>}<div class="field"><label for="new-state">Nuevo estado *</label><select id="new-state" formControlName="estadoId"><option value="">Seleccionar</option>@for(state of states(); track state.id){@if(action()==='state' || state.codigo==='DISPONIBLE' || state.codigo==='SERVICIO_TECNICO'){<option [value]="state.id">{{ state.nombre }}{{ state.esTerminal ? ' · terminal' : '' }}</option>}}</select></div>}
+               @if(action()==='recover'){<div class="field"><label for="recovery-reason">Motivo *</label><textarea id="recovery-reason" formControlName="motivoRecuperacion" required></textarea></div>}
+               @if(action()==='service'){<div class="field"><label for="service-date">Fecha de envío</label><input id="service-date" type="datetime-local" formControlName="fechaEnvio" /></div><div class="field"><label for="provider">Proveedor / técnico / destino</label><input id="provider" formControlName="proveedor" maxlength="180" /></div><div class="field"><label for="failure">Falla reportada *</label><textarea id="failure" formControlName="fallaReportada"></textarea></div>}
+               @if(action()==='retire'){<div class="notice notice--info">La baja conservará el motivo, el valor comercial vigente y el responsable TI en la trazabilidad.</div><div class="field"><label for="retire-reason">Motivo *</label><select id="retire-reason" formControlName="motivoBaja"><option value="">Seleccionar</option><option value="IRREPARABLE">Irreparable</option><option value="REPARACION_NO_CONVENIENTE">Reparación no conveniente</option><option value="MULTIPLES_REPARACIONES">Múltiples reparaciones</option><option value="OBSOLESCENCIA">Obsolescencia</option><option value="DANO_FISICO">Daño físico</option><option value="SIN_REPUESTOS">Sin repuestos</option><option value="OTRO">Otro</option></select></div>}
+               @if(action()==='verify'){<div class="verification-context"><strong>Verificar equipo</strong><span>ITAM {{ item()?.codigoInventario }} · {{ item()?.tipo?.nombre }}</span><span>{{ item()?.marca || 'Sin marca' }} {{ item()?.modelo || '' }}</span><span>{{ isSmartphone(item()!) ? 'IMEI: ' + (item()?.imei || 'Sin IMEI registrado') : 'N° serie: ' + (item()?.numeroSerie || 'Sin número de serie registrado') }}</span></div><div class="field"><label for="found">¿Encontraste el equipo? *</label><select id="found" formControlName="verificacionEncontrado"><option value="">Seleccionar</option><option value="SI">Sí</option><option value="NO">No</option></select></div>@if(actionForm.controls.verificacionEncontrado.value==='SI'){<div class="field"><label for="checked-identifier">{{ isSmartphone(item()!) ? 'IMEI encontrado' : 'Número de serie encontrado' }} *</label><input id="checked-identifier" class="code" formControlName="identificadorComprobado" /></div>}}
+-              <div class="field"><label for="action-notes">Observaciones</label><textarea id="action-notes" formControlName="observaciones" placeholder="Motivo, condición o antecedentes relevantes"></textarea></div>
++              <div class="field action-notes"><label for="action-notes">Observaciones</label><textarea id="action-notes" formControlName="observaciones" placeholder="Motivo, condición o antecedentes relevantes"></textarea></div>
+               <div class="action-form__buttons"><button class="btn btn--ghost" type="button" (click)="action.set(null)">Cancelar</button>@if(action()==='service'){<button class="btn btn--secondary" type="submit" [disabled]="submitting()" (click)="servicePrintRequested.set(true)">Registrar e imprimir</button>}<button class="btn btn--primary" type="submit" [disabled]="submitting()" (click)="servicePrintRequested.set(false)">{{ submitting() ? 'Procesando…' : (action()==='service'?'Registrar envío':'Confirmar operación') }}</button></div>
+             </form>
+           }
+@@ -166,6 +238,31 @@ type DeviceAction = 'assign-person' | 'assign-department' | 'return' | 'state' |
+ })
+ export class DispositivoDetail implements OnInit {
+   private readonly auth = inject(AuthService);
++  private readonly destroyRef = inject(DestroyRef);
++  private readonly simService = inject(SimService);
++  protected readonly collaboratorQuery = signal('');
++  protected readonly selectedCollaborator = signal<Colaborador | null>(null);
++  protected readonly jointDelivery = signal(false);
++  protected readonly simQuery = signal('');
++  protected readonly selectedSim = signal<Sim | null>(null);
++  protected readonly deliverySims = signal<Sim[]>([]);
++  protected readonly simLoading = signal(false);
++  protected readonly simError = signal('');
++  protected matchingCollaborators(): Colaborador[] { return this.collaborators().filter(person => collaboratorMatchesQuery(person, this.collaboratorQuery())); }
++  protected searchCollaborator(query: string): void { this.collaboratorQuery.set(query); this.selectedCollaborator.set(null); this.actionForm.controls.colaboradorId.setValue(''); }
++  protected selectCollaborator(person: Colaborador): void { this.selectedCollaborator.set(person); this.collaboratorQuery.set(person.nombre); this.actionForm.controls.colaboradorId.setValue(person.id); }
++  protected matchingSims(): Sim[] { return this.deliverySims().filter(sim => isSimAvailableForJointDelivery(sim) && simMatchesQuery(sim, this.simQuery())); }
++  protected searchSim(query: string): void { this.simQuery.set(query); this.selectedSim.set(null); }
++  protected selectSim(sim: Sim): void { this.selectedSim.set(sim); this.simQuery.set(String(sim.codigoInventario)); }
++  protected toggleJointDelivery(enabled: boolean): void { this.jointDelivery.set(enabled); this.searchSim(''); if(enabled) this.loadDeliverySims(); }
++  protected loadDeliverySims(): void {
++    if(this.simLoading()) return;
++    this.simLoading.set(true); this.simError.set(''); this.deliverySims.set([]);
++    this.simService.listar().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
++      next: sims => { this.deliverySims.set(sims.filter(isSimAvailableForJointDelivery)); this.simLoading.set(false); },
++      error: error => { this.simError.set(errorMessage(error)); this.simLoading.set(false); }
++    });
++  }
+   private readonly service = inject(DispositivosService);
+   private readonly estadosService = inject(EstadosService);
+   private readonly colaboradoresService = inject(ColaboradoresService);
+@@ -210,7 +307,7 @@ export class DispositivoDetail implements OnInit {
+   }
+   protected terminal(): boolean { return this.states().find((state) => state.id === this.item()?.estado.id)?.esTerminal ?? false; }
+   protected stateExists(code: string): boolean { return this.states().some((state) => state.codigo === code); }
+-  protected open(action: DeviceAction): void { const actor=this.auth.user();if(!actor){this.actionError.set('La sesión no permite identificar al responsable TI.');this.toast.error('Sesión no válida','Vuelva a iniciar sesión antes de registrar una operación.');return;}this.servicePrintRequested.set(false);this.actionForm.reset({ colaboradorId: '', departamentoId: '',recibidoPorId:'', localidad: this.item()?.localidad || '', ubicacionDetalle: this.item()?.ubicacionDetalle || '', estadoId: '',proveedor:'',fechaEnvio:'',fallaReportada:'',motivoBaja:'',motivoRecuperacion:'',verificacionEncontrado:'',identificadorComprobado:'', responsable: actor.nombre, observaciones: '' }); this.actionError.set(''); this.action.set(action); }
++  protected open(action: DeviceAction): void { const actor=this.auth.user();if(!actor){this.actionError.set('La sesión no permite identificar al responsable TI.');this.toast.error('Sesión no válida','Vuelva a iniciar sesión antes de registrar una operación.');return;}this.servicePrintRequested.set(false);this.actionForm.reset({ colaboradorId: '', departamentoId: '',recibidoPorId:'', localidad: this.item()?.localidad || '', ubicacionDetalle: this.item()?.ubicacionDetalle || '', estadoId: '',proveedor:'',fechaEnvio:'',fallaReportada:'',motivoBaja:'',motivoRecuperacion:'',verificacionEncontrado:'',identificadorComprobado:'', responsable: actor.nombre, observaciones: '' }); this.searchCollaborator(''); this.jointDelivery.set(false); this.searchSim(''); this.actionError.set(''); this.action.set(action); }
+   protected openState(code: string): void { const state = this.states().find((item) => item.codigo === code); if (!state) return; this.open('state'); this.actionForm.controls.estadoId.setValue(state.id); }
+   protected actionTitle(): string { return { 'assign-person': 'Registrar entrega', 'assign-department': 'Entregar a departamento', return: 'Registrar recepción', state: 'Cambiar situación del equipo', recover: 'Registrar equipo encontrado', service:'Enviar a revisión técnica',retire:'Retirar del inventario',verify:'Verificar equipo' }[this.action() || 'return']; }
+   protected departmentReceivers():Colaborador[]{return receiversForDepartment(this.collaborators(),this.actionForm.controls.departamentoId.value);}
+@@ -230,6 +327,7 @@ export class DispositivoDetail implements OnInit {
+     if (!actor?.nombre.trim()) { this.actionError.set('La sesión no permite identificar al responsable TI.'); return; }
+     this.actionForm.controls.responsable.setValue(actor.nombre);
+     if (action === 'assign-person' && !value.colaboradorId) { this.actionError.set('Selecciona un colaborador.'); return; }
++    if (action === 'assign-person' && this.jointDelivery() && (!this.selectedSim() || !this.item() || !isSmartphoneDevice(this.item()!) || this.item()!.simAsociada)) { this.actionError.set('Selecciona una SIM disponible para este Smartphone.'); return; }
+     if (action === 'assign-department' && (!value.departamentoId||!value.recibidoPorId)) { this.actionError.set('Selecciona el departamento y el colaborador que recibe.'); return; }
+     if (action === 'state' && !value.estadoId) { this.actionError.set('Selecciona un estado.'); return; }
+     if (action === 'recover' && (!value.estadoId || !value.motivoRecuperacion.trim())) { this.actionError.set(!value.estadoId ? 'Selecciona el estado de recuperación.' : 'Ingresa el motivo de recuperación.'); return; }
+@@ -260,7 +358,7 @@ export class DispositivoDetail implements OnInit {
+     }
+     const common = { responsable: actor.nombre, observaciones: value.observaciones.trim() || null };
+     let request: Observable<Dispositivo|OrdenServicio|ResultadoDevolucion>;
+-    if (action === 'assign-person') request = this.service.asignarColaborador(this.codigo, { ...common, colaboradorId: Number(value.colaboradorId) });
++    if (action === 'assign-person') request = this.service.asignarColaborador(this.codigo, { ...common, colaboradorId: Number(value.colaboradorId), ...(this.jointDelivery() && this.selectedSim() ? { simCodigoInventario: this.selectedSim()!.codigoInventario } : {}) });
+     else if (action === 'assign-department') request = this.service.asignarDepartamento(this.codigo, { ...common, departamentoId: Number(value.departamentoId),recibidoPorId:Number(value.recibidoPorId), localidad: value.localidad.trim() || null, ubicacionDetalle: value.ubicacionDetalle.trim() || null });
+     else if (action === 'return') request = this.service.devolver(this.codigo, common);
+     else if(action==='service')request=this.technicalService.crear({dispositivoCodigo:this.codigo,proveedor:value.proveedor.trim()||null,fechaEnvio:value.fechaEnvio||null,fallaReportada:value.fallaReportada.trim(),observaciones:value.observaciones.trim()||null,responsable:actor.nombre});
+diff --git a/frontend/src/app/features/dispositivos/dispositivos-list.ts b/frontend/src/app/features/dispositivos/dispositivos-list.ts
+index f94ff36..64d38ff 100644
+--- a/frontend/src/app/features/dispositivos/dispositivos-list.ts
++++ b/frontend/src/app/features/dispositivos/dispositivos-list.ts
+@@ -203,7 +203,7 @@ const printableDocument = (
+             } @else {
+               <span class="cell-primary">{{ custody(item) }}</span><span class="cell-secondary">{{ item.colaborador?.rut ? rut(item.colaborador!.rut) : item.departamento?.nombre || 'Sin responsable actual' }}</span>
+             }
+-          </td><td><span class="verification-badge verification-badge--{{ item.verificacionFisica?.resultado || 'PENDIENTE' }}">{{ verification(item.verificacionFisica?.resultado) }}</span></td><td>{{ item.localidad || '—' }}<span class="cell-secondary">{{ item.ubicacionDetalle || '' }}</span></td><td><div class="actions"><a class="btn btn--secondary btn--small" [routerLink]="[item.codigoInventario]">Gestionar ficha</a><a class="btn btn--ghost btn--small" [routerLink]="[item.codigoInventario,'editar']">Editar</a></div></td></tr>}
++          </td><td><span class="verification-badge" [class.verification-badge--PENDIENTE]="(item.verificacionFisica?.resultado || 'PENDIENTE') === 'PENDIENTE'" [class.verification-badge--VERIFICADO]="item.verificacionFisica?.resultado === 'VERIFICADO'" [class.verification-badge--REVISAR]="item.verificacionFisica?.resultado === 'REVISAR'">{{ verification(item.verificacionFisica?.resultado) }}</span></td><td>{{ item.localidad || '—' }}<span class="cell-secondary">{{ item.ubicacionDetalle || '' }}</span></td><td><div class="actions"><a class="btn btn--secondary btn--small" [routerLink]="[item.codigoInventario]">Gestionar ficha</a><a class="btn btn--ghost btn--small" [routerLink]="[item.codigoInventario,'editar']">Editar</a></div></td></tr>}
+         </tbody></table></div>
+         <div class="mobile-record-list inventory-mobile-list">
+           @for(item of items(); track item.id) {
+@@ -218,7 +218,7 @@ const printableDocument = (
+                 <app-status-badge [code]="item.estado.codigo" [label]="item.estado.nombre" />
+               </header>
+               <dl class="mobile-record-card__details">
+-                <div><dt>Verificación</dt><dd><span class="verification-badge verification-badge--{{ item.verificacionFisica?.resultado || 'PENDIENTE' }}">{{ verification(item.verificacionFisica?.resultado) }}</span></dd></div>
++                <div><dt>Verificación</dt><dd><span class="verification-badge" [class.verification-badge--PENDIENTE]="(item.verificacionFisica?.resultado || 'PENDIENTE') === 'PENDIENTE'" [class.verification-badge--VERIFICADO]="item.verificacionFisica?.resultado === 'VERIFICADO'" [class.verification-badge--REVISAR]="item.verificacionFisica?.resultado === 'REVISAR'">{{ verification(item.verificacionFisica?.resultado) }}</span></dd></div>
+                 <div><dt>Responsable</dt><dd>@if(assignedWithoutResponsible(item)){<span class="custody-warning"><svg lucideTriangleAlert></svg>Asignado sin responsable</span><small>Revisar custodia</small>}@else if(closedCustody(item)){<span>Último responsable: {{ lastResponsibleName(item) }}</span>@if(item.ultimoResponsableConocido;as previous){<small>{{ previous.tipo === 'COLABORADOR' ? 'Colaborador' : 'Departamento' }} · {{ previous.fechaMovimiento | date:'dd/MM/yyyy' }}</small>}}@else{<span>{{ custody(item) }}</span>}</dd></div>
+                 <div><dt>Ubicaci&oacute;n</dt><dd>{{ item.localidad || item.ubicacionDetalle || 'Sin ubicaci&oacute;n' }}</dd></div>
+               </dl>
+@@ -278,6 +278,7 @@ export class DispositivosList implements OnInit {
+ 
+   ngOnInit(): void {
+     this.filters.estado=this.route.snapshot.queryParamMap.get('estado')||'';
++    this.filters.tipoDispositivoId=this.route.snapshot.queryParamMap.get('tipoDispositivoId')||'';
+     this.estados.listar('DISPOSITIVO').subscribe({ next: (items) => this.states.set(items) });
+     this.deptService.listar().subscribe({ next: (items) => this.departments.set(items) });
+     this.typeService.listar().subscribe({ next: (items) => this.types.set(items) });
+diff --git a/frontend/src/app/layout/header/header.ts b/frontend/src/app/layout/header/header.ts
+index 7956b7b..7babb8e 100644
+--- a/frontend/src/app/layout/header/header.ts
++++ b/frontend/src/app/layout/header/header.ts
+@@ -40,7 +40,7 @@ import { AuthService } from '../../core/services/auth.service';
+           <span class="brand__icon"><svg lucideDroplet></svg></span>
+           <span>
+             <strong>Aguas San Isidro</strong>
+-            <small>SISTEMA ITAM v3.0</small>
++            <small>SISTEMA ITAM</small>
+           </span>
+         </a>
+         <nav aria-label="Accesos rapidos">
+diff --git a/frontend/src/app/layout/sidebar/sidebar.ts b/frontend/src/app/layout/sidebar/sidebar.ts
+index 40e6882..014be5e 100644
+--- a/frontend/src/app/layout/sidebar/sidebar.ts
++++ b/frontend/src/app/layout/sidebar/sidebar.ts
+@@ -1,5 +1,5 @@
+ import { Component, output } from '@angular/core';
+ import { RouterLink, RouterLinkActive } from '@angular/router';
+-import { LucideBuilding, LucideCardSim, LucideCircleGauge, LucideDynamicIcon, LucideLayoutDashboard, LucidePackage, LucideUserMinus, LucideUsers } from '@lucide/angular';
++import { LucideBell, LucideBuilding, LucideCardSim, LucideCircleGauge, LucideDynamicIcon, LucideLayoutDashboard, LucidePackage, LucideUserMinus, LucideUsers } from '@lucide/angular';
+ @Component({selector:'app-sidebar',imports:[RouterLink,RouterLinkActive,LucideDynamicIcon],template:`<nav aria-label="Navegación principal"><p class="nav-label">Gestión ITAM</p>@for(item of items;track item.path){<a [routerLink]="item.path" routerLinkActive="active" (click)="navigate.emit()"><svg [lucideIcon]="item.icon"></svg><span>{{item.label}}</span></a>}</nav><section class="sidebar-note"><svg [lucideIcon]="healthIcon"></svg><div><strong>Sistema operativo</strong><small>API y base de datos conectadas</small></div></section>`,styleUrl:'./sidebar.scss'})
+-export class Sidebar {readonly navigate=output<void>();protected readonly healthIcon=LucideCircleGauge;protected readonly items=[{path:'/dashboard',label:'Dashboard',icon:LucideLayoutDashboard},{path:'/dispositivos',label:'Inventario',icon:LucidePackage},{path:'/colaboradores',label:'Colaboradores',icon:LucideUsers},{path:'/departamentos',label:'Departamentos',icon:LucideBuilding},{path:'/sim',label:'Tarjetas SIM',icon:LucideCardSim},{path:'/offboarding',label:'Salida de personal',icon:LucideUserMinus}];}
++export class Sidebar {readonly navigate=output<void>();protected readonly healthIcon=LucideCircleGauge;protected readonly items=[{path:'/dashboard',label:'Dashboard',icon:LucideLayoutDashboard},{path:'/dispositivos',label:'Inventario',icon:LucidePackage},{path:'/alertas-stock',label:'Alertas de stock',icon:LucideBell},{path:'/colaboradores',label:'Colaboradores',icon:LucideUsers},{path:'/departamentos',label:'Departamentos',icon:LucideBuilding},{path:'/sim',label:'Tarjetas SIM',icon:LucideCardSim},{path:'/offboarding',label:'Salida de personal',icon:LucideUserMinus}];}
+diff --git a/frontend/src/environments/environment.ts b/frontend/src/environments/environment.ts
+index 93362b5..a0fa180 100644
+--- a/frontend/src/environments/environment.ts
++++ b/frontend/src/environments/environment.ts
+@@ -1,5 +1,5 @@
+ export const environment = {
+   production: false,
+-  apiUrl: 'http://localhost:3000/api/v1',
++  apiUrl: 'http://localhost:3100/api/v1',
+   assetDetailBaseUrl: ''
+ } as const;
+diff --git a/frontend/src/index.html b/frontend/src/index.html
+index fc354ca..5623e4d 100644
+--- a/frontend/src/index.html
++++ b/frontend/src/index.html
+@@ -4,10 +4,10 @@
+   <meta charset="utf-8">
+   <meta name="theme-color" content="#03045E">
+   <meta name="description" content="Sistema de gestión de activos TI de Aguas San Isidro">
+-  <title>ITAM v3.0 | Aguas San Isidro</title>
++  <title>ITAM | Aguas San Isidro</title>
+   <base href="/">
+   <meta name="viewport" content="width=device-width, initial-scale=1">
+-  <link rel="icon" type="image/x-icon" href="favicon.ico">
++  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+ </head>
+ <body>
+   <app-root></app-root>

@@ -18,6 +18,7 @@ export const routes: Routes = [
       { path: 'sim', loadChildren: () => import('./features/sim/sim.routes').then((m) => m.SIM_ROUTES) },
       { path: 'estados', loadComponent: () => import('./features/estados/estados-list').then((m) => m.EstadosList) },
       { path: 'tipos-dispositivo', loadComponent: () => import('./features/tipos-dispositivo/tipos-dispositivo-list').then((m) => m.TiposDispositivoList) },
+      { path: 'alertas-stock', loadComponent: () => import('./features/stock-alerts/stock-alerts').then((m) => m.StockAlerts) },
       { path: 'familias-codigo', loadComponent: () => import('./features/familias-codigo/familias-codigo-list').then((m) => m.FamiliasCodigoList) },
       { path: 'offboarding', loadComponent: () => import('./features/offboarding/offboarding-page').then((m) => m.OffboardingPage) },
       { path: 'servicio-tecnico', loadComponent: () => import('./features/servicio-tecnico/servicio-tecnico').then((m) => m.ServicioTecnico) },

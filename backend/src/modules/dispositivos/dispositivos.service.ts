@@ -10,6 +10,16 @@ import {
   resolverTipoActivo,
   resolverTipoActivoParaAlta
 } from "../tipos-dispositivo/tipos-dispositivo.service";
+import {
+  asociarSimADispositivo,
+  asignarSimAColaborador,
+  cambiarEstadoSim,
+  insertarHistorialSim,
+  obtenerEstadoSimPorCodigo,
+  obtenerSimPorCodigo,
+  obtenerSimPorDispositivoId
+} from "../sim/sim.repository";
+import type { SimRow } from "../sim/sim.types";
 import { toIsoDate, toIsoDateTime } from "../../shared/dates";
 import {
   ConflictError,
@@ -700,6 +710,18 @@ export const assertColaboradorActivo = (
   }
 };
 
+export const assertSimDisponibleParaEntrega = (sim: SimRow): void => {
+  if (
+    sim.estado_codigo !== "DISPONIBLE"
+    || sim.dispositivo_id !== null
+    || sim.colaborador_id !== null
+  ) {
+    throw new ConflictError(
+      "La SIM seleccionada ya no está disponible para entregar."
+    );
+  }
+};
+
 export const assertAsignadoConCustodioUnico = (
   colaboradorId: string | null,
   departamentoId: string | null
@@ -773,6 +795,26 @@ export const asignarAColaborador = async (
     assertCustodiaDisponible(anterior);
     await assertSinOrdenServicioAbierta(anterior.dispositivo_id, client);
 
+    let sim: SimRow | null = null;
+    let estadoSimAsignada: { id: string; codigo: string; nombre: string } | null = null;
+    if (input.simCodigoInventario !== undefined) {
+      if (anterior.tipo_dispositivo_nombre.trim().toUpperCase() !== "SMARTPHONE") {
+        throw new ValidationError(
+          "La entrega conjunta de SIM solo está disponible para Smartphones."
+        );
+      }
+      if (anterior.sim_id || await obtenerSimPorDispositivoId(anterior.dispositivo_id, client)) {
+        throw new ConflictError("El Smartphone ya tiene una SIM asociada.");
+      }
+      sim = await obtenerSimPorCodigo(input.simCodigoInventario, client, true);
+      if (!sim) throw new NotFoundError("SIM no encontrada.");
+      assertSimDisponibleParaEntrega(sim);
+      estadoSimAsignada = await obtenerEstadoSimPorCodigo("ASIGNADA", client);
+      if (!estadoSimAsignada) {
+        throw new ConflictError("No existe un estado ASIGNADA activo para SIM.");
+      }
+    }
+
     const actualizado = await asignarDispositivoAColaborador(
       codigoInventario,
       input.colaboradorId,
@@ -793,19 +835,76 @@ export const asignarAColaborador = async (
       input.observaciones,
       {
         custodiaAnterior: custodySnapshot(anterior),
-        custodiaNueva: custodySnapshot(actualizado)
+        custodiaNueva: custodySnapshot(actualizado),
+        ...(sim ? { simCodigoInventario: sim.sim_codigo_inventario } : {})
       },
       client
     );
+
+    if (sim && estadoSimAsignada) {
+      const asociada = await asociarSimADispositivo(
+        sim.sim_codigo_inventario,
+        actualizado.dispositivo_id,
+        client
+      );
+      if (!asociada) throw new NotFoundError("SIM no encontrada.");
+
+      const asignada = await asignarSimAColaborador(
+        sim.sim_codigo_inventario,
+        input.colaboradorId,
+        client
+      );
+      if (!asignada) throw new NotFoundError("SIM no encontrada.");
+
+      const simActualizada = await cambiarEstadoSim(
+        sim.sim_codigo_inventario,
+        estadoSimAsignada.id,
+        client
+      );
+      if (!simActualizada) throw new NotFoundError("SIM no encontrada.");
+
+      await insertarHistorialSim(
+        simActualizada.sim_id,
+        "ASOCIAR_DISPOSITIVO",
+        sim.estado_id,
+        estadoSimAsignada.id,
+        input.responsable,
+        input.observaciones,
+        {
+          dispositivoCodigoInventario: codigoInventario,
+          estadoAutomatico: estadoSimAsignada.codigo,
+          entregaConjunta: true
+        },
+        client
+      );
+      await insertarHistorialSim(
+        simActualizada.sim_id,
+        "ASIGNAR_COLABORADOR",
+        estadoSimAsignada.id,
+        estadoSimAsignada.id,
+        input.responsable,
+        input.observaciones,
+        {
+          colaboradorId: input.colaboradorId,
+          dispositivoCodigoInventario: codigoInventario,
+          estadoAutomatico: estadoSimAsignada.codigo,
+          entregaConjunta: true
+        },
+        client
+      );
+    }
     await registrarVerificacionAutomaticaPorOperacion(
       codigoInventario,
       "entregado a colaborador",
       input.responsable,
       client
     );
-    await client.query("COMMIT");
+    const resultado = sim
+      ? await obtenerDispositivoPorCodigo(codigoInventario, client)
+      : actualizado;
 
-    return mapDispositivo(actualizado);
+    await client.query("COMMIT");
+    return mapDispositivo(resultado!);
   } catch (error) {
     await client.query("ROLLBACK");
     return normalizarErrorDispositivo(error);
