@@ -23,6 +23,7 @@ export interface SimAsociadaResumen {
   codigoInventario: number;
   iccidCodigoFabrica: string | null;
   numeroAsociado: string | null;
+  lineaMovil: import("../lineas-moviles/lineas-moviles.types").LineaMovilResumen | null;
   compania: string | null;
   estado: EstadoResumen | null;
 }
@@ -61,6 +62,7 @@ export interface DispositivoResumen {
   valorComercial: number;
   facturaAdquisicion:{id:string;numeroFactura:string;fechaFactura:string|null;proveedor:string|null;montoTotal:number|null;observaciones:string|null;referenciaDocumental:string|null;documento:{nombreOriginal:string;mimeType:string;tamanoBytes:number}|null}|null;
   fechaRegistro: string;
+  fechaIngresoInventario: string;
   creadoEn: string;
   actualizadoEn: string;
   estado: EstadoResumen;
@@ -68,6 +70,8 @@ export interface DispositivoResumen {
   departamento: DepartamentoResumen | null;
   recibidoPor: ColaboradorResumen | null;
   simAsociada: SimAsociadaResumen | null;
+  lineaMovil: import("../lineas-moviles/lineas-moviles.types").LineaMovilResumen | null;
+  numeroTelefonico: string | null;
   tipoCustodia: "NONE" | "COLABORADOR" | "DEPARTAMENTO";
   ultimoResponsableConocido: UltimoResponsableConocido | null;
   ultimoResultadoOffboarding: ResultadoOffboarding | null;
@@ -122,6 +126,7 @@ export interface DispositivoRow {
   factura_documento_mime_type:string|null;
   factura_documento_tamano_bytes:string|number|null;
   fecha_registro: Date | string;
+  fecha_ingreso_inventario: Date | string;
   creado_en: Date | string;
   actualizado_en: Date | string;
   estado_id: string;
@@ -145,6 +150,12 @@ export interface DispositivoRow {
   sim_codigo_inventario: number | null;
   iccid_codigo_fabrica: string | null;
   numero_asociado: string | null;
+  linea_movil_id: string | null;
+  linea_numero_telefonico: string | null;
+  linea_estado: import("../lineas-moviles/lineas-moviles.types").EstadoLineaMovil | null;
+  sim_linea_movil_id: string | null;
+  sim_linea_numero_telefonico: string | null;
+  sim_linea_estado: import("../lineas-moviles/lineas-moviles.types").EstadoLineaMovil | null;
   compania: string | null;
   sim_estado_id: string | null;
   sim_estado_codigo: string | null;
@@ -227,6 +238,14 @@ export interface ResumenGerencial {
 export interface AsignarColaboradorInput {
   colaboradorId: number;
   simCodigoInventario?: number;
+  numeroTelefonico?: string | null;
+  responsable: string;
+  observaciones?: string | null;
+}
+
+export interface AsociarLineaDispositivoInput {
+  numeroTelefonico: string;
+  simId?: string | null;
   responsable: string;
   observaciones?: string | null;
 }
@@ -280,6 +299,7 @@ export interface CambiarEstadoDispositivoInput {
   observaciones?: string | null;
   recuperar?: boolean;
   motivoRecuperacion?: string;
+  accionLineaExtravio?: import("../lineas-moviles/lineas-moviles.types").AccionLineaExtravio;
 }
 
 export type MotivoBaja =

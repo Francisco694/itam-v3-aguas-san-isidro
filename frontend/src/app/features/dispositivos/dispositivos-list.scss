@@ -286,6 +286,24 @@
 .inventory-table tbody tr:hover {
   background: #f4fbfd;
 }
+.location-cell {
+  max-width: 15rem;
+  min-width: 11rem;
+}
+.location-cell .cell-secondary {
+  display: -webkit-box;
+  line-height: 1.25;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.table-icon-action {
+  flex: 0 0 2.15rem;
+  min-height: 2.15rem;
+  padding: 0;
+  width: 2.15rem;
+}
+.inventory-table th:last-child { width: 5.2rem; }
 .custody-warning {
   align-items: center;
   background: #fef3c7;
@@ -569,13 +587,20 @@
   align-items: center;
   background: #fff;
   border: 1px solid var(--gray-200);
-  border-radius: 0.8rem;
+  border-radius: 999px;
   color: var(--slate-700);
   display: flex;
-  gap: 0.65rem;
+  font-weight: 700;
+  gap: .5rem;
   padding: 0.65rem 0.85rem;
+  box-shadow: var(--shadow-sm);
   white-space: nowrap;
   scroll-snap-align: start;
+}
+.state-dot {
+  border-radius: 50%;
+  height: .62rem;
+  width: .62rem;
 }
 .state-shortcuts button strong {
   background: var(--gray-100);

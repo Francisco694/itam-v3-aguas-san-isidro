@@ -1,6 +1,6 @@
 import { DatePipe } from '@angular/common';
 import { Component, input, output } from '@angular/core';
-import { LucideDownload, LucideDroplet, LucideMail, LucidePrinter, LucideX } from '@lucide/angular';
+import { LucideDownload, LucideMail, LucidePrinter, LucideX } from '@lucide/angular';
 import { ActaEntrega } from '../../../core/models/itam.models';
 import { formatClp } from '../../utils/currency';
 
@@ -8,7 +8,7 @@ export const actaCommercialTotal = (devices: readonly { valorComercial: number }
   devices.reduce((total, device) => total + device.valorComercial, 0);
 @Component({
   selector: 'app-acta-preview',
-  imports: [DatePipe, LucideDownload, LucideDroplet, LucideMail, LucidePrinter, LucideX],
+  imports: [DatePipe, LucideDownload, LucideMail, LucidePrinter, LucideX],
   template: `<div class="dialog-backdrop" role="presentation" (click)="backdrop($event)">
     <article
       class="dialog dialog--wide acta-document print-document"
@@ -30,7 +30,7 @@ export const actaCommercialTotal = (devices: readonly { valorComercial: number }
       </div>
       <header class="acta-brand">
         <div>
-          <span class="brand-mark"><svg lucideDroplet></svg></span>
+          <span class="brand-mark"><img src="/assets/brand/itam-logo.png" alt="" /></span>
           <p><strong>AGUAS SAN ISIDRO</strong><small>DEPARTAMENTO DE TECNOLOGÍA</small></p>
         </div>
         <span>CONTROL PATRIMONIAL TI</span>
@@ -167,8 +167,10 @@ export const actaCommercialTotal = (devices: readonly { valorComercial: number }
         justify-content: center;
         width: 2.6rem;
       }
-      .brand-mark svg {
-        height: 1.3rem;
+      .brand-mark img {
+        height: 100%;
+        object-fit: cover;
+        width: 100%;
       }
       .acta-brand p,
       .acta-brand strong,

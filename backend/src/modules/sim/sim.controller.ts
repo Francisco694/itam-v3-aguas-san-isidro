@@ -5,6 +5,7 @@ import { ValidationError } from "../../shared/errors";
 import { sendCollection, sendItem } from "../../shared/responses";
 import {
   parseBodyObject,
+  parseOptionalBoolean,
   parseOptionalString,
   parsePositiveInteger,
   parseRequiredString,
@@ -168,6 +169,15 @@ export const asociarDispositivoController = asyncHandler(
       dispositivoCodigoInventario: parsePositiveInteger(
         body.dispositivoCodigoInventario,
         "dispositivoCodigoInventario"
+      ),
+      numeroAsociado: parseOptionalString(
+        body.numeroTelefonico ?? body.numeroAsociado,
+        "numeroTelefonico",
+        30
+      ),
+      reemplazarSimActual: parseOptionalBoolean(
+        body.reemplazarSimActual,
+        "reemplazarSimActual"
       ),
       ...parseResponsableInput(req, body)
     };

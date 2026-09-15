@@ -1,9 +1,22 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { map, Observable } from 'rxjs';
+import { map, Observable, tap } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { ApiCollectionResponse, ApiItemResponse } from '../models/api.models';
-import { AsignarDispositivoColaboradorInput, AsignarDispositivoDepartamentoInput, CambiarEstadoInput, DarBajaInput, DevolverDispositivoInput, Dispositivo, DispositivoFilters, DispositivoInput, HistorialEvento, ResultadoDevolucion, ResultadoOffboardingInput, ResumenGerencial, TrazabilidadDispositivo, VerificacionFisica, VerificacionFisicaResumen } from '../models/itam.models';
+import { AsociarLineaDispositivoInput, AsignarDispositivoColaboradorInput, AsignarDispositivoDepartamentoInput, CambiarEstadoInput, DarBajaInput, DevolverDispositivoInput, Dispositivo, DispositivoFilters, DispositivoInput, HistorialEvento, LineaMovilResumen, ResultadoDevolucion, ResultadoOffboardingInput, ResumenGerencial, TrazabilidadDispositivo, VerificacionFisica, VerificacionFisicaResumen } from '../models/itam.models';
+
+interface LineaMovilApiRow {
+  id: string | number;
+  numero_telefonico?: string;
+  numeroTelefonico?: string;
+  estado: LineaMovilResumen['estado'];
+  dispositivo_id?: string | number | null;
+  dispositivoId?: string | number | null;
+  sim_id?: string | null;
+  simId?: string | null;
+  colaborador_id?: string | null;
+  colaboradorId?: string | null;
+}
 
 @Injectable({ providedIn: 'root' })
 export class DispositivosService {
@@ -25,6 +38,27 @@ export class DispositivosService {
   }
   crear(input: DispositivoInput) { return this.item(this.http.post<ApiItemResponse<Dispositivo>>(this.url, input)); }
   actualizar(codigo: number, input: Partial<DispositivoInput>) { return this.item(this.http.patch<ApiItemResponse<Dispositivo>>(`${this.url}/${codigo}`, input)); }
+  asociarLinea(codigo: number, input: AsociarLineaDispositivoInput) {
+    const endpoint = `${this.url}/${codigo}/asociar-linea`;
+    console.log('[asociar-linea] URL', endpoint);
+    console.log('[asociar-linea] payload', input);
+    return this.http.post<ApiItemResponse<LineaMovilApiRow>>(endpoint, input).pipe(
+      tap({
+        next: (response) => console.log('[asociar-linea] respuesta', response),
+        error: (error) => console.error('[asociar-linea] error', error)
+      }),
+      map((response) => ({
+        id: String(response.data.id),
+        numeroTelefonico: response.data.numeroTelefonico ?? response.data.numero_telefonico ?? '',
+        estado: response.data.estado,
+        dispositivoId: response.data.dispositivoId === undefined
+          ? response.data.dispositivo_id === null || response.data.dispositivo_id === undefined ? null : String(response.data.dispositivo_id)
+          : response.data.dispositivoId === null ? null : String(response.data.dispositivoId),
+        simId: response.data.simId ?? response.data.sim_id ?? null,
+        colaboradorId: response.data.colaboradorId ?? response.data.colaborador_id ?? null
+      }))
+    );
+  }
   asignarColaborador(codigo: number, input: AsignarDispositivoColaboradorInput) { return this.item(this.http.post<ApiItemResponse<Dispositivo>>(`${this.url}/${codigo}/asignar-colaborador`, input)); }
   asignarDepartamento(codigo: number, input: AsignarDispositivoDepartamentoInput) { return this.item(this.http.post<ApiItemResponse<Dispositivo>>(`${this.url}/${codigo}/asignar-departamento`, input)); }
   devolver(codigo: number, input: DevolverDispositivoInput) { return this.http.post<ApiItemResponse<ResultadoDevolucion>>(`${this.url}/${codigo}/devolver`, input).pipe(map(r=>r.data)); }
@@ -32,8 +66,8 @@ export class DispositivosService {
   darBaja(codigo:number,input:DarBajaInput){return this.item(this.http.post<ApiItemResponse<Dispositivo>>(`${this.url}/${codigo}/dar-baja`,input));}
   cambiarEstado(codigo: number, input: CambiarEstadoInput) { return this.item(this.http.post<ApiItemResponse<Dispositivo>>(`${this.url}/${codigo}/cambiar-estado`, input)); }
   historial(codigo: number) { return this.http.get<ApiCollectionResponse<HistorialEvento>>(`${this.url}/${codigo}/historial`).pipe(map((r) => r.data)); }
-  verificar(codigo: number, input: { encontrado: boolean; identificadorComprobado?: string | null; observacion?: string | null }) { return this.http.post<ApiItemResponse<VerificacionFisica>>(`${this.url}/${codigo}/verificaciones-fisicas`, input).pipe(map((r) => r.data)); }
+  verificarManual(codigo: number) { return this.http.post<ApiItemResponse<VerificacionFisica>>(`${this.url}/${codigo}/verificacion-manual`, {}).pipe(map((r) => r.data)); }
   verificaciones(codigo: number) { return this.http.get<ApiCollectionResponse<VerificacionFisica>>(`${this.url}/${codigo}/verificaciones-fisicas`).pipe(map((r) => r.data)); }
   trazabilidad(codigo: string | number) { return this.http.get<ApiItemResponse<TrazabilidadDispositivo>>(`${this.url}/${codigo}/trazabilidad`).pipe(map((r) => r.data)); }
-  private item(request: Observable<ApiItemResponse<Dispositivo>>) { return request.pipe(map((response) => response.data)); }
+  private item<T>(request: Observable<ApiItemResponse<T>>) { return request.pipe(map((response) => response.data)); }
 }

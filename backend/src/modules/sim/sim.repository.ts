@@ -15,6 +15,9 @@ const getDb = (client?: PoolClient): DbExecutor => client ?? pool;
 const simSelect = `
   SELECT
     s.id AS sim_id,
+    linea.id AS linea_movil_id,
+    linea.numero_telefonico AS linea_numero_telefonico,
+    linea.estado AS linea_estado,
     s.codigo_inventario AS sim_codigo_inventario,
     s.iccid_codigo_fabrica,
     s.numero_asociado,
@@ -49,6 +52,8 @@ const simSelect = `
     ON dispositivo_tipo.id = d.tipo_dispositivo_id
   LEFT JOIN itam.estados de
     ON de.id = d.estado_id
+  LEFT JOIN itam.lineas_moviles linea
+    ON linea.id = s.linea_movil_id
 `;
 
 export const listarSim = async (): Promise<SimRow[]> => {
@@ -80,6 +85,24 @@ export const obtenerSimPorCodigo = async (
   return result.rows[0] ?? null;
 };
 
+export const obtenerSimPorId = async (
+  simId: string,
+  client?: PoolClient,
+  forUpdate = false
+): Promise<SimRow | null> => {
+  const result = await getDb(client).query<SimRow>(
+    `
+      ${simSelect}
+      WHERE s.id = $1
+      LIMIT 1
+      ${forUpdate ? "FOR UPDATE OF s" : ""}
+    `,
+    [simId]
+  );
+
+  return result.rows[0] ?? null;
+};
+
 export const obtenerSimPorDispositivoId = async (
   dispositivoId: string,
   client?: PoolClient
@@ -94,6 +117,32 @@ export const obtenerSimPorDispositivoId = async (
   );
 
   return result.rows[0] ?? null;
+};
+
+export const existeOtraSimOperableConNumero = async (
+  numeroAsociado: string,
+  simId: string | null,
+  client: PoolClient,
+  simIdAdicionalExcluida: string | null = null
+): Promise<boolean> => {
+  const result = await client.query<{ existe: boolean }>(
+    `
+      SELECT EXISTS (
+        SELECT 1
+        FROM itam.sim s
+        JOIN itam.estados e ON e.id = s.estado_id
+        WHERE ($2::bigint IS NULL OR s.id <> $2::bigint)
+          AND ($3::bigint IS NULL OR s.id <> $3::bigint)
+          AND e.tipo_entidad = 'SIM'
+          AND e.activo = TRUE
+          AND e.codigo IN ('DISPONIBLE', 'ASIGNADA')
+          AND REGEXP_REPLACE(COALESCE(s.numero_asociado, ''), '[^0-9]', '', 'g') = $1
+      ) AS existe
+    `,
+    [numeroAsociado, simId, simIdAdicionalExcluida]
+  );
+
+  return result.rows[0]?.existe ?? false;
 };
 
 export const obtenerEstadoSimPorCodigo = async (
@@ -173,9 +222,10 @@ export const crearSim = async (
 
 export const actualizarSim = async (
   codigoInventario: number,
-  input: ActualizarSimInput
+  input: ActualizarSimInput,
+  client?: PoolClient
 ): Promise<SimRow | null> => {
-  const result = await pool.query<{ codigo_inventario: number }>(
+  const result = await getDb(client).query<{ codigo_inventario: number }>(
     `
       UPDATE itam.sim
       SET
@@ -214,22 +264,24 @@ export const actualizarSim = async (
     return null;
   }
 
-  return obtenerSimPorCodigo(result.rows[0].codigo_inventario);
+  return obtenerSimPorCodigo(result.rows[0].codigo_inventario, client);
 };
 
 export const asociarSimADispositivo = async (
   codigoInventario: number,
   dispositivoId: string,
-  client: PoolClient
+  client: PoolClient,
+  numeroAsociado?: string | null
 ): Promise<SimRow | null> => {
   const result = await client.query<{ codigo_inventario: number }>(
     `
       UPDATE itam.sim
-      SET dispositivo_id = $2
+      SET dispositivo_id = $2,
+          numero_asociado = COALESCE($3, numero_asociado)
       WHERE codigo_inventario = $1
       RETURNING codigo_inventario
     `,
-    [codigoInventario, dispositivoId]
+    [codigoInventario, dispositivoId, numeroAsociado?.trim() || null]
   );
 
   if (!result.rows[0]) {

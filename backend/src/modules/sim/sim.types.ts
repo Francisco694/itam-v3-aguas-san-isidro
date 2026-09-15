@@ -18,6 +18,9 @@ export interface DispositivoResumen {
 
 export interface SimRow {
   sim_id: string;
+  linea_movil_id: string | null;
+  linea_numero_telefonico: string | null;
+  linea_estado: import("../lineas-moviles/lineas-moviles.types").EstadoLineaMovil | null;
   sim_codigo_inventario: number;
   iccid_codigo_fabrica: string | null;
   numero_asociado: string | null;
@@ -48,6 +51,7 @@ export interface SimResumen {
   codigoInventario: number;
   iccidCodigoFabrica: string | null;
   numeroAsociado: string | null;
+  lineaMovil: import("../lineas-moviles/lineas-moviles.types").LineaMovilResumen | null;
   compania: string | null;
   estado: EstadoResumen;
   colaborador: ColaboradorResumen | null;
@@ -75,6 +79,8 @@ export interface ActualizarSimInput {
 
 export interface AsociarDispositivoInput {
   dispositivoCodigoInventario: number;
+  numeroAsociado?: string | null;
+  reemplazarSimActual?: boolean;
   responsable: string;
   observaciones?: string | null;
 }

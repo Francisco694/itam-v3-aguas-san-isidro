@@ -81,7 +81,7 @@ export const visibleReconciliationLabel = (classification: ClasificacionConcilia
           <div class="detail-item"><dt>RUT</dt><dd>{{ rut(collaborator.rut) }}</dd></div>
           <div class="detail-item"><dt>Cargo</dt><dd>{{ collaborator.cargo || '—' }}</dd></div>
           <div class="detail-item"><dt>Departamento</dt><dd>{{ collaborator.departamento?.nombre || 'Sin departamento' }}</dd></div>
-          <div class="detail-item"><dt>Localidad</dt><dd>{{ collaborator.localidad || '—' }}</dd></div>
+          <div class="detail-item"><dt>Localidad</dt><dd>{{ collaborator.localidadNombre || collaborator.localidadCodigo || '—' }}@if (collaborator.localidadCodigo && collaborator.localidadCodigo !== collaborator.localidadNombre) { <span class="cell-secondary">Código: {{ collaborator.localidadCodigo }}</span> }</dd></div>
           <div class="detail-item"><dt>Estado</dt><dd>{{ collaborator.activo ? 'Activo' : 'Inactivo' }}</dd></div>
         </dl>
       </section>

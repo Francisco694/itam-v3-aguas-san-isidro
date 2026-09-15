@@ -1,16 +1,16 @@
 import { DatePipe } from '@angular/common';
 import { Component, input, output } from '@angular/core';
-import { LucideDroplet, LucidePrinter, LucideX } from '@lucide/angular';
+import { LucidePrinter, LucideX } from '@lucide/angular';
 import { ColaboradorResumen, Dispositivo } from '../../../core/models/itam.models';
 
 @Component({
   selector: 'app-document-preview',
-  imports: [DatePipe, LucideDroplet, LucidePrinter, LucideX],
+  imports: [DatePipe, LucidePrinter, LucideX],
   template: `
     <div class="dialog-backdrop document-backdrop" role="presentation" (click)="onBackdrop($event)">
       <article class="dialog dialog--wide print-document" role="dialog" aria-modal="true" [attr.aria-labelledby]="documentType() === 'receipt' ? 'receipt-title' : 'delivery-title'">
         <div class="document-actions print-hide"><span>Vista previa no persistida</span><div><button class="btn btn--secondary" type="button" (click)="close.emit()"><svg lucideX></svg>Cerrar</button><button class="btn btn--primary" type="button" (click)="print()"><svg lucidePrinter></svg>Imprimir</button></div></div>
-        <header class="document-brand"><span class="document-logo"><svg lucideDroplet></svg></span><div><strong>Aguas San Isidro</strong><span>DEPARTAMENTO DE TECNOLOGÍA</span></div></header>
+        <header class="document-brand"><span class="document-logo"><img src="/assets/brand/itam-logo.png" alt="" /></span><div><strong>Aguas San Isidro</strong><span>DEPARTAMENTO DE TECNOLOGÍA</span></div></header>
         <div class="document-title">@if(documentType()==='receipt'){<p>COMPROBANTE PRELIMINAR</p><h2 id="receipt-title">COMPROBANTE DE RECEPCIÓN</h2>}@else{<p>DOCUMENTO PRELIMINAR</p><h2 id="delivery-title">ACTA DE ENTREGA DE EQUIPO</h2>}<span>Generado el {{ generatedAt() | date:'dd/MM/yyyy HH:mm' }}</span></div>
         <section class="document-section"><h3>Persona responsable</h3><dl><div><dt>Nombre</dt><dd>{{ collaborator()?.nombre || '—' }}</dd></div><div><dt>RUT</dt><dd>{{ collaborator()?.rut || '—' }}</dd></div><div><dt>Cargo</dt><dd>{{ collaborator()?.cargo || '—' }}</dd></div><div><dt>Departamento</dt><dd>{{ departmentName() || device().departamento?.nombre || '—' }}</dd></div></dl></section>
         <section class="document-section"><h3>{{ documentType()==='receipt' ? 'Equipo recibido' : 'Equipo asignado' }}</h3><dl><div><dt>Código</dt><dd class="code">{{ device().codigoInventario }}</dd></div><div><dt>Tipo</dt><dd>{{ device().tipo.nombre }}</dd></div><div><dt>Marca / Modelo</dt><dd>{{ device().marca || '—' }} {{ device().modelo || '' }}</dd></div><div><dt>Serie</dt><dd>{{ device().numeroSerie || '—' }}</dd></div><div><dt>IMEI</dt><dd>{{ device().imei || '—' }}</dd></div><div><dt>Estado resultante</dt><dd>{{ device().estado.nombre }}</dd></div></dl></section>

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   actualizarDispositivoController,
+  asociarLineaController,
   asignarColaboradorController,
   asignarDepartamentoController,
   cambiarEstadoDispositivoController,
@@ -14,6 +15,7 @@ import {
   resumenGerencialController,
   resultadoOffboardingController,
   trazabilidadDispositivoController,
+  registrarVerificacionManualController,
   registrarVerificacionFisicaController
 } from "./dispositivos.controller";
 
@@ -21,6 +23,7 @@ const router = Router();
 
 router.get("/", listarDispositivosController);
 router.get("/resumen-gerencial", resumenGerencialController);
+router.post("/:codigo/asociar-linea", asociarLineaController);
 router.get("/:codigo/historial", historialDispositivoController);
 router.get("/:codigo/trazabilidad", trazabilidadDispositivoController);
 router.get("/:codigo/verificaciones-fisicas", listarVerificacionesFisicasController);
@@ -39,6 +42,7 @@ router.post("/:codigo/devolver", devolverDispositivoController);
 router.post("/:codigo/resultado-offboarding", resultadoOffboardingController);
 router.post("/:codigo/dar-baja", darBajaDispositivoController);
 router.post("/:codigo/verificaciones-fisicas", registrarVerificacionFisicaController);
+router.post("/:codigo/verificacion-manual", registrarVerificacionManualController);
 router.post(
   "/:codigo/cambiar-estado",
   cambiarEstadoDispositivoController

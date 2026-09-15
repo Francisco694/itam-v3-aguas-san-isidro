@@ -1,3 +1,4 @@
+import { pool } from "../../config/database";
 import { ConflictError, NotFoundError } from "../../shared/errors";
 import { toIsoDateTime } from "../../shared/dates";
 import {
@@ -36,7 +37,7 @@ export const clasificarVerificacionFisica = (
     ) {
       return { resultado: "REVISAR", identificadorEsperado };
     }
-    return { resultado: "VERIFICADO", identificadorEsperado };
+    return { resultado: "PENDIENTE", identificadorEsperado };
   }
   return { resultado: "REVISAR", identificadorEsperado };
 };
@@ -89,34 +90,45 @@ export const registrarVerificacionFisica = async (
   );
 };
 
-export const registrarVerificacionAutomaticaPorOperacion = async (
+export const registrarVerificacionManual = async (
   codigo: number,
-  motivo: string,
-  responsable: string,
-  client: import("pg").PoolClient
-): Promise<void> => {
-  const dispositivo = await obtenerDispositivoParaVerificacion(codigo, client);
-  if (!dispositivo) throw new NotFoundError("Dispositivo no encontrado.");
-  const ultima = await obtenerUltimaVerificacionFisica(dispositivo.id, client);
-  if (ultima && ultima !== "PENDIENTE") return;
-
-  const identificadorEsperado =
-    dispositivo.tipo_nombre.trim().toUpperCase() === "SMARTPHONE"
+  responsable: string
+): Promise<VerificacionFisica> => {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const dispositivo = await obtenerDispositivoParaVerificacion(codigo, client, true);
+    if (!dispositivo) throw new NotFoundError("Dispositivo no encontrado.");
+    const ultima = await obtenerUltimaVerificacionFisica(dispositivo.id, client);
+    if (ultima && ultima !== "PENDIENTE") {
+      throw new ConflictError("El equipo ya cuenta con evidencia de verificación.");
+    }
+    const identificadorEsperado = dispositivo.tipo_nombre.trim().toUpperCase() === "SMARTPHONE"
       ? dispositivo.imei
       : dispositivo.numero_serie;
-  await insertarVerificacionFisica(
-    dispositivo,
-    {
-      encontrado: true,
-      identificadorComprobado: identificadorEsperado,
-      identificadorEsperado,
-      resultado: "VERIFICADO",
-      observacion: `Equipo verificado mediante operación física: ${motivo}.`,
-      responsable,
-      motivo
-    },
-    client
-  );
+    const verification = await insertarVerificacionFisica(
+      dispositivo,
+      {
+        encontrado: true,
+        identificadorComprobado: identificadorEsperado,
+        identificadorEsperado,
+        resultado: "VERIFICADO",
+        observacion: "Equipo verificado manualmente luego de confirmar coincidencia física con registro ITAM.",
+        responsable,
+        motivo: "confirmación manual de datos",
+        tipoEvento: "VERIFICACION_MANUAL_EQUIPO",
+        descripcion: "Equipo verificado manualmente luego de confirmar coincidencia física con registro ITAM."
+      },
+      client
+    );
+    await client.query("COMMIT");
+    return toVerification(verification);
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 };
 
 export const obtenerVerificacionesFisicas = async (

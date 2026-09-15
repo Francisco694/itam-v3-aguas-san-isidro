@@ -7,6 +7,7 @@ import { sendCollection, sendItem } from "../../shared/responses";
 import { parseCodigoItam } from "./dispositivos.controller";
 import {
   obtenerVerificacionesFisicas,
+  registrarVerificacionManual,
   registrarVerificacionFisica
 } from "./physical-verifications.service";
 import type { RegistrarVerificacionFisicaInput } from "./physical-verifications.types";
@@ -41,6 +42,19 @@ export const listarVerificacionesFisicasController = asyncHandler(
     sendCollection(
       res,
       await obtenerVerificacionesFisicas(parseCodigoItam(req.params.codigo))
+    );
+  }
+);
+
+export const registrarVerificacionManualController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    sendItem(
+      res,
+      await registrarVerificacionManual(
+        parseCodigoItam(req.params.codigo),
+        authenticatedActorName(req)
+      ),
+      201
     );
   }
 );

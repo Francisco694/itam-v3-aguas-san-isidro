@@ -15,8 +15,9 @@ export class StatusBadge {
     if (code.includes('PRESTAMO')) return 'teal';
     if (code.includes('SERVICIO')) return 'warning';
     if (code.includes('RETENIDO') || code.includes('REVISION')) return 'purple';
-    if (code.includes('EXTRAVIAD')) return 'dark';
-    if (['DADA_BAJA', 'DADO_BAJA', 'FALSE', 'INACTIVO'].includes(code)) return 'danger';
+    if (code.includes('EXTRAVIAD')) return 'danger';
+    if (['DADA_BAJA', 'DADO_BAJA'].includes(code)) return 'neutral';
+    if (['FALSE', 'INACTIVO'].includes(code)) return 'danger';
     return 'neutral';
   });
 }

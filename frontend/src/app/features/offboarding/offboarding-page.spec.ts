@@ -15,6 +15,8 @@ const collaborator = (id: string, nombre: string) => ({
   cargo: 'Administrativo',
   departamento: { id: '1', nombre: 'TI' },
   localidad: 'Santiago',
+  localidadCodigo: 'Santiago',
+  localidadNombre: 'Santiago',
   activo: true,
   observaciones: null,
   creadoEn: '2026-08-28T10:00:00.000Z',

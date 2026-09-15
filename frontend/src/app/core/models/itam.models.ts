@@ -1,7 +1,7 @@
 export type TipoEntidad = 'DISPOSITIVO' | 'SIM';
 export interface EstadoResumen { id: string; codigo: string; nombre: string; }
 export interface DepartamentoResumen { id: string; nombre: string; }
-export interface ColaboradorResumen { id: string; rut: string; nombre: string; cargo: string | null; localidad?: string | null; departamento?: DepartamentoResumen | null; }
+export interface ColaboradorResumen { id: string; rut: string; nombre: string; cargo: string | null; localidad?: string | null; localidadCodigo?: string | null; localidadNombre?: string | null; departamento?: DepartamentoResumen | null; }
 export type InventoryCodeStrategy = 'REPEAT_PREFIX';
 export interface AssociatedDeviceType { id: string; nombre: string; activo: boolean; }
 export interface InventoryCodeFamily {
@@ -39,21 +39,25 @@ export interface DepartamentoInput { nombre: string; activo?: boolean; observaci
 
 export interface Colaborador {
   id: string; rut: string; nombre: string; cargo: string | null; departamento: DepartamentoResumen | null;
-  localidad: string | null; activo: boolean; observaciones: string | null; creadoEn: string; actualizadoEn: string;
+  localidad: string | null; localidadCodigo: string | null; localidadNombre: string | null;
+  activo: boolean; observaciones: string | null; creadoEn: string; actualizadoEn: string;
 }
 export interface ColaboradorFilters { nombre?: string; rut?: string; departamentoId?: number; activo?: boolean; }
 export interface ColaboradorInput { rut: string; nombre: string; cargo?: string | null; departamentoId?: number | null; localidad?: string | null; activo?: boolean; observaciones?: string | null; }
 
-export interface SimAsociadaResumen { id: string; codigoInventario: number; iccidCodigoFabrica: string | null; numeroAsociado: string | null; compania: string | null; estado: EstadoResumen | null; }
+export type EstadoLineaMovil = 'ACTIVA'|'BLOQUEADA'|'SUSPENDIDA'|'DADA_BAJA'|'PENDIENTE_REPOSICION';
+export type AccionLineaExtravio = 'CONSERVAR_BLOQUEAR'|'DAR_BAJA'|'PENDIENTE_CONFIRMAR'|'NO_APLICA';
+export interface LineaMovilResumen { id: string; numeroTelefonico: string; estado: EstadoLineaMovil; dispositivoId?: string | null; simId?: string | null; colaboradorId?: string | null; }
+export interface SimAsociadaResumen { id: string; codigoInventario: number; iccidCodigoFabrica: string | null; numeroAsociado: string | null; lineaMovil?: LineaMovilResumen | null; compania: string | null; estado: EstadoResumen | null; }
 export interface Dispositivo {
   id: string; codigoInventario: number; tipoDispositivo: string; marca: string | null; modelo: string | null;
   tipo: TipoDispositivo;
   numeroSerie: string | null; imei: string | null; localidad: string | null; ubicacionDetalle: string | null;
-  observaciones: string | null; fechaRegistro: string; creadoEn: string; actualizadoEn: string; estado: EstadoResumen;
+  observaciones: string | null; fechaRegistro: string; fechaIngresoInventario: string; creadoEn: string; actualizadoEn: string; estado: EstadoResumen;
   atributosEspecificos: Record<string, string | number | null>;
   valorComercial: number;
   facturaAdquisicion:{id:string;numeroFactura:string;fechaFactura:string|null;proveedor:string|null;montoTotal:number|null;observaciones:string|null;referenciaDocumental:string|null;documento:FacturaDocumento|null}|null;
-  colaborador: ColaboradorResumen | null; departamento: DepartamentoResumen | null; recibidoPor: ColaboradorResumen | null; simAsociada: SimAsociadaResumen | null; tipoCustodia: 'NONE'|'COLABORADOR'|'DEPARTAMENTO';
+  colaborador: ColaboradorResumen | null; departamento: DepartamentoResumen | null; recibidoPor: ColaboradorResumen | null; simAsociada: SimAsociadaResumen | null; lineaMovil: LineaMovilResumen | null; numeroTelefonico: string | null; labelPhone?: string | null; tipoCustodia: 'NONE'|'COLABORADOR'|'DEPARTAMENTO';
   ultimoResponsableConocido?:{tipo:'COLABORADOR'|'DEPARTAMENTO';nombre:string;rut:string|null;fechaMovimiento:string}|null;
   ultimoResultadoOffboarding: ResultadoOffboarding | null;
   verificacionFisica: VerificacionFisicaResumen | null;
@@ -87,9 +91,9 @@ export interface ReporteInventario {
 }
 export interface DispositivoInput { codigoInventario?: number; tipoDispositivoId: number; marca?: string | null; modelo?: string | null; numeroSerie?: string | null; imei?: string | null; valorComercial?: number; localidad?: string | null; ubicacionDetalle?: string | null; observaciones?: string | null; atributosEspecificos?: Record<string, string | number | null>; responsable?: string; }
 export interface ResponsableInput { responsable: string; observaciones?: string | null; }
-export interface AsignarDispositivoColaboradorInput extends ResponsableInput { colaboradorId: number; simCodigoInventario?: number; }
+export interface AsignarDispositivoColaboradorInput extends ResponsableInput { colaboradorId: number; simCodigoInventario?: number; numeroTelefonico?: string | null; }
 export interface AsignarDispositivoDepartamentoInput extends ResponsableInput { departamentoId: number; recibidoPorId: number; localidad?: string | null; ubicacionDetalle?: string | null; }
-export interface CambiarEstadoInput extends ResponsableInput { estadoId: number; recuperar?: boolean; motivoRecuperacion?: string; }
+export interface CambiarEstadoInput extends ResponsableInput { estadoId: number; recuperar?: boolean; motivoRecuperacion?: string; accionLineaExtravio?: AccionLineaExtravio; }
 export interface DevolverDispositivoInput extends ResponsableInput { condicion?: string | null; resultado?: 'DEVUELTO'|'DANADO'; }
 export interface ComprobanteDevolucionResumen {id:string;numeroComprobante:string;fecha:string;resultado:'DEVUELTO'|'DANADO';}
 export interface ResultadoDevolucion {dispositivo:Dispositivo;comprobante:ComprobanteDevolucionResumen;}
@@ -104,11 +108,13 @@ export interface FacturaAdquisicion{ id:string;numeroFactura:string;fechaFactura
 export interface SimDispositivoResumen { id: string; codigoInventario: number; tipoDispositivo: string; marca: string | null; modelo: string | null; estado: EstadoResumen | null; }
 export interface Sim {
   id: string; codigoInventario: number; iccidCodigoFabrica: string | null; numeroAsociado: string | null; compania: string | null;
+  lineaMovil?: LineaMovilResumen | null;
   estado: EstadoResumen; colaborador: ColaboradorResumen | null; dispositivo: SimDispositivoResumen | null;
   observaciones: string | null; fechaRegistro: string; creadoEn: string; actualizadoEn: string;
 }
 export interface SimInput { codigoInventario?: number; iccidCodigoFabrica: string; numeroAsociado?: string | null; compania?: string | null; observaciones?: string | null; responsable?: string; }
-export interface AsociarDispositivoInput extends ResponsableInput { dispositivoCodigoInventario: number; }
+export interface AsociarDispositivoInput extends ResponsableInput { dispositivoCodigoInventario: number; numeroTelefonico?: string | null; numeroAsociado?: string | null; reemplazarSimActual?: boolean; }
+export interface AsociarLineaDispositivoInput { numeroTelefonico: string; simId?: string | null; }
 export interface AsignarSimColaboradorInput extends ResponsableInput { colaboradorId: number; }
 
 export interface HistorialEvento {

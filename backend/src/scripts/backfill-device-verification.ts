@@ -1,4 +1,3 @@
-import type { PoolClient } from "pg";
 import { pool } from "../config/database";
 import { env } from "../config/env";
 import {
@@ -29,9 +28,6 @@ interface VerificationRow extends ExistingVerificationEvidence {
   dispositivo_id: string;
   fecha_verificacion: Date | string;
 }
-
-const identifier = (device: Pick<VerificationDeviceEvidence, "imei" | "numeroSerie">): string | null =>
-  device.imei ?? device.numeroSerie;
 
 const asEvent = (row: EventRow): VerificationEventEvidence => ({
   id: row.id,
@@ -103,7 +99,7 @@ const printSummary = (
     .slice(0, 5)
     .map(({ device, decision }) => ({ codigoItam: device.codigoInventario, resultado: decision.resultado, motivo: decision.motivo }));
   console.log(JSON.stringify({
-    mode: process.argv.includes("--apply") ? "APPLY" : "DRY_RUN",
+    mode: "DRY_RUN",
     database: env.database.name,
     ...summary,
     muestras: {
@@ -115,46 +111,6 @@ const printSummary = (
   }, null, 2));
 };
 
-const applyDecisions = async (
-  client: PoolClient,
-  devices: VerificationDeviceEvidence[],
-  decisions: ReturnType<typeof calcularEstadoVerificacion>[]
-): Promise<number> => {
-  let writes = 0;
-  for (let index = 0; index < devices.length; index += 1) {
-    const device = devices[index]!;
-    const decision = decisions[index]!;
-    if (decision.resultado !== "VERIFICADO" || !decision.eventoEvidencia || !decision.eventoEvidencia.usuarioEjecutorId) continue;
-    const actorId = decision.eventoEvidencia.usuarioEjecutorId;
-    const expected = identifier(device);
-    const observation = `Backfill de verificación: ${decision.motivo}`;
-    if (decision.verificacionExistenteId) {
-      await client.query(
-        `UPDATE itam.verificaciones_fisicas_dispositivo
-            SET encontrado=TRUE,
-                identificador_comprobado=$2,
-                identificador_esperado=$2,
-                resultado='VERIFICADO',
-                observacion=$3,
-                usuario_id=$4,
-                fecha_verificacion=$5
-          WHERE id=$1 AND resultado='PENDIENTE'`,
-        [decision.verificacionExistenteId, expected, observation, actorId, decision.eventoEvidencia.fechaEvento]
-      );
-    } else {
-      await client.query(
-        `INSERT INTO itam.verificaciones_fisicas_dispositivo
-          (dispositivo_id,encontrado,identificador_comprobado,identificador_esperado,
-           resultado,observacion,usuario_id,fecha_verificacion)
-         VALUES($1,TRUE,$2,$2,'VERIFICADO',$3,$4,$5)`,
-        [device.id, expected, observation, actorId, decision.eventoEvidencia.fechaEvento]
-      );
-    }
-    writes += 1;
-  }
-  return writes;
-};
-
 const main = async (): Promise<void> => {
   const current = await pool.query<{ database: string }>("SELECT current_database() AS database");
   if (current.rows[0]?.database !== "itam_dev" || env.database.name !== "itam_dev") {
@@ -163,19 +119,6 @@ const main = async (): Promise<void> => {
   const devices = await loadDevices();
   const decisions = devices.map(calcularEstadoVerificacion);
   printSummary(devices, decisions);
-  if (!process.argv.includes("--apply")) return;
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-    const writes = await applyDecisions(client, devices, decisions);
-    await client.query("COMMIT");
-    console.log(JSON.stringify({ mode: "APPLY_COMMITTED", writesPerformed: writes }, null, 2));
-  } catch (error) {
-    await client.query("ROLLBACK");
-    throw error;
-  } finally {
-    client.release();
-  }
 };
 
 void main().catch((error) => {

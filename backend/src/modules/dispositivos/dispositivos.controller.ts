@@ -15,6 +15,7 @@ import {
 } from "../../shared/validation";
 import {
   actualizarDispositivoExistente,
+  asociarLineaADispositivo,
   asignarAColaborador,
   asignarADepartamento,
   cambiarEstadoDispositivoExistente,
@@ -30,6 +31,7 @@ import {
 } from "./dispositivos.service";
 export {
   listarVerificacionesFisicasController,
+  registrarVerificacionManualController,
   registrarVerificacionFisicaController
 } from "./physical-verifications.controller";
 import type {
@@ -321,6 +323,11 @@ export const asignarColaboradorController = asyncHandler(
           body.simCodigoInventario,
           "simCodigoInventario"
         ) ?? undefined,
+      numeroTelefonico: parseOptionalString(
+        body.numeroTelefonico,
+        "numeroTelefonico",
+        30
+      ),
       responsable: authenticatedActorName(req),
       observaciones: parseOptionalString(
         body.observaciones,
@@ -331,6 +338,44 @@ export const asignarColaboradorController = asyncHandler(
     const dispositivo = await asignarAColaborador(codigo, input);
 
     sendItem(res, dispositivo);
+  }
+);
+
+export const asociarLineaController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    console.log("[asociar-linea] entra endpoint");
+    const codigo = parsePositiveInteger(req.params.codigo, "codigo");
+    const body = parseBodyObject(req.body);
+    console.log("[asociar-linea] codigo recibido", codigo);
+    console.log("[asociar-linea] body recibido", {
+      numeroTelefonico: body.numeroTelefonico,
+      numero_telefonico: body.numero_telefonico,
+      simId: body.simId ?? body.sim_id ?? null
+    });
+    const simId = body.simId ?? body.sim_id ?? null;
+    if (simId !== null && (typeof simId !== "string" || !simId.trim())) {
+      throw new ValidationError("SIM seleccionada no válida.");
+    }
+    const numeroTelefonico = parseOptionalString(
+      body.numeroTelefonico ?? body.numero_telefonico,
+      "numeroTelefonico",
+      30
+    );
+    if (!numeroTelefonico?.trim()) throw new ValidationError("Ingrese 9 dígitos o formato 56XXXXXXXXX.");
+    const lineaMovil = await asociarLineaADispositivo(codigo, {
+      numeroTelefonico,
+      simId,
+      responsable: authenticatedActorName(req),
+      observaciones: parseOptionalString(body.observaciones, "observaciones")
+    });
+    sendItem(res, {
+      id: lineaMovil.id,
+      numeroTelefonico: lineaMovil.numero_telefonico,
+      estado: lineaMovil.estado,
+      dispositivoId: lineaMovil.dispositivo_id,
+      simId: lineaMovil.sim_id,
+      colaboradorId: lineaMovil.colaborador_id
+    });
   }
 );
 
@@ -422,6 +467,13 @@ const motivosBaja = [
   "OBSOLESCENCIA","DANO_FISICO","SIN_REPUESTOS","OTRO"
 ] as const satisfies readonly MotivoBaja[];
 
+const accionesLineaExtravio = [
+  "CONSERVAR_BLOQUEAR",
+  "DAR_BAJA",
+  "PENDIENTE_CONFIRMAR",
+  "NO_APLICA"
+] as const;
+
 export const darBajaDispositivoController = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
     const codigo = parsePositiveInteger(req.params.codigo, "codigo");
@@ -452,7 +504,12 @@ export const cambiarEstadoDispositivoController = asyncHandler(
         body.motivoRecuperacion,
         "motivoRecuperacion",
         500
-      ) ?? undefined
+      ) ?? undefined,
+      accionLineaExtravio: parseOptionalEnum(
+        body.accionLineaExtravio,
+        "accionLineaExtravio",
+        accionesLineaExtravio
+      )
     };
 
     const dispositivo = await cambiarEstadoDispositivoExistente(

@@ -2,7 +2,7 @@ import { DatePipe } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { LucideCamera, LucideDownload, LucidePrinter, LucidePlus, LucideScanBarcode, LucideSearch, LucideSlidersHorizontal, LucideTriangleAlert, LucideX } from '@lucide/angular';
+import { LucideCamera, LucideDownload, LucideEye, LucidePencil, LucidePrinter, LucidePlus, LucideScanBarcode, LucideSearch, LucideSlidersHorizontal, LucideTriangleAlert, LucideX } from '@lucide/angular';
 import QRCode from 'qrcode';
 import { catchError, forkJoin, of } from 'rxjs';
 import { Departamento, Dispositivo, Estado, ResultadoVerificacionFisica, TipoDispositivo } from '../../core/models/itam.models';
@@ -13,6 +13,7 @@ import { SimService } from '../../core/services/sim.service';
 import { ToastService } from '../../core/services/toast.service';
 import { TiposDispositivoService } from '../../core/services/tipos-dispositivo.service';
 import { PageHeader } from '../../shared/components/page-header/page-header';
+import { assetLabelPhone, assetLabelResponsible } from '../../shared/components/asset-label/asset-label';
 import { QrScanner } from '../../shared/components/qr-scanner/qr-scanner';
 import { StatusBadge } from '../../shared/components/status-badge/status-badge';
 import { ViewState } from '../../shared/components/view-state/view-state';
@@ -90,6 +91,8 @@ const printableLabel = (device: Dispositivo, qrDataUrl: string, mode: 'A4' | 'TH
           ? `<b>${escapeHtml(`${device.marca ?? ''} ${device.modelo ?? ''}`.trim())}</b>`
           : ''}
         <small>${escapeHtml(batchLabelIdentifier(device))}</small>
+        <small>Resp: ${escapeHtml(assetLabelResponsible(device))}</small>
+        ${assetLabelPhone(device) ? `<small>Fono: ${escapeHtml(assetLabelPhone(device))}</small>` : ''}
       </div>
     </div>
   </article>`;
@@ -116,7 +119,7 @@ const printableDocument = (
     .label-body, .thermal-label__body { align-items: center; display: flex; gap: 2mm; min-height: 0; }
     .label-qr { flex: 0 0 20mm; height: 20mm; width: 20mm; }
     .label-data, .thermal-label__info { display: flex; flex: 1; flex-direction: column; min-width: 0; }
-    .label-data small, .label-data span, .label-data b { font-size: 7pt; line-height: 1.25; overflow-wrap: anywhere; }
+    .label-data small, .label-data span, .label-data b { font-size: 6.5pt; line-height: 1.16; overflow-wrap: anywhere; }
     .label-data strong { font-family: Consolas, monospace; font-size: 12pt; line-height: 1.2; margin: .7mm 0; }
     .thermal-label { break-after: page; display: grid; grid-template-columns: 18mm 1fr; column-gap: 2mm; height: 30mm; page-break-after: always; padding: 2mm; width: 50mm; }
     .thermal-label header { grid-column: 1 / -1; font-size: 7pt; margin-bottom: 0; }
@@ -135,7 +138,7 @@ const printableDocument = (
 
 @Component({
   selector: 'app-dispositivos-list',
-  imports: [DatePipe, FormsModule, RouterLink, PageHeader, QrScanner, StatusBadge, ViewState, LucideCamera, LucideDownload, LucidePrinter, LucidePlus, LucideScanBarcode, LucideSearch, LucideSlidersHorizontal, LucideTriangleAlert, LucideX],
+  imports: [DatePipe, FormsModule, RouterLink, PageHeader, QrScanner, StatusBadge, ViewState, LucideCamera, LucideDownload, LucideEye, LucidePencil, LucidePrinter, LucidePlus, LucideScanBarcode, LucideSearch, LucideSlidersHorizontal, LucideTriangleAlert, LucideX],
   template: `
     <app-page-header title="Inventario de Equipos" subtitle="Control físico, custodias y condición operativa de los activos.">
       <button class="btn btn--navy mobile-qr-action" type="button" (click)="scannerOpen.set(true)"><svg lucideCamera></svg> Escanear QR</button>
@@ -158,7 +161,7 @@ const printableDocument = (
       />
     }
     <nav class="state-shortcuts" aria-label="Filtros rápidos por estado">
-      @for(shortcut of shortcuts;track shortcut.code){<button type="button" [class.active]="filters.estado===shortcut.code" (click)="selectState(shortcut.code)"><span>{{shortcut.label}}</span><strong>{{stateCount(shortcut.code)}}</strong></button>}
+      @for(shortcut of shortcuts;track shortcut.code){<button type="button" [class.active]="filters.estado===shortcut.code" (click)="selectState(shortcut.code)">@if(shortcut.color){<i class="state-dot" [style.background]="shortcut.color" aria-hidden="true"></i>}<span>{{shortcut.label}}</span><strong>{{stateCount(shortcut.code)}}</strong></button>}
     </nav>
     <button
       class="advanced-filter-toggle"
@@ -203,7 +206,7 @@ const printableDocument = (
             } @else {
               <span class="cell-primary">{{ custody(item) }}</span><span class="cell-secondary">{{ item.colaborador?.rut ? rut(item.colaborador!.rut) : item.departamento?.nombre || 'Sin responsable actual' }}</span>
             }
-          </td><td><span class="verification-badge" [class.verification-badge--PENDIENTE]="(item.verificacionFisica?.resultado || 'PENDIENTE') === 'PENDIENTE'" [class.verification-badge--VERIFICADO]="item.verificacionFisica?.resultado === 'VERIFICADO'" [class.verification-badge--REVISAR]="item.verificacionFisica?.resultado === 'REVISAR'">{{ verification(item.verificacionFisica?.resultado) }}</span></td><td>{{ item.localidad || '—' }}<span class="cell-secondary">{{ item.ubicacionDetalle || '' }}</span></td><td><div class="actions"><a class="btn btn--secondary btn--small" [routerLink]="[item.codigoInventario]">Gestionar ficha</a><a class="btn btn--ghost btn--small" [routerLink]="[item.codigoInventario,'editar']">Editar</a></div></td></tr>}
+          </td><td><span class="verification-badge" [class.verification-badge--PENDIENTE]="(item.verificacionFisica?.resultado || 'PENDIENTE') === 'PENDIENTE'" [class.verification-badge--VERIFICADO]="item.verificacionFisica?.resultado === 'VERIFICADO'" [class.verification-badge--REVISAR]="item.verificacionFisica?.resultado === 'REVISAR'">{{ verification(item.verificacionFisica?.resultado) }}</span></td><td class="location-cell"><span class="cell-primary">{{ item.localidad || 'Sin localidad' }}</span><span class="cell-secondary">{{ item.ubicacionDetalle || 'Sin detalle de ubicación' }}</span></td><td><div class="actions"><a class="btn btn--secondary btn--small table-icon-action" [routerLink]="[item.codigoInventario]" title="Gestionar ficha" [attr.aria-label]="'Gestionar ficha de ITAM ' + item.codigoInventario"><svg lucideEye aria-hidden="true"></svg></a><a class="btn btn--secondary btn--small table-icon-action" [routerLink]="[item.codigoInventario,'editar']" title="Editar" [attr.aria-label]="'Editar ITAM ' + item.codigoInventario"><svg lucidePencil aria-hidden="true"></svg></a></div></td></tr>}
         </tbody></table></div>
         <div class="mobile-record-list inventory-mobile-list">
           @for(item of items(); track item.id) {
@@ -235,7 +238,7 @@ const printableDocument = (
       <div class="print-options-overlay" role="presentation" (click)="printOptionsOpen.set(false)">
         <section class="print-options-dialog" role="dialog" aria-modal="true" aria-labelledby="print-options-title" (click)="$event.stopPropagation()">
           <header><div><span>IMPRESIÓN MÚLTIPLE</span><h2 id="print-options-title">Imprimir {{ selectedCount() }} etiquetas</h2></div><button type="button" aria-label="Cerrar" (click)="printOptionsOpen.set(false)"><svg lucideX></svg></button></header>
-          <p>Elija el formato de salida. Las etiquetas no incluyen nombres, RUT ni valores comerciales.</p>
+          <p>Elija el formato de salida. Las etiquetas incluyen el responsable actual y el teléfono asociado cuando existe; omiten RUT y valores comerciales.</p>
           <div class="print-choice-grid">
             <button type="button" (click)="printLabels('A4')"><svg lucidePrinter></svg><strong>Hoja A4</strong><span>Varias etiquetas organizadas en grilla por hoja.</span></button>
             <button type="button" (click)="printLabels('THERMAL')"><svg lucidePrinter></svg><strong>Impresora de etiquetas</strong><span>Una etiqueta por dispositivo para impresora térmica Zebra.</span></button>
@@ -260,7 +263,7 @@ export class DispositivosList implements OnInit {
   protected readonly departments = signal<Departamento[]>([]);
   protected readonly types = signal<TipoDispositivo[]>([]);
   protected readonly allItems = signal<Dispositivo[]>([]);
-  protected readonly shortcuts=[{code:'',label:'Todos'},{code:'DISPONIBLE',label:'Disponibles'},{code:'ASIGNADO',label:'Asignados'},{code:'SERVICIO_TECNICO',label:'Servicio Técnico'},{code:'EXTRAVIADO',label:'Extraviados'},{code:'DADO_BAJA',label:'Dados de Baja'}];
+  protected readonly shortcuts=[{code:'',label:'Todos',color:''},{code:'DISPONIBLE',label:'Disponibles',color:'#16a34a'},{code:'ASIGNADO',label:'Asignados',color:'#0879bd'},{code:'SERVICIO_TECNICO',label:'Servicio Técnico',color:'#f59e0b'},{code:'EXTRAVIADO',label:'Extraviados',color:'#ef4444'},{code:'DADO_BAJA',label:'Dados de Baja',color:'#94a3b8'}];
   protected readonly loading = signal(true);
   protected readonly quickLoading = signal(false);
   protected readonly scannerOpen = signal(false);

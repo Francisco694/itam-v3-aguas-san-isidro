@@ -31,6 +31,7 @@ import type {
   PendienteOffboarding
 } from "./colaboradores.types";
 import { esRutValido, formatearRut, normalizarRut } from "./rut";
+import { resolverNombreLocalidad } from "./localidades.aliases";
 
 const mapColaborador = (row: ColaboradorRow): Colaborador => ({
   id: row.id,
@@ -45,6 +46,8 @@ const mapColaborador = (row: ColaboradorRow): Colaborador => ({
         }
       : null,
   localidad: row.localidad,
+  localidadCodigo: row.localidad,
+  localidadNombre: resolverNombreLocalidad(row.localidad),
   activo: row.activo,
   observaciones: row.observaciones,
   creadoEn: toIsoDateTime(row.creado_en),

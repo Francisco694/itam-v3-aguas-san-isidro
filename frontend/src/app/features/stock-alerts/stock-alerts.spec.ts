@@ -54,6 +54,7 @@ describe('Alertas de stock', () => {
     const minimum = fixture.nativeElement.querySelector('input[type=number]') as HTMLInputElement;
     minimum.value = '3'; minimum.dispatchEvent(new Event('input')); fixture.detectChanges();
     fixture.nativeElement.querySelector('.stock-row button').click();
+    fixture.detectChanges();
     expect(actualizar).toHaveBeenCalledWith(1, { minimoDisponible: 3, alertaActiva: true });
     expect(fixture.nativeElement.textContent).toContain('se guardó correctamente');
   });

@@ -24,6 +24,8 @@ export interface Colaborador {
   cargo: string | null;
   departamento: DepartamentoResumen | null;
   localidad: string | null;
+  localidadCodigo?: string | null;
+  localidadNombre?: string | null;
   activo: boolean;
   observaciones: string | null;
   creadoEn: string;

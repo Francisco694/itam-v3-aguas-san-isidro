@@ -41,6 +41,8 @@ export interface VerificacionFisicaInsert {
   observacion: string | null;
   responsable: string;
   motivo?: string | null;
+  tipoEvento?: "VERIFICACION_FISICA" | "VERIFICACION_MANUAL_EQUIPO";
+  descripcion?: string | null;
 }
 
 export interface VerificacionFisicaRow {

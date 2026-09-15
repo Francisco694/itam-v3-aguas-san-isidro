@@ -6,24 +6,31 @@ import { DispositivoDetail } from './dispositivo-detail';
 import { AuthService } from '../../core/services/auth.service';
 import { DispositivosService } from '../../core/services/dispositivos.service';
 import { SimService } from '../../core/services/sim.service';
+import { ConfirmationService } from '../../core/services/confirmation.service';
 import { AssetLabel } from '../../shared/components/asset-label/asset-label';
 
 describe('Registrar entrega: formulario', () => {
   let fixture: any;
   let component: any;
   let api: any;
+  let simApi: any;
+  let confirmation: any;
   const person = { id: '7', nombre: 'Marta Pérez', rut: '12.345.678-5', activo: true, cargo: 'Analista', departamento: null };
   const sim = { id: '8', codigoInventario: 555, numeroAsociado: '912345678', compania: 'Operador', estado: { codigo: 'DISPONIBLE' }, dispositivo: null, colaborador: null };
   beforeEach(async () => {
     vi.spyOn(AssetLabel.prototype as any, 'renderQr').mockResolvedValue(undefined);
-    api = { asignarColaborador: vi.fn(() => NEVER) };
+    api = { asignarColaborador: vi.fn(() => NEVER), cambiarEstado: vi.fn(() => of({})), verificarManual: vi.fn(() => of({ resultado: 'VERIFICADO' })) };
+    simApi = { listar: vi.fn(() => of([sim, { ...sim, id: '9', codigoInventario: 556, colaborador: person }])), asociarDispositivo: vi.fn(() => of(sim)) };
+    confirmation = { confirm: vi.fn(async () => true) };
     await TestBed.configureTestingModule({ imports: [DispositivoDetail], providers: [provideHttpClient(), provideRouter([]),
       { provide: AuthService, useValue: { user: () => ({ nombre: 'Responsable TI' }) } },
       { provide: DispositivosService, useValue: api },
-      { provide: SimService, useValue: { listar: () => of([sim, { ...sim, id: '9', codigoInventario: 556, colaborador: person }]) } }
+      { provide: SimService, useValue: simApi },
+      { provide: ConfirmationService, useValue: confirmation }
     ] }).compileComponents();
     fixture = TestBed.createComponent(DispositivoDetail);
     component = fixture.componentInstance;
+    component.codigo = 1445;
     component.load = () => {};
     component.item.set({ id: '1', codigoInventario: 1445, tipo: { nombre: 'Smartphone', configuracionFormulario: { camposEspecificos: [] } }, estado: { codigo: 'DISPONIBLE', nombre: 'Disponible' }, tipoCustodia: 'NONE', simAsociada: null, atributosEspecificos: {}, creadoEn: '2026-01-01', valorComercial: 0 });
     component.collaborators.set([person]);
@@ -70,5 +77,30 @@ describe('Registrar entrega: formulario', () => {
     expect(api.asignarColaborador.mock.calls[0][1].simCodigoInventario).toBeUndefined();
     component.open('assign-person');
     expect(component.selectedCollaborator()).toBeNull(); expect(component.selectedSim()).toBeNull();
+  });
+  it('confirma una verificación manual pendiente y evita mostrarla después', async () => {
+    component.item.update((device: any) => ({ ...device, verificacionFisica: { resultado: 'PENDIENTE' } }));
+    await component.verifyManually();
+    expect(confirmation.confirm).toHaveBeenCalledOnce();
+    expect(api.verificarManual).toHaveBeenCalledWith(1445);
+  });
+  it('asocia una SIM disponible desde el diálogo independiente', () => {
+    component.openSimAssociation(); fixture.detectChanges();
+    component.selectAssociationSimByCode('555');
+    component.associateSim();
+    expect(simApi.asociarDispositivo).toHaveBeenCalledWith(555, expect.objectContaining({ dispositivoCodigoInventario: 1445 }));
+  });
+  it('exige decidir qué ocurre con la línea al reportar un Smartphone con SIM perdido', async () => {
+    component.item.update((device: any) => ({ ...device, simAsociada: sim }));
+    component.states.set([{ id: '80', codigo: 'EXTRAVIADO', nombre: 'Extraviado', esTerminal: true, activo: true }]);
+    component.openState('EXTRAVIADO'); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('#lost-line-action')).not.toBeNull();
+    await component.execute();
+    expect(api.cambiarEstado).not.toHaveBeenCalled();
+    component.actionForm.controls.accionLineaExtravio.setValue('CONSERVAR_BLOQUEAR');
+    await component.execute();
+    expect(api.cambiarEstado).toHaveBeenCalledWith(1445, expect.objectContaining({
+      accionLineaExtravio: 'CONSERVAR_BLOQUEAR'
+    }));
   });
 });

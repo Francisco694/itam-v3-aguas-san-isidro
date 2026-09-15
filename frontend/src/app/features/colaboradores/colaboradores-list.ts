@@ -69,7 +69,7 @@ import { errorMessage } from '../../shared/utils/error-message';
             <tbody>
               @for (item of items(); track item.id) {
                 <tr>
-                  <td><a class="cell-primary link" [routerLink]="[item.id]">{{ item.nombre }}</a><span class="cell-secondary">{{ item.localidad || 'Sin localidad' }}</span></td>
+                  <td><a class="cell-primary link" [routerLink]="[item.id]">{{ item.nombre }}</a><span class="cell-secondary">{{ item.localidadNombre || item.localidadCodigo || 'Sin localidad' }}</span></td>
                   <td>{{ item.rut }}</td>
                   <td>{{ item.cargo || 'Sin cargo' }}</td>
                   <td>{{ item.departamento?.nombre || 'Sin departamento' }}</td>
@@ -90,7 +90,7 @@ import { errorMessage } from '../../shared/utils/error-message';
               <dl class="mobile-record-card__details">
                 <div><dt>Cargo</dt><dd>{{ item.cargo || 'Sin cargo' }}</dd></div>
                 <div><dt>Departamento</dt><dd>{{ item.departamento?.nombre || 'Sin departamento' }}</dd></div>
-                <div><dt>Localidad</dt><dd>{{ item.localidad || 'Sin localidad' }}</dd></div>
+                <div><dt>Localidad</dt><dd>{{ item.localidadNombre || item.localidadCodigo || 'Sin localidad' }}</dd></div>
               </dl>
               <footer class="mobile-record-card__actions">
                 <a class="btn btn--primary" [routerLink]="[item.id]">Ver</a>

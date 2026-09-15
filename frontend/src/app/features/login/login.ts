@@ -2,7 +2,6 @@ import { Component, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import {
-  LucideDroplet,
   LucideEye,
   LucideEyeOff,
   LucideKeyRound,
@@ -16,7 +15,6 @@ import { errorMessage } from '../../shared/utils/error-message';
   selector: 'app-login',
   imports: [
     ReactiveFormsModule,
-    LucideDroplet,
     LucideEye,
     LucideEyeOff,
     LucideKeyRound,
@@ -27,9 +25,9 @@ import { errorMessage } from '../../shared/utils/error-message';
     <main>
       <section class="login-card">
         <header>
-          <span><svg lucideDroplet></svg></span>
+          <span><img src="/assets/brand/itam-logo.png" alt="" /></span>
           <h1>Aguas San Isidro</h1>
-          <p>SISTEMA ITAM v3.0</p>
+          <p>SISTEMA ITAM</p>
         </header>
 
         <form [formGroup]="form" (ngSubmit)="submit()">
@@ -135,12 +133,16 @@ import { errorMessage } from '../../shared/utils/error-message';
             <svg lucideLogIn></svg>
             {{ loading() ? 'Ingresando...' : 'Ingresar' }}
           </button>
+          <small>Uso exclusivo para personal autorizado de Aguas San Isidro.</small>
         </form>
+        
+            
       </section>
+      
     </main>
   `,
   styles: [`
-    :host{display:block;min-height:100vh;min-height:100dvh}main{align-items:center;background:linear-gradient(145deg,var(--navy),#0077b6);display:flex;justify-content:center;min-height:100vh;min-height:100dvh;padding:1.5rem}.login-card{background:#fff;border-radius:1.25rem;box-shadow:0 24px 60px rgba(3,4,94,.3);max-width:27rem;overflow:hidden;width:100%}.login-card header{background:var(--navy);color:#fff;padding:2rem;text-align:center}.login-card header span{align-items:center;background:var(--cyan);border-radius:1rem;display:inline-flex;height:3rem;justify-content:center;width:3rem}.login-card header svg{color:var(--navy)}h1{font-size:1.25rem;margin:.8rem 0 .2rem}header p{color:#90e0ef;font-size:.7rem;letter-spacing:.14em;margin:0}form{display:grid;gap:1rem;padding:2rem}.access-method{border:0;margin:0;padding:0}.access-method legend{font-size:.82rem;font-weight:700;margin-bottom:.45rem}.method-tabs{background:var(--gray-100);border-radius:.75rem;display:grid;gap:.25rem;grid-template-columns:1fr 1fr;padding:.25rem}.method-tabs button{align-items:center;background:transparent;border:0;border-radius:.55rem;color:var(--slate-500);cursor:pointer;display:flex;font-weight:700;gap:.4rem;justify-content:center;min-height:2.75rem;padding:.65rem}.method-tabs button.active{background:#fff;box-shadow:0 1px 4px rgba(15,23,42,.14);color:var(--navy)}.method-tabs svg{height:1rem;width:1rem}.password-field{position:relative}.password-field input{padding-right:3rem;width:100%}.password-toggle{align-items:center;background:transparent;border:0;color:var(--slate-500);cursor:pointer;display:inline-flex;height:2.75rem;justify-content:center;padding:0;position:absolute;right:.2rem;top:50%;transform:translateY(-50%);width:2.75rem}.password-toggle:hover{color:var(--navy)}.password-toggle:focus-visible{border-radius:.5rem;outline:2px solid var(--cyan);outline-offset:1px}.password-toggle svg{height:1.2rem;width:1.2rem}.field small{color:var(--slate-500);display:block;font-size:.75rem;margin-top:.4rem}.submit-button{justify-content:center;width:100%}@media(max-width:480px){main{align-items:stretch;padding:.75rem}.login-card{align-self:center;border-radius:1rem}.login-card header{padding:1.5rem 1rem}form{padding:1.25rem 1rem}.method-tabs button{font-size:.78rem;padding-inline:.4rem}}
+    :host{display:block;min-height:100vh;min-height:100dvh}main{align-items:center;background:linear-gradient(145deg,var(--navy),#0077b6);display:flex;justify-content:center;min-height:100vh;min-height:100dvh;padding:1.5rem}.login-card{background:#fff;border-radius:1.25rem;box-shadow:0 24px 60px rgba(3,4,94,.3);max-width:27rem;overflow:hidden;width:100%}.login-card header{background:var(--navy);color:#fff;padding:2rem;text-align:center}.login-card header span{align-items:center;background:var(--cyan);border-radius:1rem;display:inline-flex;height:3rem;justify-content:center;width:3rem}    .login-card header img{height:100%;object-fit:cover;width:100%}.login-card header svg{color:var(--navy)}h1{font-size:1.25rem;margin:.8rem 0 .2rem}header p{color:#90e0ef;font-size:.7rem;letter-spacing:.14em;margin:0}form{display:grid;gap:1rem;padding:2rem}.access-method{border:0;margin:0;padding:0}.access-method legend{font-size:.82rem;font-weight:700;margin-bottom:.45rem}.method-tabs{background:var(--gray-100);border-radius:.75rem;display:grid;gap:.25rem;grid-template-columns:1fr 1fr;padding:.25rem}.method-tabs button{align-items:center;background:transparent;border:0;border-radius:.55rem;color:var(--slate-500);cursor:pointer;display:flex;font-weight:700;gap:.4rem;justify-content:center;min-height:2.75rem;padding:.65rem}.method-tabs button.active{background:#fff;box-shadow:0 1px 4px rgba(15,23,42,.14);color:var(--navy)}.method-tabs svg{height:1rem;width:1rem}.password-field{position:relative}.password-field input{padding-right:3rem;width:100%}.password-toggle{align-items:center;background:transparent;border:0;color:var(--slate-500);cursor:pointer;display:inline-flex;height:2.75rem;justify-content:center;padding:0;position:absolute;right:.2rem;top:50%;transform:translateY(-50%);width:2.75rem}.password-toggle:hover{color:var(--navy)}.password-toggle:focus-visible{border-radius:.5rem;outline:2px solid var(--cyan);outline-offset:1px}.password-toggle svg{height:1.2rem;width:1.2rem}.field small{color:var(--slate-500);display:block;font-size:.75rem;margin-top:.4rem}.submit-button{justify-content:center;width:100%}@media(max-width:480px){main{align-items:stretch;padding:.75rem}.login-card{align-self:center;border-radius:1rem}.login-card header{padding:1.5rem 1rem}form{padding:1.25rem 1rem}.method-tabs button{font-size:.78rem;padding-inline:.4rem}}
   `]
 })
 export class Login {

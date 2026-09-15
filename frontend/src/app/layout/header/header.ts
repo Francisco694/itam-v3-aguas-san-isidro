@@ -1,7 +1,6 @@
 import { Component, inject, input, output } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import {
-  LucideDroplet,
   LucideKeyRound,
   LucideLogOut,
   LucideMenu,
@@ -15,7 +14,6 @@ import { AuthService } from '../../core/services/auth.service';
   selector: 'app-header',
   imports: [
     RouterLink,
-    LucideDroplet,
     LucideKeyRound,
     LucideLogOut,
     LucideMenu,
@@ -37,7 +35,7 @@ import { AuthService } from '../../core/services/auth.service';
           <svg lucideMenu></svg>
         </button>
         <a class="brand" routerLink="/dashboard" aria-label="Inicio ITAM">
-          <span class="brand__icon"><svg lucideDroplet></svg></span>
+          <span class="brand__icon"><img src="/assets/brand/itam-logo.png" alt="" /></span>
           <span>
             <strong>Aguas San Isidro</strong>
             <small>SISTEMA ITAM</small>

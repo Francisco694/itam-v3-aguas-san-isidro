@@ -62,7 +62,7 @@ export const listarColaboradores = async (
     `
       ${colaboradorSelect}
       ${where.length > 0 ? `WHERE ${where.join(" AND ")}` : ""}
-      ORDER BY c.nombre ASC
+      ORDER BY c.activo DESC, c.nombre ASC
     `,
     values
   );

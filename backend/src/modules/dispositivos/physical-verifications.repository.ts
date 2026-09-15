@@ -12,7 +12,8 @@ type DbExecutor = Pool | PoolClient;
 
 export const obtenerDispositivoParaVerificacion = async (
   codigo: number,
-  client?: PoolClient
+  client?: PoolClient,
+  bloquear = false
 ): Promise<DispositivoVerificacionRow | null> => {
   const result = await (client ?? pool).query<DispositivoVerificacionRow>(
     `SELECT d.id, d.estado_id, e.codigo AS estado_codigo,
@@ -21,7 +22,8 @@ export const obtenerDispositivoParaVerificacion = async (
        FROM itam.dispositivos d
        JOIN itam.estados e ON e.id = d.estado_id
        JOIN itam.tipos_dispositivo tipo ON tipo.id = d.tipo_dispositivo_id
-      WHERE d.codigo_inventario = $1`,
+      WHERE d.codigo_inventario = $1
+      ${bloquear ? "FOR UPDATE OF d" : ""}`,
     [codigo]
   );
   return result.rows[0] ?? null;
@@ -59,7 +61,7 @@ export const insertarVerificacionFisica = async (
          (tipo_entidad, dispositivo_id, tipo_evento, estado_anterior_id,
           estado_nuevo_id, responsable, observaciones, detalle,
           usuario_ejecutor_id)
-       VALUES ('DISPOSITIVO',$1,'VERIFICACION_FISICA',$2,$2,$3,$4,$5::jsonb,$6)`,
+       VALUES ('DISPOSITIVO',$1,$7,$2,$2,$3,$4,$5::jsonb,$6)`,
       [
         dispositivo.id,
         dispositivo.estado_id,
@@ -70,9 +72,11 @@ export const insertarVerificacionFisica = async (
           identificadorComprobado: input.identificadorComprobado,
           identificadorEsperado: input.identificadorEsperado,
           resultado: input.resultado,
-          motivo: input.motivo ?? null
+          motivo: input.motivo ?? null,
+          descripcion: input.descripcion ?? null
         }),
-        currentUserId()
+        currentUserId(),
+        input.tipoEvento ?? "VERIFICACION_FISICA"
       ]
     );
     if (ownsTransaction) await executor.query("COMMIT");

@@ -36,6 +36,8 @@ const process = (
     cargo: null,
     departamento: null,
     localidad: null,
+    localidadCodigo: null,
+    localidadNombre: null,
     activo: true,
     observaciones: null,
     creadoEn: '2026-08-29T10:00:00.000Z',

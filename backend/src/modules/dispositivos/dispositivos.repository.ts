@@ -54,6 +54,8 @@ const dispositivoSelect = `
     factura.documento_mime_type AS factura_documento_mime_type,
     factura.documento_tamano_bytes AS factura_documento_tamano_bytes,
     d.fecha_registro,
+    COALESCE(ingreso_inventario.fecha_evento, d.creado_en)
+      AS fecha_ingreso_inventario,
     d.creado_en,
     d.actualizado_en,
     e.id AS estado_id,
@@ -77,6 +79,13 @@ const dispositivoSelect = `
     s.codigo_inventario AS sim_codigo_inventario,
     s.iccid_codigo_fabrica,
     s.numero_asociado,
+    COALESCE(linea_directa.id, linea_sim.id) AS linea_movil_id,
+    COALESCE(linea_directa.numero_telefonico, linea_sim.numero_telefonico)
+      AS linea_numero_telefonico,
+    COALESCE(linea_directa.estado, linea_sim.estado) AS linea_estado,
+    linea_sim.id AS sim_linea_movil_id,
+    linea_sim.numero_telefonico AS sim_linea_numero_telefonico,
+    linea_sim.estado AS sim_linea_estado,
     s.compania,
     sim_estado.id AS sim_estado_id,
     sim_estado.codigo AS sim_estado_codigo,
@@ -113,8 +122,38 @@ const dispositivoSelect = `
     ON s.dispositivo_id = d.id
   LEFT JOIN itam.estados sim_estado
     ON sim_estado.id = s.estado_id
+  LEFT JOIN itam.lineas_moviles linea_sim
+    ON linea_sim.id = s.linea_movil_id
+  LEFT JOIN LATERAL (
+    SELECT linea.*
+    FROM itam.lineas_moviles linea
+    WHERE linea.dispositivo_id = d.id
+    ORDER BY
+      CASE WHEN s.id IS NOT NULL AND linea.sim_id = s.id THEN 0 ELSE 1 END,
+      CASE WHEN linea.sim_id IS NULL THEN 0 ELSE 1 END,
+      CASE linea.estado WHEN 'ACTIVA' THEN 0 ELSE 1 END,
+      linea.actualizado_en DESC,
+      linea.id DESC
+    LIMIT 1
+  ) linea_directa ON TRUE
   LEFT JOIN itam.facturas_adquisicion factura
     ON factura.id = d.factura_adquisicion_id
+  LEFT JOIN LATERAL (
+    SELECT h.fecha_evento
+    FROM itam.historial_eventos h
+    WHERE h.dispositivo_id = d.id
+      AND h.tipo_entidad = 'DISPOSITIVO'
+      AND h.tipo_evento IN (
+        'ALTA_DISPOSITIVO',
+        'IMPORTAR_DISPOSITIVO',
+        'REGISTRO_IMPORTADO',
+        'EQUIPO_CREADO',
+        'DISPOSITIVO_CREADO',
+        'EQUIPO_INCORPORADO_AL_INVENTARIO'
+      )
+    ORDER BY h.fecha_evento ASC, h.id ASC
+    LIMIT 1
+  ) ingreso_inventario ON TRUE
   LEFT JOIN LATERAL (
     SELECT candidato.tipo, candidato.id, candidato.nombre, candidato.rut,
       candidato.fecha_movimiento
@@ -187,20 +226,10 @@ const dispositivoSelect = `
     LIMIT 1
   ) offboarding ON TRUE
   LEFT JOIN LATERAL (
-    SELECT evidencia.resultado, evidencia.fecha_verificacion, evidencia.observacion
-    FROM (
-      SELECT v.resultado, v.fecha_verificacion, v.observacion
-      FROM itam.verificaciones_fisicas_dispositivo v
-      WHERE v.dispositivo_id = d.id
-      UNION ALL
-      SELECT 'VERIFICADO' AS resultado, h.fecha_evento AS fecha_verificacion,
-             'Equipo creado directamente en ITAM.' AS observacion
-      FROM itam.historial_eventos h
-      WHERE h.dispositivo_id = d.id
-        AND h.tipo_evento = 'ALTA_DISPOSITIVO'
-        AND h.detalle->>'source' IS NULL
-    ) evidencia
-    ORDER BY evidencia.fecha_verificacion DESC
+    SELECT v.resultado, v.fecha_verificacion, v.observacion
+    FROM itam.verificaciones_fisicas_dispositivo v
+    WHERE v.dispositivo_id = d.id
+    ORDER BY v.fecha_verificacion DESC, v.id DESC
     LIMIT 1
   ) verificacion ON TRUE
 `;
