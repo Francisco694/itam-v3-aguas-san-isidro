@@ -44,7 +44,7 @@ test("una orden tecnica abierta bloquea la asignacion del dispositivo",async()=>
  const client=await pool.connect();try{await client.query("BEGIN");
   const device=await client.query<{id:string}>("SELECT d.id FROM itam.dispositivos d WHERE NOT EXISTS(SELECT 1 FROM itam.ordenes_servicio_tecnico o WHERE o.dispositivo_id=d.id AND o.estado NOT IN ('CERRADA','BAJA','REPARACION_RECHAZADA')) LIMIT 1");assert.ok(device.rows[0]);
   await client.query("INSERT INTO itam.ordenes_servicio_tecnico(dispositivo_id,falla_reportada,responsable_envio) VALUES($1,'TEST bloqueo','TEST')",[device.rows[0]!.id]);
-  await assert.rejects(assertSinOrdenServicioAbierta(device.rows[0]!.id,client),(error:unknown)=>error instanceof ConflictError&&error.message.includes("orden de servicio"));
+  await assert.rejects(assertSinOrdenServicioAbierta(device.rows[0]!.id,client),(error:unknown)=>error instanceof ConflictError&&error.message.includes("servicio técnico"));
  }finally{await client.query("ROLLBACK");client.release()}
 });
 

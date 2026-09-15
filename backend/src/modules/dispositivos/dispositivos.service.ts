@@ -826,7 +826,7 @@ export const assertSinOrdenServicioAbierta = async (
   );
   if (result.rows[0]) {
     throw new ConflictError(
-      "El dispositivo tiene una orden de servicio técnico abierta."
+      "El equipo ya se encuentra en servicio técnico."
     );
   }
 };

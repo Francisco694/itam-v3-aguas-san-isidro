@@ -1,10 +1,10 @@
 import { DatePipe } from '@angular/common';
 import { Component, DestroyRef, OnInit, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { LucideBuilding, LucideCircleAlert, LucideDownload, LucideExternalLink, LucideFileText, LucideHistory, LucidePackageCheck, LucidePencil, LucidePlus, LucideRotateCcw, LucideShieldAlert, LucideUserCheck, LucideWrench, LucideX } from '@lucide/angular';
-import { combineLatest, forkJoin, Observable, tap } from 'rxjs';
+import { catchError, combineLatest, forkJoin, Observable, of } from 'rxjs';
 import { ActaEntrega, Colaborador, ComprobanteDevolucion, Departamento, Dispositivo, Estado, HistorialEvento, LineaMovilResumen, OrdenServicio, ResultadoDevolucion, Sim, TrazabilidadDispositivo } from '../../core/models/itam.models';
 import { ColaboradoresService } from '../../core/services/colaboradores.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
@@ -50,8 +50,8 @@ export const normalizeChileanPhoneInput = (value: string): string => {
 };
 
 export const smartphonePhoneValue = (device: Dispositivo): string | null =>
-  device.numeroTelefonico?.trim()
-    || device.lineaMovil?.numeroTelefonico?.trim()
+  device.lineaMovil?.numeroTelefonico?.trim()
+    || device.numeroTelefonico?.trim()
     || device.labelPhone?.trim()
     || device.simAsociada?.lineaMovil?.numeroTelefonico?.trim()
     || device.simAsociada?.numeroAsociado?.trim()
@@ -78,6 +78,36 @@ export const smartphoneLineActionCopy = (device: Dispositivo): { title: string; 
   }
   return { title: 'Gestionar línea / SIM', description: 'Editar línea o reemplazar SIM' };
 };
+
+export const isActiveTechnicalServiceOrder = (order: OrdenServicio): boolean =>
+  !['CERRADA', 'BAJA', 'REPARACION_RECHAZADA'].includes(order.estado);
+
+export const activeTechnicalServiceOrderForDevice = (
+  orders: readonly OrdenServicio[],
+  codigoInventario: number,
+): OrdenServicio | null =>
+  orders.find((order) => order.dispositivo.codigoInventario === codigoInventario && isActiveTechnicalServiceOrder(order)) ?? null;
+
+export const technicalServiceOrderStatusLabel = (state: OrdenServicio['estado']): string => ({
+  PENDIENTE_DIAGNOSTICO: 'Pendiente de diagnóstico',
+  COTIZACION_RECIBIDA: 'Diagnóstico registrado',
+  REPARACION_APROBADA: 'Resultado registrado',
+  REPARACION_RECHAZADA: 'Resultado registrado',
+  EN_REPARACION: 'Resultado registrado',
+  REPARACION_TERMINADA: 'Resultado registrado',
+  CERRADA: 'Finalizado',
+  BAJA: 'Finalizado',
+})[state];
+
+const todayDateInputValue = (): string => {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${now.getFullYear()}-${month}-${day}`;
+};
+
+const isDateInputValue = (value: string): boolean =>
+  /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(new Date(`${value}T00:00:00`).getTime());
 
 export const isSavedMobileLine = (value: unknown): value is LineaMovilResumen =>
   !!value
@@ -169,7 +199,7 @@ type DeviceAction = 'assign-person' | 'assign-department' | 'return' | 'state' |
 @Component({
   selector: 'app-dispositivo-detail',
   standalone: true,
-  imports: [DatePipe, ReactiveFormsModule, RouterLink, PageHeader, StatusBadge, ViewState, ComprobanteDevolucionPreview, ActaPreview, AssetLabel, LucideBuilding, LucideCircleAlert, LucideDownload, LucideExternalLink, LucideFileText, LucideHistory, LucidePackageCheck, LucidePencil, LucidePlus, LucideRotateCcw, LucideShieldAlert, LucideUserCheck, LucideWrench, LucideX],
+  imports: [DatePipe, FormsModule, ReactiveFormsModule, RouterLink, PageHeader, StatusBadge, ViewState, ComprobanteDevolucionPreview, ActaPreview, AssetLabel, LucideBuilding, LucideCircleAlert, LucideDownload, LucideExternalLink, LucideFileText, LucideHistory, LucidePackageCheck, LucidePencil, LucidePlus, LucideRotateCcw, LucideShieldAlert, LucideUserCheck, LucideWrench, LucideX],
   template: `
     <app-page-header title="Ficha de Equipo" subtitle="Información del equipo y acciones disponibles.">
       <a class="btn btn--secondary" [routerLink]="['/dispositivos']">Volver al inventario</a>
@@ -193,6 +223,7 @@ type DeviceAction = 'assign-person' | 'assign-department' | 'return' | 'state' |
         <article><small>ÚLTIMO RESPONSABLE CONOCIDO</small>@if(traceability()?.ultimoResponsableConocido;as previous){<strong>{{previous.nombre}}</strong><span>{{previous.tipo==='COLABORADOR' ? ('RUT '+(previous.rut||'no informado')) : 'Departamento'}} · {{previous.fechaUltimoMovimiento|date:'dd/MM/yyyy HH:mm'}} · {{originLabel(previous.origenDato)}}</span>}@else{<strong>Sin responsable conocido</strong><span>No existe evidencia histórica vinculada</span>}</article>
       </section>
       @for(alert of traceability()?.alertas || [];track alert){<div class="notice notice--warning traceability-alert"><svg lucideCircleAlert></svg><div><strong>{{ alert.includes('Asignado') ? 'Requiere revisión' : (device.estado.codigo==='EXTRAVIADO' ? 'Equipo perdido' : 'Equipo retirado del inventario') }}</strong><span>{{alert}}</span></div></div>}
+      @if(activeServiceOrder(); as order){<section class="notice technical-service-card" role="status"><svg lucideWrench></svg><div><strong>Equipo en servicio técnico</strong><span>Este equipo está apartado del inventario operativo mientras se encuentra en revisión técnica.</span><dl><div><dt>Revisión N°</dt><dd>#{{order.id}}</dd></div><div><dt>Fecha de envío</dt><dd>{{serviceDateLabel(order.fechaEnvio)}}</dd></div><div><dt>Proveedor / técnico / destino</dt><dd>{{order.proveedor || 'No informado'}}</dd></div><div><dt>Falla reportada</dt><dd>{{order.fallaReportada}}</dd></div><div><dt>Estado de la revisión</dt><dd>{{technicalServiceStatusLabel(order.estado)}}</dd></div></dl><a class="btn btn--secondary btn--small" routerLink="/servicio-tecnico">Ver revisión técnica</a></div></section>}
       <section class="panoramic-card">
         <article class="panoramic-column details-column">
           <div class="column-title"><span>01</span><div><small>IDENTIFICACIÓN</small><h3>Detalles</h3></div></div>
@@ -224,11 +255,11 @@ type DeviceAction = 'assign-person' | 'assign-department' | 'return' | 'state' |
           <div class="column-title"><span>03</span><div><small>GESTIÓN</small><h3>Acciones del equipo</h3></div></div>
           @if (!action()) {
             <div class="operation-list">
-              <button type="button" [disabled]="terminal() || device.tipoCustodia!=='NONE'" (click)="open('assign-person')"><svg lucideUserCheck></svg><span>Entregar equipo<small>A un colaborador habilitado</small></span></button>
-              @if((device.colaborador || device.departamento) && !terminal()){<button type="button" class="operation-return" (click)="open('return')"><svg lucideRotateCcw></svg><span>Recibir en bodega<small>Registra recepción y revisión</small></span></button>}
-              <button type="button" [disabled]="terminal()" (click)="open('service')"><svg lucideWrench></svg><span>Enviar a revisión técnica<small>Crear orden y bloquear movimientos</small></span></button>
+              <button type="button" [disabled]="terminal() || technicalServiceActive() || device.tipoCustodia!=='NONE'" (click)="open('assign-person')"><svg lucideUserCheck></svg><span>Entregar equipo<small>A un colaborador habilitado</small></span></button>
+              @if((device.colaborador || device.departamento) && !terminal() && !technicalServiceActive()){<button type="button" class="operation-return" (click)="open('return')"><svg lucideRotateCcw></svg><span>Recibir en bodega<small>Registra recepción y revisión</small></span></button>}
+              @if(!technicalServiceActive()){<button type="button" [disabled]="terminal()" (click)="open('service')"><svg lucideWrench></svg><span>Enviar a revisión técnica<small>Crear orden y bloquear movimientos</small></span></button>}
               <button type="button" [disabled]="!stateExists('EXTRAVIADO')" (click)="openState('EXTRAVIADO')"><svg lucideShieldAlert></svg><span>Reportar equipo perdido<small>Requiere confirmación</small></span></button>
-              <button type="button" (click)="open('assign-department')" [disabled]="terminal() || device.tipoCustodia!=='NONE'"><svg lucideBuilding></svg><span>Entregar a departamento<small>Responsabilidad institucional</small></span></button>
+              <button type="button" (click)="open('assign-department')" [disabled]="terminal() || technicalServiceActive() || device.tipoCustodia!=='NONE'"><svg lucideBuilding></svg><span>Entregar a departamento<small>Responsabilidad institucional</small></span></button>
               <button type="button" (click)="open('state')"><svg lucidePackageCheck></svg><span>Cambiar situación del equipo<small>Ver opciones disponibles</small></span></button>
               @if((device.verificacionFisica?.resultado || 'PENDIENTE') === 'PENDIENTE'){
                 <button type="button" (click)="verifyManually()"><svg lucidePackageCheck></svg><span>Verificar equipo<small>Confirmar revisión física y datos del equipo</small></span></button>
@@ -240,7 +271,7 @@ type DeviceAction = 'assign-person' | 'assign-department' | 'return' | 'state' |
           } @else {
             <form class="action-form" [formGroup]="actionForm" (ngSubmit)="execute()">
               <header><div><small>OPERACIÓN EN CURSO</small><h4>{{ actionTitle() }}</h4></div><button class="icon-button" type="button" aria-label="Cancelar operación" [disabled]="submitting()" (click)="action.set(null)"><svg lucideX></svg></button></header>
-              @if(actionError()){<div class="notice notice--error" role="alert">{{ actionError() }}</div>}
+              @if(actionError()){<div class="notice notice--error" role="alert"><strong>{{ actionErrorTitle() || 'No se pudo registrar la operación' }}</strong><span>{{ actionError() }}</span></div>}
               @if(action()==='assign-person'){
                 <div class="delivery-form">
                   <div class="field delivery-field">
@@ -319,10 +350,10 @@ type DeviceAction = 'assign-person' | 'assign-department' | 'return' | 'state' |
                 </select></div>
               }
               @if(action()==='recover'){<div class="field"><label for="recovery-reason">Motivo *</label><textarea id="recovery-reason" formControlName="motivoRecuperacion" required></textarea></div>}
-              @if(action()==='service'){<div class="field"><label for="service-date">Fecha de envío</label><input id="service-date" type="datetime-local" formControlName="fechaEnvio" /></div><div class="field"><label for="provider">Proveedor / técnico / destino</label><input id="provider" formControlName="proveedor" maxlength="180" /></div><div class="field"><label for="failure">Falla reportada *</label><textarea id="failure" formControlName="fallaReportada"></textarea></div>}
+              @if(action()==='service'){<div class="field"><label for="service-date">Fecha de envío *</label><input id="service-date" type="date" formControlName="fechaEnvio" /></div><div class="field"><label for="provider">Proveedor / técnico / destino *</label><input id="provider" formControlName="proveedor" maxlength="180" /></div><div class="field"><label for="service-type">Tipo de servicio *</label><select id="service-type" formControlName="tipoServicio"><option value="">Seleccionar</option><option value="GARANTIA">Garantía</option><option value="REPARACION">Reparación</option><option value="MANTENCION">Mantención</option><option value="DIAGNOSTICO">Diagnóstico</option></select></div><div class="field"><label for="failure">Falla reportada *</label><textarea id="failure" formControlName="fallaReportada"></textarea></div><div class="field"><label for="accessories">Accesorios entregados</label><textarea id="accessories" formControlName="accesoriosEntregados"></textarea></div>}
               @if(action()==='retire'){<div class="notice notice--info">La baja conservará el motivo, el valor comercial vigente y el responsable TI en la trazabilidad.</div><div class="field"><label for="retire-reason">Motivo *</label><select id="retire-reason" formControlName="motivoBaja"><option value="">Seleccionar</option><option value="IRREPARABLE">Irreparable</option><option value="REPARACION_NO_CONVENIENTE">Reparación no conveniente</option><option value="MULTIPLES_REPARACIONES">Múltiples reparaciones</option><option value="OBSOLESCENCIA">Obsolescencia</option><option value="DANO_FISICO">Daño físico</option><option value="SIN_REPUESTOS">Sin repuestos</option><option value="OTRO">Otro</option></select></div>}
               <div class="field action-notes"><label for="action-notes">Observaciones</label><textarea id="action-notes" formControlName="observaciones" placeholder="Motivo, condición o antecedentes relevantes"></textarea></div>
-              <div class="action-form__buttons"><button class="btn btn--ghost" type="button" (click)="action.set(null)">Cancelar</button>@if(action()==='service'){<button class="btn btn--secondary" type="submit" [disabled]="submitting()" (click)="servicePrintRequested.set(true)">Registrar e imprimir</button>}<button class="btn btn--primary" type="submit" [disabled]="submitting()" (click)="servicePrintRequested.set(false)">{{ submitting() ? 'Procesando…' : (action()==='service'?'Registrar envío':'Confirmar operación') }}</button></div>
+              <div class="action-form__buttons"><button class="btn btn--ghost" type="button" (click)="action.set(null)">Cancelar</button><button class="btn btn--primary" type="submit" [disabled]="submitting()">{{ submitting() ? 'Procesando…' : (action()==='service'?'Registrar envío':'Confirmar operación') }}</button></div>
             </form>
           }
         </aside>
@@ -337,7 +368,7 @@ type DeviceAction = 'assign-person' | 'assign-department' | 'return' | 'state' |
         <section class="sim-association-dialog card" role="dialog" aria-modal="true" aria-labelledby="sim-association-title" (click)="$event.stopPropagation()">
           <header><div><small>SMARTPHONE</small><h2 id="sim-association-title">{{ item() && lineActionCopy(item()!).title }}</h2></div><button class="icon-button" type="button" aria-label="Cerrar" [disabled]="submitting()" (click)="closeSimAssociation()"><svg lucideX></svg></button></header>
           @if(modalError(); as error){<div class="notice notice--error modal-save-error" role="alert"><strong>{{error.title}}</strong><span>{{error.detail}}</span></div>}
-          <form (ngSubmit)="associateSim()">
+          <form novalidate (ngSubmit)="associateSim()">
             @if(submitting()){<div class="notice notice--info" role="status" aria-live="polite">Guardando número telefónico...</div>}
             <div class="field"><label for="association-phone">Número telefónico *</label><input id="association-phone" type="tel" inputmode="tel" maxlength="20" placeholder="569XXXXXXXX" [value]="simPhone()" (input)="simPhone.set($any($event.target).value); simError.set(''); modalError.set(null)" [disabled]="submitting()" required /><small class="hint">Acepta 9 dígitos o formato 56XXXXXXXXX.</small>@if(simPhone().trim() && !isPhoneValid(simPhone())){<small class="field-error" role="alert">Ingrese 9 dígitos o formato 56XXXXXXXXX.</small>}</div>
             @if(item()?.simAsociada; as currentSim){<div class="delivery-selection" role="status"><div><small>SIM asociada actualmente</small><strong>ITAM {{currentSim.codigoInventario}}</strong><span>{{currentSim.compania || 'Sin operador'}} · Elige otra SIM solo si deseas reemplazarla.</span></div></div>}@else{<div class="notice notice--warning">SIM pendiente de asociar. Puedes guardar el número ahora y asociar una SIM después.</div>}
@@ -401,18 +432,26 @@ export class DispositivoDetail implements OnInit {
   private showModalError(title: string, detail: string): void {
     this.modalError.set({ title, detail });
   }
+  private downloadServicePdf(order: OrdenServicio, blob: Blob): void {
+    const url=URL.createObjectURL(blob),link=document.createElement('a');
+    link.href=url;
+    link.download='OT-'+order.id+'-servicio-tecnico.pdf';
+    link.click();
+    URL.revokeObjectURL(url);
+  }
   private resetDetailStateForRoute(): void {
     this.submitting.set(false);
     this.action.set(null);
     this.actionError.set('');
+    this.actionErrorTitle.set('');
     this.returnProof.set(null);
     this.createdActa.set(null);
+    this.activeServiceOrder.set(null);
     this.simAssociationOpen.set(false);
     this.selectedSim.set(null);
     this.simPhone.set('');
     this.simError.set('');
     this.modalError.set(null);
-    this.servicePrintRequested.set(false);
     this.clearFeedback();
   }
   private readonly service = inject(DispositivosService);
@@ -436,8 +475,10 @@ export class DispositivoDetail implements OnInit {
   protected readonly loading = signal(true);
   protected readonly error = signal('');
   protected readonly actionError = signal('');
+  protected readonly actionErrorTitle = signal('');
   protected readonly submitting = signal(false);
   protected readonly action = signal<DeviceAction | null>(null);
+  protected readonly activeServiceOrder = signal<OrdenServicio | null>(null);
   protected readonly returnProof = signal<ComprobanteDevolucion | null>(null);
   protected readonly createdActa=signal<ActaEntrega|null>(null);
   protected readonly clp=formatClp;
@@ -446,16 +487,18 @@ export class DispositivoDetail implements OnInit {
   protected readonly smartphonePhoneText=smartphonePhoneText;
   protected readonly smartphonePhonePending=smartphonePhonePending;
   protected readonly lineActionCopy=smartphoneLineActionCopy;
+  protected readonly technicalServiceStatusLabel=technicalServiceOrderStatusLabel;
+  protected serviceDateLabel(value: string): string { const [year,month,day]=value.slice(0,10).split('-');return `${day}/${month}/${year}`; }
   protected readonly labelResponsible=assetLabelResponsible;
   protected readonly labelPhone=smartphonePhoneValue;
+  protected technicalServiceActive(): boolean { return this.item()?.estado.codigo === 'SERVICIO_TECNICO' || !!this.activeServiceOrder(); }
   protected originLabel(origin: 'HISTORIAL'|'BAJA'|'COMPROBANTE'): string { return {HISTORIAL:'Historial',BAJA:'Registro de baja',COMPROBANTE:'Comprobante'}[origin]; }
   protected eventLabel(event: string): string { return { ALTA_DISPOSITIVO: 'Equipo incorporado al inventario', ASIGNAR_COLABORADOR: 'Equipo entregado a un colaborador', CONCILIAR_DISPOSITIVO_EXISTENTE: 'Registro actualizado desde inventario anterior', DEVOLVER_A_BODEGA: 'Equipo recibido en bodega', CAMBIAR_ESTADO: 'Situación del equipo actualizada', REPORTAR_EXTRAVIO: 'Equipo reportado como perdido', DAR_DE_BAJA: 'Equipo retirado del inventario', VERIFICACION_FISICA: 'Verificación física', VERIFICACION_MANUAL_EQUIPO: 'Equipo verificado manualmente por usuario', SIM_ASOCIADA_A_DISPOSITIVO: 'SIM asociada al smartphone', ENTREGA_EQUIPO_CON_SIM: 'Smartphone entregado con SIM', LINEA_MOVIL_NUMERO_ACTUALIZADO: 'Número telefónico actualizado' }[event] || event.replaceAll('_', ' '); }
   protected verificationEventLabel(event: HistorialEvento): string { const result = event.detalle['resultado']; return result === 'VERIFICADO' ? '✓ Equipo verificado' : '! Datos por revisar'; }
   private codigo = 0;
   private id = '';
   private routeAction = '';
-  protected readonly servicePrintRequested=signal(false);
-  protected readonly actionForm = this.fb.nonNullable.group({ colaboradorId: [''], departamentoId: [''], recibidoPorId:[''], localidad: [''], ubicacionDetalle: [''], estadoId: [''], accionLineaExtravio: [''], proveedor:[''], fechaEnvio:[''], fallaReportada:[''], motivoBaja:[''], motivoRecuperacion:[''], responsable: ['', [Validators.required, Validators.maxLength(150)]], observaciones: [''] });
+  protected readonly actionForm = this.fb.nonNullable.group({ colaboradorId: [''], departamentoId: [''], recibidoPorId:[''], localidad: [''], ubicacionDetalle: [''], estadoId: [''], accionLineaExtravio: [''], proveedor:[''], fechaEnvio:[''], tipoServicio:[''], fallaReportada:[''], accesoriosEntregados:[''], motivoBaja:[''], motivoRecuperacion:[''], responsable: ['', [Validators.required, Validators.maxLength(150)]], observaciones: [''] });
 
   ngOnInit(): void {
     combineLatest([this.route.paramMap, this.route.queryParamMap])
@@ -474,7 +517,7 @@ export class DispositivoDetail implements OnInit {
   protected load(): void {
     const requestedId = this.id;
     this.loading.set(true); this.error.set('');
-    forkJoin({ traceability: this.service.trazabilidad(this.id), states: this.estadosService.listar('DISPOSITIVO'), collaborators: this.colaboradoresService.listar({ activo: true }), departments: this.departamentosService.listar() }).subscribe({ next: (result) => { if (requestedId !== this.id) return; this.traceability.set(result.traceability); this.item.set(result.traceability.dispositivo); this.codigo = result.traceability.dispositivo.codigoInventario; this.history.set(result.traceability.eventos); this.states.set(result.states.filter((state) => state.activo)); this.collaborators.set(result.collaborators); this.departments.set(result.departments.filter((department) => department.activo)); this.loading.set(false); if (this.routeAction === 'assign' && !this.terminal()) this.open('assign-person'); }, error: (error) => { if (requestedId !== this.id) return; this.error.set(errorMessage(error)); this.loading.set(false); } });
+    forkJoin({ traceability: this.service.trazabilidad(this.id), states: this.estadosService.listar('DISPOSITIVO'), collaborators: this.colaboradoresService.listar({ activo: true }), departments: this.departamentosService.listar(), serviceOrders: this.technicalService.listar().pipe(catchError(() => of([] as OrdenServicio[]))) }).subscribe({ next: (result) => { if (requestedId !== this.id) return; this.traceability.set(result.traceability); this.item.set(result.traceability.dispositivo); this.codigo = result.traceability.dispositivo.codigoInventario; this.activeServiceOrder.set(activeTechnicalServiceOrderForDevice(result.serviceOrders, this.codigo)); this.history.set(result.traceability.eventos); this.states.set(result.states.filter((state) => state.activo)); this.collaborators.set(result.collaborators); this.departments.set(result.departments.filter((department) => department.activo)); this.loading.set(false); if (this.routeAction === 'assign' && !this.terminal() && !this.technicalServiceActive()) this.open('assign-person'); }, error: (error) => { if (requestedId !== this.id) return; this.error.set(errorMessage(error)); this.loading.set(false); } });
   }
   protected terminal(): boolean { return this.states().find((state) => state.id === this.item()?.estado.id)?.esTerminal ?? false; }
   protected stateExists(code: string): boolean { return this.states().some((state) => state.codigo === code); }
@@ -494,7 +537,10 @@ export class DispositivoDetail implements OnInit {
   protected closeSimAssociation(): void { if(this.submitting())return;this.simAssociationOpen.set(false);this.selectedSim.set(null);this.simPhone.set('');this.simError.set('');this.modalError.set(null); }
   protected async associateSim(): Promise<void> {
     const device=this.item(),sim=this.selectedSim();
-    if(!device||this.submitting())return;
+    if(this.submitting())return;
+    if(!device){this.showModalError('No se pudo guardar el número telefónico','No se pudo identificar el código ITAM del equipo actual.');return;}
+    const codigo=Number(device.codigoInventario);
+    if(!Number.isInteger(codigo)||codigo<=0){this.showModalError('No se pudo guardar el número telefónico','No se pudo identificar el código ITAM del equipo actual.');return;}
     const phone=this.simPhone().trim();
     if(!phone){this.showModalError('No se pudo guardar el número telefónico','Ingrese 9 dígitos o formato 56XXXXXXXXX.');return;}
     if(!isChileanPhoneInputValid(phone)){this.showModalError('No se pudo guardar el número telefónico','Ingrese 9 dígitos o formato 56XXXXXXXXX.');return;}
@@ -510,9 +556,9 @@ export class DispositivoDetail implements OnInit {
     }
     this.submitting.set(true);this.simError.set('');this.modalError.set(null);
     const linePayload = { numeroTelefonico: normalizedPhone, simId: sim?.id ?? device.simAsociada?.id ?? null };
-    console.log('[asociar-linea] codigo actual', device.codigoInventario);
+    console.log('[asociar-linea] codigo actual', codigo);
     console.log('[asociar-linea] payload', linePayload);
-    const request: Observable<unknown> = this.service.asociarLinea(device.codigoInventario,linePayload);
+    const request: Observable<unknown> = this.service.asociarLinea(codigo,linePayload);
     request.subscribe({next:(result)=>{
       if (String(device.codigoInventario) !== this.id) return;
       {
@@ -578,7 +624,7 @@ export class DispositivoDetail implements OnInit {
       this.toast.error('No se pudo guardar el número telefónico',message);
     }});
   }
-  protected open(action: DeviceAction): void { const actor=this.auth.user();if(!actor){this.actionError.set('La sesión no permite identificar al responsable TI.');this.toast.error('Sesión no válida','Vuelva a iniciar sesión antes de registrar una operación.');return;}this.servicePrintRequested.set(false);this.actionForm.reset({ colaboradorId: '', departamentoId: '',recibidoPorId:'', localidad: this.item()?.localidad || '', ubicacionDetalle: this.item()?.ubicacionDetalle || '', estadoId: '',accionLineaExtravio:'',proveedor:'',fechaEnvio:'',fallaReportada:'',motivoBaja:'',motivoRecuperacion:'', responsable: actor.nombre, observaciones: '' }); this.searchCollaborator(''); this.jointDelivery.set(false); this.deliveryPhone.set(action==='assign-person'&&this.item()&&isSmartphoneDevice(this.item()!) ? smartphonePhoneValue(this.item()!) || '' : ''); this.searchSim(''); this.actionError.set(''); this.action.set(action); }
+  protected open(action: DeviceAction): void { const actor=this.auth.user();if(!actor){this.actionError.set('La sesión no permite identificar al responsable TI.');this.toast.error('Sesión no válida','Vuelva a iniciar sesión antes de registrar una operación.');return;}if(action==='service'&&this.technicalServiceActive()){this.actionErrorTitle.set('No se pudo registrar el envío a servicio técnico');this.actionError.set('El equipo ya se encuentra en servicio técnico.');return;}this.actionForm.reset({ colaboradorId: '', departamentoId: '',recibidoPorId:'', localidad: this.item()?.localidad || '', ubicacionDetalle: this.item()?.ubicacionDetalle || '', estadoId: '',accionLineaExtravio:'',proveedor:'',fechaEnvio: action==='service' ? todayDateInputValue() : '',tipoServicio: action==='service' ? 'DIAGNOSTICO' : '',fallaReportada:'',accesoriosEntregados:'',motivoBaja:'',motivoRecuperacion:'', responsable: actor.nombre, observaciones: '' }); this.searchCollaborator(''); this.jointDelivery.set(false); this.deliveryPhone.set(action==='assign-person'&&this.item()&&isSmartphoneDevice(this.item()!) ? smartphonePhoneValue(this.item()!) || '' : ''); this.searchSim(''); this.actionError.set(''); this.actionErrorTitle.set(''); this.action.set(action); }
   protected openState(code: string): void { const state = this.states().find((item) => item.codigo === code); if (!state) return; this.open('state'); this.actionForm.controls.estadoId.setValue(state.id); if(code==='EXTRAVIADO'&&this.item()&&isSmartphoneDevice(this.item()!)&&!this.item()!.simAsociada)this.actionForm.controls.accionLineaExtravio.setValue('NO_APLICA'); }
   protected isReportingSmartphoneLost(): boolean { const target=this.states().find(state=>state.id===this.actionForm.controls.estadoId.value);const device=this.item();return this.action()==='state'&&!!device&&isSmartphoneDevice(device)&&target?.codigo==='EXTRAVIADO'; }
   protected actionTitle(): string { return { 'assign-person': 'Registrar entrega', 'assign-department': 'Entregar a departamento', return: 'Registrar recepción', state: 'Cambiar situación del equipo', recover: 'Registrar equipo encontrado', service:'Enviar a revisión técnica',retire:'Retirar del inventario' }[this.action() || 'return']; }
@@ -596,7 +642,7 @@ export class DispositivoDetail implements OnInit {
     const action = this.action(); if (!action || this.submitting()) return;
     const value = this.actionForm.getRawValue();
     const actor = this.auth.user();
-    if (!actor?.nombre.trim()) { this.actionError.set('La sesión no permite identificar al responsable TI.'); return; }
+    if (!actor?.nombre.trim()) { this.actionErrorTitle.set('No se pudo registrar la operación'); this.actionError.set('La sesión no permite identificar al responsable TI.'); return; }
     this.actionForm.controls.responsable.setValue(actor.nombre);
     if (action === 'assign-person' && !value.colaboradorId) { this.actionError.set('Selecciona un colaborador.'); return; }
     const deliveryPhoneValue = this.deliveryPhone().trim();
@@ -607,7 +653,11 @@ export class DispositivoDetail implements OnInit {
     if (action === 'state' && !value.estadoId) { this.actionError.set('Selecciona un estado.'); return; }
     if (action === 'state' && this.isReportingSmartphoneLost() && !value.accionLineaExtravio) { this.actionError.set('Indica qué hacer con la línea telefónica.'); return; }
     if (action === 'recover' && (!value.estadoId || !value.motivoRecuperacion.trim())) { this.actionError.set(!value.estadoId ? 'Selecciona el estado de recuperación.' : 'Ingresa el motivo de recuperación.'); return; }
-    if (action === 'service' && !value.fallaReportada.trim()) { this.actionError.set('Describe la falla reportada.'); return; }
+    if (action === 'service' && this.technicalServiceActive()) { this.actionErrorTitle.set('No se pudo registrar el envío a servicio técnico'); this.actionError.set('El equipo ya se encuentra en servicio técnico.'); return; }
+    if (action === 'service' && (!value.fechaEnvio || !isDateInputValue(value.fechaEnvio))) { this.actionErrorTitle.set('No se pudo registrar el envío a servicio técnico'); this.actionError.set('La fecha de envío es obligatoria y debe ser solo día.'); return; }
+    if (action === 'service' && !value.proveedor.trim()) { this.actionErrorTitle.set('No se pudo registrar el envío a servicio técnico'); this.actionError.set('Falta proveedor, técnico o destino.'); return; }
+    if (action === 'service' && !value.tipoServicio) { this.actionErrorTitle.set('No se pudo registrar el envío a servicio técnico'); this.actionError.set('Selecciona el tipo de servicio.'); return; }
+    if (action === 'service' && !value.fallaReportada.trim()) { this.actionErrorTitle.set('No se pudo registrar el envío a servicio técnico'); this.actionError.set('Falta falla reportada.'); return; }
     if (action === 'retire' && !value.motivoBaja) { this.actionError.set('Selecciona el motivo de baja.'); return; }
     if (action === 'return' && !await this.confirmation.confirm('Se registrará la recepción y el equipo quedará retenido para revisión.', { title: 'Confirmar recepción', confirmLabel: 'Confirmar recepción' })) return;
     if (action === 'retire' && !await this.confirmation.confirm('El equipo será retirado del inventario y el motivo quedará guardado para revisión.', { title: 'Confirmar retiro', confirmLabel: 'Retirar del inventario', tone: 'danger' })) return;
@@ -619,13 +669,32 @@ export class DispositivoDetail implements OnInit {
     if (action === 'assign-person') request = this.service.asignarColaborador(this.codigo, { ...common, colaboradorId: Number(value.colaboradorId), ...(deliveryPhoneValue && this.item() && isSmartphoneDevice(this.item()!) ? { numeroTelefonico: deliveryPhoneValue } : {}), ...(this.jointDelivery() && this.selectedSim() ? { simCodigoInventario: this.selectedSim()!.codigoInventario } : {}) });
     else if (action === 'assign-department') request = this.service.asignarDepartamento(this.codigo, { ...common, departamentoId: Number(value.departamentoId),recibidoPorId:Number(value.recibidoPorId), localidad: value.localidad.trim() || null, ubicacionDetalle: value.ubicacionDetalle.trim() || null });
     else if (action === 'return') request = this.service.devolver(this.codigo, common);
-    else if(action==='service')request=this.technicalService.crear({dispositivoCodigo:this.codigo,proveedor:value.proveedor.trim()||null,fechaEnvio:value.fechaEnvio||null,fallaReportada:value.fallaReportada.trim(),observaciones:value.observaciones.trim()||null,responsable:actor.nombre});
+    else if(action==='service')request=this.technicalService.crear({dispositivoCodigo:this.codigo,proveedor:value.proveedor.trim()||null,fechaEnvio:value.fechaEnvio||null,tipoServicio:value.tipoServicio as 'GARANTIA'|'REPARACION'|'MANTENCION'|'DIAGNOSTICO',fallaReportada:value.fallaReportada.trim(),accesoriosEntregados:value.accesoriosEntregados.trim()||null,observaciones:value.observaciones.trim()||null,responsable:actor.nombre});
     else if(action==='retire')request=this.service.darBaja(this.codigo,{...common,motivo:value.motivoBaja as import('../../core/models/itam.models').MotivoBaja});
     else request = this.service.cambiarEstado(this.codigo, { ...common, estadoId: Number(value.estadoId), ...(action === 'recover' ? { recuperar: true, motivoRecuperacion: value.motivoRecuperacion.trim() } : {}), ...(action === 'state' && this.isReportingSmartphoneLost() ? { accionLineaExtravio: value.accionLineaExtravio as import('../../core/models/itam.models').AccionLineaExtravio } : {}) });
-    if(action==='service'&&this.servicePrintRequested()){request=request.pipe(tap(result=>{if(!('entregasTemporales' in result))return;this.technicalService.envioPdf(result.id).subscribe({next:blob=>{const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download='ST-'+result.id+'-envio.pdf';link.click();URL.revokeObjectURL(url)},error:error=>this.toast.warning('Envío registrado','No fue posible descargar el documento: '+errorMessage(error))})}))}
-    this.submitting.set(true); this.actionError.set('');
+    this.submitting.set(true); this.actionError.set(''); this.actionErrorTitle.set('');
     request.subscribe({
       next: (result) => {
+        if(action==='service'&&'entregasTemporales' in result){
+          const order=result;
+          this.technicalService.envioPdf(order.id).subscribe({
+            next:blob=>{
+              this.downloadServicePdf(order,blob);
+              this.activeServiceOrder.set(order);
+              this.action.set(null);
+              this.submitting.set(false);
+              this.showFeedback({type:'success',title:'Equipo enviado a servicio técnico',detail:'El envío fue registrado correctamente y se generó la orden de trabajo.'});
+              this.toast.success('Equipo enviado a servicio técnico','El envío fue registrado correctamente y se generó la orden de trabajo.');
+              this.load();
+            },
+            error:error=>{
+              this.actionErrorTitle.set('No se pudo registrar el envío a revisión técnica');
+              this.actionError.set(errorMessage(error));
+              this.submitting.set(false);
+            }
+          });
+          return;
+        }
         this.action.set(null);
         this.submitting.set(false);
         if ('codigoInventario' in result && action === 'assign-person' && isSmartphoneDevice(result) && deliveryPhoneValue) {
@@ -644,7 +713,7 @@ export class DispositivoDetail implements OnInit {
         else if('codigoInventario' in result&&(action==='assign-person'||action==='assign-department')){const updated=result;this.actasService.crear({colaboradorId:action==='assign-person'?Number(value.colaboradorId):null,departamentoId:action==='assign-department'?Number(value.departamentoId):null,recepcionanteId:action==='assign-department'?Number(value.recibidoPorId):null,localidad:value.localidad.trim()||updated.localidad,responsableTi:actor.nombre,observaciones:value.observaciones.trim()||null,dispositivosCodigos:[updated.codigoInventario]}).subscribe({next:acta=>this.createdActa.set(acta),error:error=>this.toast.warning('Asignación registrada',`No fue posible generar el acta: ${errorMessage(error)}`)});}
         this.load();
       },
-      error: (error) => { this.actionError.set(deviceActionErrorMessage(error)); this.submitting.set(false); }
+      error: (error) => { this.actionErrorTitle.set(action==='service'?'No se pudo registrar el envío a revisión técnica':'No se pudo registrar la operación'); this.actionError.set(action==='service'?errorMessage(error):deviceActionErrorMessage(error)); this.submitting.set(false); }
     });
   }
 }

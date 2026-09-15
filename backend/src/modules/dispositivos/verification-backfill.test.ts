@@ -35,12 +35,12 @@ const device = (
   verificaciones
 });
 
-test("backfill: creación manual queda verificada", () => {
+test("backfill: creación manual queda pendiente", () => {
   const result = calcularEstadoVerificacion(device([
     event("1", "ALTA_DISPOSITIVO", "2026-09-01T10:00:00Z", "4", { codigoInventario: 1444 })
   ]));
-  assert.equal(result.resultado, "VERIFICADO");
-  assert.equal(result.categoria, "MANUAL");
+  assert.equal(result.resultado, "PENDIENTE");
+  assert.equal(result.categoria, "SIN_EVIDENCIA");
 });
 
 test("backfill: importador solo queda pendiente", () => {
@@ -52,13 +52,22 @@ test("backfill: importador solo queda pendiente", () => {
   assert.equal(result.categoria, "IMPORTADO_PENDIENTE");
 });
 
-test("backfill: operación física posterior verifica un importado", () => {
+test("backfill: operación física posterior no verifica un importado", () => {
   const result = calcularEstadoVerificacion(device([
     event("1", "ALTA_DISPOSITIVO", "2026-08-25T10:00:00Z", null, { source: "Inventario.xlsx" }, "Importador Inventario.xlsx"),
     event("2", "ENVIAR_SERVICIO_TECNICO", "2026-09-02T10:00:00Z", "4", { ordenServicioId: "61" })
   ]));
+  assert.equal(result.resultado, "PENDIENTE");
+  assert.equal(result.categoria, "IMPORTADO_PENDIENTE");
+});
+
+test("backfill: VERIFICADO existente se conserva", () => {
+  const result = calcularEstadoVerificacion(device(
+    [event("1", "ALTA_DISPOSITIVO", "2026-09-01T10:00:00Z", "4")],
+    [{ id: "56", resultado: "VERIFICADO" }]
+  ));
   assert.equal(result.resultado, "VERIFICADO");
-  assert.equal(result.categoria, "OPERACION_POSTERIOR");
+  assert.equal(result.categoria, "MANUAL");
 });
 
 test("backfill: un evento histórico de entrega del importador no verifica", () => {

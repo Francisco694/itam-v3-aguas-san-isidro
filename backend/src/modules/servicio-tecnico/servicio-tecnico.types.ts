@@ -7,6 +7,8 @@ export interface OrdenServicioRow {
   id:string; dispositivo_id:string; codigo_inventario:number;
   tipo_dispositivo:string; marca:string|null; modelo:string|null;
   numero_serie:string|null;imei:string|null;observaciones_envio:string|null;
+  tipo_servicio:"GARANTIA"|"REPARACION"|"MANTENCION"|"DIAGNOSTICO";
+  accesorios_entregados:string|null;plazo_informado:string|null;
   valor_comercial:string|number; proveedor:string|null;
   fecha_envio:Date|string; falla_reportada:string; diagnostico:string|null;
   descripcion_reparacion:string|null; monto_cotizacion:string|number|null;
@@ -14,6 +16,7 @@ export interface OrdenServicioRow {
   observacion_decision:string|null; fecha_decision:Date|string|null;
   responsable_decision:string|null; costo_final:string|number|null;
   fecha_retorno:Date|string|null; resultado:string|null;
+  estado_final:"OPERATIVO"|"SIN_REPARACION"|"BAJA"|null; observaciones_retorno:string|null;
   estado:EstadoOrdenServicio; responsable_envio:string;
   creado_en:Date|string; actualizado_en:Date|string;
   reparaciones_anteriores:string|number; costo_acumulado:string|number;
@@ -35,18 +38,22 @@ export interface EntregaTemporalRow {
 
 export interface CrearOrdenServicioInput {
   dispositivoCodigo:number; proveedor?:string|null;
-  fechaEnvio?:string|null;fallaReportada:string;observaciones?:string|null; responsable:string;
+  fechaEnvio?:string|null;
+  tipoServicio:"GARANTIA"|"REPARACION"|"MANTENCION"|"DIAGNOSTICO";
+  fallaReportada:string; accesoriosEntregados?:string|null; observaciones?:string|null; responsable:string;
 }
 export interface CotizacionInput {
   diagnostico:string; descripcionReparacion:string;
-  montoCotizacion:number; proveedor?:string|null; responsable:string;
+  montoCotizacion:number; plazoInformado?:string|null; proveedor?:string|null; responsable:string;
 }
 export interface DecisionServicioInput {
   decision:"APROBAR"|"RECHAZAR"|"DAR_BAJA";
   motivo?:string|null; observaciones?:string|null; responsable:string;
 }
 export interface CerrarOrdenInput {
-  costoFinal:number; fechaRetorno?:string|null; resultado:string; responsable:string;
+  costoFinal:number; fechaRetorno?:string|null; resultado:string;
+  estadoFinal:"OPERATIVO"|"SIN_REPARACION"|"BAJA";
+  observacionesRetorno?:string|null; responsable:string;
 }
 export interface EntregarTemporalInput {dispositivoCodigo:number;responsable:string;observaciones?:string|null;}
 export interface CerrarTemporalInput {responsable:string;observaciones?:string|null;}

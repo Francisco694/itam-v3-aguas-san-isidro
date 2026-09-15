@@ -80,7 +80,6 @@ const loadDevices = async (): Promise<VerificationDeviceEvidence[]> => {
 const countBy = (decisions: ReturnType<typeof calcularEstadoVerificacion>[]) => ({
   total: decisions.length,
   manualesVerificados: decisions.filter((item) => item.categoria === "MANUAL" && item.resultado === "VERIFICADO").length,
-  importadosVerificadosPorOperacion: decisions.filter((item) => item.categoria === "OPERACION_POSTERIOR").length,
   importadosPendientes: decisions.filter((item) => item.categoria === "IMPORTADO_PENDIENTE").length,
   revisarExistentes: decisions.filter((item) => item.categoria === "REVISAR_EXISTENTE").length,
   sinEvidencia: decisions.filter((item) => item.categoria === "SIN_EVIDENCIA").length,
@@ -104,8 +103,7 @@ const printSummary = (
     ...summary,
     muestras: {
       manuales: samples("MANUAL", "VERIFICADO"),
-      importadosPendientes: samples("IMPORTADO_PENDIENTE", "PENDIENTE"),
-      importadosConOperacionPosterior: samples("OPERACION_POSTERIOR", "VERIFICADO")
+      importadosPendientes: samples("IMPORTADO_PENDIENTE", "PENDIENTE")
     },
     writesPerformed: false
   }, null, 2));

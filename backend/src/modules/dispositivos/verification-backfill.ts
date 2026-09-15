@@ -34,21 +34,10 @@ export interface VerificationDeviceEvidence {
 export interface VerificationDecision {
   resultado: VerificationResult;
   motivo: string;
-  categoria: "MANUAL" | "OPERACION_POSTERIOR" | "IMPORTADO_PENDIENTE" | "REVISAR_EXISTENTE" | "SIN_EVIDENCIA";
+  categoria: "MANUAL" | "IMPORTADO_PENDIENTE" | "REVISAR_EXISTENTE" | "SIN_EVIDENCIA";
   eventoEvidencia: VerificationEventEvidence | null;
   verificacionExistenteId: string | null;
 }
-
-const PHYSICAL_OPERATION_EVENTS = new Set([
-  "DEVOLVER_DISPOSITIVO",
-  "ASIGNAR_COLABORADOR",
-  "ASIGNAR_DEPARTAMENTO",
-  "RECUPERAR_EXTRAVIADO",
-  "RECUPERAR_DADO_BAJA",
-  "RECUPERAR_ACTIVO_OFFBOARDING",
-  "ENVIAR_SERVICIO_TECNICO",
-  "RETORNO_POST_SERVICIO_TECNICO"
-]);
 
 const text = (value: unknown): string =>
   typeof value === "string" ? value.trim() : value == null ? "" : String(value).trim();
@@ -74,11 +63,6 @@ export const esEventoImportado = (event: VerificationEventEvidence): boolean => 
     || responsible.startsWith("IMPORTADOR ");
 };
 
-export const esOperacionFisicaValida = (event: VerificationEventEvidence): boolean =>
-  PHYSICAL_OPERATION_EVENTS.has(event.tipoEvento)
-  && event.usuarioEjecutorId !== null
-  && !esEventoImportado(event);
-
 const firstEvent = (events: VerificationEventEvidence[]): VerificationEventEvidence | null =>
   [...events].sort((left, right) => eventDate(left) - eventDate(right) || Number(left.id) - Number(right.id))[0] ?? null;
 
@@ -86,8 +70,9 @@ const latestEvent = (events: VerificationEventEvidence[]): VerificationEventEvid
   [...events].sort((left, right) => eventDate(right) - eventDate(left) || Number(right.id) - Number(left.id))[0] ?? null;
 
 /**
- * Determina el estado sin inferir custodia ni modificar el estado físico del
- * dispositivo. Los resultados explícitos REVISAR/VERIFICADO se conservan.
+ * Determina el estado sin inferir verificación desde la creación manual ni
+ * desde operaciones posteriores. Los resultados explícitos REVISAR/VERIFICADO
+ * se conservan.
  */
 export const calcularEstadoVerificacion = (
   dispositivo: VerificationDeviceEvidence
@@ -124,11 +109,11 @@ export const calcularEstadoVerificacion = (
   );
   if (altaManual) {
     return {
-      resultado: "VERIFICADO",
-      motivo: "Equipo creado directamente en ITAM por un usuario autenticado.",
-      categoria: "MANUAL",
+      resultado: "PENDIENTE",
+      motivo: "Equipo creado manualmente; queda pendiente hasta una verificación física explícita desde el botón Verificar equipo.",
+      categoria: "SIN_EVIDENCIA",
       eventoEvidencia: altaManual,
-      verificacionExistenteId: null
+      verificacionExistenteId: dispositivo.verificaciones.find((item) => item.resultado === "PENDIENTE")?.id ?? null
     };
   }
 
@@ -139,14 +124,14 @@ export const calcularEstadoVerificacion = (
   );
   const fechaLimite = ultimaImportacion ? eventDate(ultimaImportacion) : -Infinity;
   const operacionPosterior = eventos
-    .filter((event) => eventDate(event) > fechaLimite && esOperacionFisicaValida(event))
+    .filter((event) => eventDate(event) > fechaLimite && event.usuarioEjecutorId !== null && !esEventoImportado(event))
     .sort((left, right) => eventDate(right) - eventDate(left) || Number(right.id) - Number(left.id))[0] ?? null;
 
   if (operacionPosterior) {
     return {
-      resultado: "VERIFICADO",
-      motivo: "Equipo importado con una operación física posterior realizada por un usuario autenticado.",
-      categoria: "OPERACION_POSTERIOR",
+      resultado: "PENDIENTE",
+      motivo: "Equipo importado con actividad posterior; esa actividad no sustituye la verificación física explícita.",
+      categoria: "IMPORTADO_PENDIENTE",
       eventoEvidencia: operacionPosterior,
       verificacionExistenteId: dispositivo.verificaciones.find((item) => item.resultado === "PENDIENTE")?.id ?? null
     };
@@ -155,7 +140,7 @@ export const calcularEstadoVerificacion = (
   if (importados.length > 0) {
     return {
       resultado: "PENDIENTE",
-      motivo: "Equipo importado sin evidencia de una operación física posterior en ITAM.",
+      motivo: "Equipo importado sin verificación física explícita.",
       categoria: "IMPORTADO_PENDIENTE",
       eventoEvidencia: latestEvent(importados),
       verificacionExistenteId: dispositivo.verificaciones.find((item) => item.resultado === "PENDIENTE")?.id ?? null

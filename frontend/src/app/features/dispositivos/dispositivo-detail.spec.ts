@@ -104,8 +104,8 @@ describe('ficha de dispositivo QA-01/03/11', () => {
       },
     } as Dispositivo;
 
-    expect(smartphonePhoneText(device)).toBe('56911111111');
-    expect(assetLabelPhone(device)).toBe('56911111111');
+    expect(smartphonePhoneText(device)).toBe('56922222222');
+    expect(assetLabelPhone(device)).toBe('56922222222');
   });
 
   it('muestra el número que pertenece a la SIM asociada', () => {

@@ -19,7 +19,7 @@ describe('Registrar entrega: formulario', () => {
   const sim = { id: '8', codigoInventario: 555, numeroAsociado: '912345678', compania: 'Operador', estado: { codigo: 'DISPONIBLE' }, dispositivo: null, colaborador: null };
   beforeEach(async () => {
     vi.spyOn(AssetLabel.prototype as any, 'renderQr').mockResolvedValue(undefined);
-    api = { asignarColaborador: vi.fn(() => NEVER), cambiarEstado: vi.fn(() => of({})), verificarManual: vi.fn(() => of({ resultado: 'VERIFICADO' })) };
+    api = { asignarColaborador: vi.fn(() => NEVER), cambiarEstado: vi.fn(() => of({})), verificarManual: vi.fn(() => of({ resultado: 'VERIFICADO' })), asociarLinea: vi.fn(() => of({ id: '15', numeroTelefonico: '56912345678', estado: 'ACTIVA', dispositivoId: '1', simId: '8' })) };
     simApi = { listar: vi.fn(() => of([sim, { ...sim, id: '9', codigoInventario: 556, colaborador: person }])), asociarDispositivo: vi.fn(() => of(sim)) };
     confirmation = { confirm: vi.fn(async () => true) };
     await TestBed.configureTestingModule({ imports: [DispositivoDetail], providers: [provideHttpClient(), provideRouter([]),
@@ -84,11 +84,12 @@ describe('Registrar entrega: formulario', () => {
     expect(confirmation.confirm).toHaveBeenCalledOnce();
     expect(api.verificarManual).toHaveBeenCalledWith(1445);
   });
-  it('asocia una SIM disponible desde el diálogo independiente', () => {
+  it('asocia una SIM disponible desde el diálogo independiente', async () => {
     component.openSimAssociation(); fixture.detectChanges();
     component.selectAssociationSimByCode('555');
-    component.associateSim();
-    expect(simApi.asociarDispositivo).toHaveBeenCalledWith(555, expect.objectContaining({ dispositivoCodigoInventario: 1445 }));
+    await component.associateSim();
+    expect(api.asociarLinea).toHaveBeenCalledWith(1445, expect.objectContaining({ numeroTelefonico: '56912345678', simId: '8' }));
+    expect(simApi.asociarDispositivo).not.toHaveBeenCalled();
   });
   it('exige decidir qué ocurre con la línea al reportar un Smartphone con SIM perdido', async () => {
     component.item.update((device: any) => ({ ...device, simAsociada: sim }));

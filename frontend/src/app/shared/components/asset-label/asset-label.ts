@@ -19,8 +19,8 @@ export const assetLabelResponsible = (device: LabelDevice): string => {
 };
 
 export const assetLabelPhone = (device: Pick<LabelDevice, 'simAsociada' | 'lineaMovil' | 'numeroTelefonico' | 'labelPhone'>): string | null =>
-  device.numeroTelefonico?.trim()
-  || device.lineaMovil?.numeroTelefonico?.trim()
+  device.lineaMovil?.numeroTelefonico?.trim()
+  || device.numeroTelefonico?.trim()
   || device.labelPhone?.trim()
   || device.simAsociada?.lineaMovil?.numeroTelefonico?.trim()
   || device.simAsociada?.numeroAsociado?.trim()
