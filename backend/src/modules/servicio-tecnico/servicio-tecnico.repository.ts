@@ -1,6 +1,6 @@
 import type { PoolClient } from "pg";
 import { pool } from "../../config/database";
-import type { EntregaTemporalRow, OrdenServicioRow } from "./servicio-tecnico.types";
+import type { CotizacionArchivoRow, EntregaTemporalRow, OrdenServicioRow } from "./servicio-tecnico.types";
 
 export const selectOrden = `
  SELECT o.*,d.codigo_inventario,t.nombre AS tipo_dispositivo,d.marca,d.modelo,
@@ -18,13 +18,31 @@ export const selectOrden = `
  JOIN itam.tipos_dispositivo t ON t.id=d.tipo_dispositivo_id
  LEFT JOIN itam.colaboradores custodio ON custodio.id=o.colaborador_id_al_ingreso
  LEFT JOIN itam.departamentos departamento ON departamento.id=o.departamento_id_al_ingreso
- LEFT JOIN itam.colaboradores recepcionante ON recepcionante.id=o.recibido_por_id_al_ingreso`;
-
+ LEFT JOIN itam.colaboradores recepcionante ON recepcionante.id=o.recibido_por_id_al_ingreso
+ LEFT JOIN LATERAL (
+   SELECT archivo.id AS cotizacion_archivo_id,archivo.proveedor AS cotizacion_archivo_proveedor,
+          archivo.nombre_original AS cotizacion_archivo_nombre_original,
+          archivo.mime_type AS cotizacion_archivo_mime_type,
+          archivo.tamanio_bytes AS cotizacion_archivo_tamanio_bytes,
+          archivo.version AS cotizacion_archivo_version,
+          archivo.activo AS cotizacion_archivo_activo,
+          archivo.subido_por AS cotizacion_archivo_subido_por,
+          archivo.creado_en AS cotizacion_archivo_creado_en
+   FROM itam.servicio_tecnico_cotizaciones_archivos archivo
+   WHERE archivo.orden_servicio_tecnico_id=o.id AND archivo.activo=TRUE
+   ORDER BY archivo.version DESC,archivo.id DESC LIMIT 1
+ ) cotizacion_archivo ON TRUE`;
 export const listarOrdenes = async ():Promise<OrdenServicioRow[]> =>
   (await pool.query<OrdenServicioRow>(`${selectOrden} ORDER BY o.fecha_envio DESC`)).rows;
 
 export const obtenerOrden = async (id:number,client?:PoolClient):Promise<OrdenServicioRow|null> =>
   ((await (client??pool).query<OrdenServicioRow>(`${selectOrden} WHERE o.id=$1 LIMIT 1`,[id])).rows[0]??null);
+
+export const obtenerOrdenParaActualizar = async (id:number,client:PoolClient):Promise<OrdenServicioRow|null> =>
+  ((await client.query<OrdenServicioRow>(`${selectOrden} WHERE o.id=$1 LIMIT 1 FOR UPDATE OF o`,[id])).rows[0]??null);
+
+export const obtenerCotizacionArchivo = async (ordenId:number,client?:PoolClient):Promise<CotizacionArchivoRow|null> =>
+  ((await (client??pool).query<CotizacionArchivoRow>(`SELECT * FROM itam.servicio_tecnico_cotizaciones_archivos WHERE orden_servicio_tecnico_id=$1 AND activo=TRUE ORDER BY version DESC,id DESC LIMIT 1`,[ordenId])).rows[0]??null);
 
 export const obtenerOrdenAbiertaPorDispositivo = async (
   dispositivoId:string,client:PoolClient

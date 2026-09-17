@@ -35,12 +35,12 @@ const device = (
   verificaciones
 });
 
-test("backfill: creación manual queda pendiente", () => {
+test("backfill: creación manual queda verificada", () => {
   const result = calcularEstadoVerificacion(device([
     event("1", "ALTA_DISPOSITIVO", "2026-09-01T10:00:00Z", "4", { codigoInventario: 1444 })
   ]));
-  assert.equal(result.resultado, "PENDIENTE");
-  assert.equal(result.categoria, "SIN_EVIDENCIA");
+  assert.equal(result.resultado, "VERIFICADO");
+  assert.equal(result.categoria, "MANUAL");
 });
 
 test("backfill: importador solo queda pendiente", () => {
@@ -81,11 +81,11 @@ test("backfill: un evento histórico de entrega del importador no verifica", () 
   assert.equal(result.resultado, "PENDIENTE");
 });
 
-test("backfill: REVISAR existente se conserva", () => {
+test("backfill: un REVISAR previo de alta manual queda verificado", () => {
   const result = calcularEstadoVerificacion(device(
     [event("1", "ALTA_DISPOSITIVO", "2026-09-01T10:00:00Z", "4")],
     [{ id: "55", resultado: "REVISAR" }]
   ));
-  assert.equal(result.resultado, "REVISAR");
-  assert.equal(result.categoria, "REVISAR_EXISTENTE");
+  assert.equal(result.resultado, "VERIFICADO");
+  assert.equal(result.categoria, "MANUAL");
 });

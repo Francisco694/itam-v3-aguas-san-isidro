@@ -84,7 +84,8 @@ const countBy = (decisions: ReturnType<typeof calcularEstadoVerificacion>[]) => 
   revisarExistentes: decisions.filter((item) => item.categoria === "REVISAR_EXISTENTE").length,
   sinEvidencia: decisions.filter((item) => item.categoria === "SIN_EVIDENCIA").length,
   verificados: decisions.filter((item) => item.resultado === "VERIFICADO").length,
-  pendientes: decisions.filter((item) => item.resultado === "PENDIENTE").length
+  pendientes: decisions.filter((item) => item.categoria === "IMPORTADO_PENDIENTE" && item.resultado === "PENDIENTE").length,
+  writesPerformed: false
 });
 
 const printSummary = (
@@ -105,7 +106,6 @@ const printSummary = (
       manuales: samples("MANUAL", "VERIFICADO"),
       importadosPendientes: samples("IMPORTADO_PENDIENTE", "PENDIENTE")
     },
-    writesPerformed: false
   }, null, 2));
 };
 

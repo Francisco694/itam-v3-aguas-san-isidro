@@ -219,11 +219,13 @@ type DeviceAction = 'assign-person' | 'assign-department' | 'return' | 'state' |
       </section>
       <section class="traceability-overview" aria-label="Resumen de trazabilidad">
         <article><small>ESTADO DEL EQUIPO</small><strong>{{ device.estado.nombre }}</strong><span>{{ terminal() ? 'Fuera de la operación normal' : 'Estado registrado actualmente' }}</span></article>
+        <article><small>VERIFICACIÓN FÍSICA</small><strong>{{ device.origenRegistro === 'MANUAL' || device.verificacionFisica?.resultado === 'VERIFICADO' ? 'Verificado' : 'No verificado' }}</strong><span>{{ device.origenRegistro === 'MANUAL' ? 'Acreditada por registro manual' : 'Auditoría física del inventario' }}</span></article>
         <article><small>RESPONSABLE ACTUAL</small>@if(traceability()?.responsableActual;as current){<strong>En poder de {{current.nombre}}</strong><span>{{current.tipo==='COLABORADOR' ? ('RUT '+(current.rut||'no informado')) : 'Departamento responsable'}}</span>}@else{<strong>Sin responsable actual</strong><span>{{device.estado.codigo==='DISPONIBLE' ? 'Disponible para entregar' : 'No registra una entrega vigente'}}</span>}</article>
         <article><small>ÚLTIMO RESPONSABLE CONOCIDO</small>@if(traceability()?.ultimoResponsableConocido;as previous){<strong>{{previous.nombre}}</strong><span>{{previous.tipo==='COLABORADOR' ? ('RUT '+(previous.rut||'no informado')) : 'Departamento'}} · {{previous.fechaUltimoMovimiento|date:'dd/MM/yyyy HH:mm'}} · {{originLabel(previous.origenDato)}}</span>}@else{<strong>Sin responsable conocido</strong><span>No existe evidencia histórica vinculada</span>}</article>
       </section>
       @for(alert of traceability()?.alertas || [];track alert){<div class="notice notice--warning traceability-alert"><svg lucideCircleAlert></svg><div><strong>{{ alert.includes('Asignado') ? 'Requiere revisión' : (device.estado.codigo==='EXTRAVIADO' ? 'Equipo perdido' : 'Equipo retirado del inventario') }}</strong><span>{{alert}}</span></div></div>}
-      @if(activeServiceOrder(); as order){<section class="notice technical-service-card" role="status"><svg lucideWrench></svg><div><strong>Equipo en servicio técnico</strong><span>Este equipo está apartado del inventario operativo mientras se encuentra en revisión técnica.</span><dl><div><dt>Revisión N°</dt><dd>#{{order.id}}</dd></div><div><dt>Fecha de envío</dt><dd>{{serviceDateLabel(order.fechaEnvio)}}</dd></div><div><dt>Proveedor / técnico / destino</dt><dd>{{order.proveedor || 'No informado'}}</dd></div><div><dt>Falla reportada</dt><dd>{{order.fallaReportada}}</dd></div><div><dt>Estado de la revisión</dt><dd>{{technicalServiceStatusLabel(order.estado)}}</dd></div></dl><a class="btn btn--secondary btn--small" routerLink="/servicio-tecnico">Ver revisión técnica</a></div></section>}
+      @if(activeServiceOrder(); as order){<section class="notice technical-service-card" role="status"><svg lucideWrench></svg><div><strong>Equipo en servicio técnico</strong><span>Este equipo está apartado del inventario operativo mientras se encuentra en revisión técnica.</span><dl><div><dt>Revisión N°</dt><dd>#{{order.id}}</dd></div><div><dt>Fecha de envío</dt><dd>{{serviceDateLabel(order.fechaEnvio)}}</dd></div><div><dt>Proveedor / técnico / destino</dt><dd>{{order.proveedor || 'No informado'}}</dd></div><div><dt>Falla reportada</dt><dd>{{order.fallaReportada}}</dd></div><div><dt>Estado de la revisión</dt><dd>{{technicalServiceStatusLabel(order.estado)}}</dd></div></dl><a class="btn btn--secondary btn--small" [routerLink]="['/servicio-tecnico']" [queryParams]="{orden: order.id}">Ver revisión técnica</a></div></section>}
+      @if(serviceOrders().length){<section class="technical-history"><div class="column-title"><span>04</span><div><small>SERVICIO TÉCNICO</small><h3>Historial de servicio técnico</h3></div></div><div class="technical-history__list">@for(order of serviceOrders(); track order.id){<article><header><strong>Revisión #{{order.id}}</strong><span>{{technicalServiceStatusLabel(order.estado)}}</span></header><dl><div><dt>Fecha</dt><dd>{{serviceDateLabel(order.fechaEnvio)}}</dd></div><div><dt>Proveedor</dt><dd>{{order.proveedor || 'No informado'}}</dd></div><div><dt>Falla</dt><dd>{{order.fallaReportada}}</dd></div><div><dt>Costo cotizado / final</dt><dd>{{order.montoCotizacion === null ? 'No informado' : clp(order.montoCotizacion)}} / {{order.costoFinal === null ? 'No informado' : clp(order.costoFinal)}}</dd></div></dl><a class="btn btn--secondary btn--small" [routerLink]="['/servicio-tecnico']" [queryParams]="{orden: order.id}">Ver orden y cotización</a></article>}</div></section>}
       <section class="panoramic-card">
         <article class="panoramic-column details-column">
           <div class="column-title"><span>01</span><div><small>IDENTIFICACIÓN</small><h3>Detalles</h3></div></div>
@@ -249,7 +251,7 @@ type DeviceAction = 'assign-person' | 'assign-department' | 'return' | 'state' |
         <article class="panoramic-column audit-column">
           <div class="column-title"><span>02</span><div><small>TRAZABILIDAD</small><h3>Historial del equipo</h3></div><svg lucideHistory></svg></div>
           @if (!history().length) { <app-view-state kind="empty" title="Sin movimientos" message="Este equipo aún no registra movimientos." /> }
-          @else { <div class="audit-timeline">@for(event of history(); track event.id){<article class="audit-event"><span class="audit-event__node"></span><div><strong>{{ eventLabel(event.tipoEvento) }}</strong>@if(event.tipoEvento==='VERIFICACION_FISICA'){<p>{{ verificationEventLabel(event) }}</p>}<p><span>{{ event.estadoAnterior?.nombre || 'Sin estado' }}</span><b>→</b><span>{{ event.estadoNuevo?.nombre || 'Sin cambio' }}</span></p>          @if(custodyText(event,'custodiaAnterior');as before){<p><span>{{before}}</span><b>→</b><span>{{custodyText(event,'custodiaNueva')||'Sin responsable'}}</span></p>}@if(event.observaciones){<blockquote>{{ event.observaciones }}</blockquote>}<footer><time>{{ event.fechaEvento | date:'dd/MM/yyyy HH:mm' }}</time><span>{{ event.responsable }}</span></footer></div></article>}</div> }
+          @else { <div class="audit-timeline">@for(event of history(); track event.id){<article class="audit-event"><span class="audit-event__node"></span><div><strong>{{ eventLabel(event.tipoEvento) }}</strong>@if(event.tipoEvento==='VERIFICACION_FISICA' || event.tipoEvento==='EQUIPO_VERIFICADO_POR_REGISTRO_MANUAL'){<p>{{ verificationEventLabel(event) }}</p>}<p><span>{{ event.estadoAnterior?.nombre || 'Sin estado' }}</span><b>→</b><span>{{ event.estadoNuevo?.nombre || 'Sin cambio' }}</span></p>          @if(custodyText(event,'custodiaAnterior');as before){<p><span>{{before}}</span><b>→</b><span>{{custodyText(event,'custodiaNueva')||'Sin responsable'}}</span></p>}@if(event.observaciones){<blockquote>{{ event.observaciones }}</blockquote>}<footer><time>{{ event.fechaEvento | date:'dd/MM/yyyy HH:mm' }}</time><span>{{ event.responsable }}</span></footer></div></article>}</div> }
         </article>
         <aside class="panoramic-column actions-column">
           <div class="column-title"><span>03</span><div><small>GESTIÓN</small><h3>Acciones del equipo</h3></div></div>
@@ -257,12 +259,12 @@ type DeviceAction = 'assign-person' | 'assign-department' | 'return' | 'state' |
             <div class="operation-list">
               <button type="button" [disabled]="terminal() || technicalServiceActive() || device.tipoCustodia!=='NONE'" (click)="open('assign-person')"><svg lucideUserCheck></svg><span>Entregar equipo<small>A un colaborador habilitado</small></span></button>
               @if((device.colaborador || device.departamento) && !terminal() && !technicalServiceActive()){<button type="button" class="operation-return" (click)="open('return')"><svg lucideRotateCcw></svg><span>Recibir en bodega<small>Registra recepción y revisión</small></span></button>}
-              @if(!technicalServiceActive()){<button type="button" [disabled]="terminal()" (click)="open('service')"><svg lucideWrench></svg><span>Enviar a revisión técnica<small>Crear orden y bloquear movimientos</small></span></button>}
+              @if(!technicalServiceActive()){<button type="button" [disabled]="terminal()" (click)="openServiceOrder()"><svg lucideWrench></svg><span>Enviar a Servicio Técnico<small>Crear orden y bloquear movimientos</small></span></button>}
               <button type="button" [disabled]="!stateExists('EXTRAVIADO')" (click)="openState('EXTRAVIADO')"><svg lucideShieldAlert></svg><span>Reportar equipo perdido<small>Requiere confirmación</small></span></button>
               <button type="button" (click)="open('assign-department')" [disabled]="terminal() || technicalServiceActive() || device.tipoCustodia!=='NONE'"><svg lucideBuilding></svg><span>Entregar a departamento<small>Responsabilidad institucional</small></span></button>
               <button type="button" (click)="open('state')"><svg lucidePackageCheck></svg><span>Cambiar situación del equipo<small>Ver opciones disponibles</small></span></button>
-              @if((device.verificacionFisica?.resultado || 'PENDIENTE') === 'PENDIENTE'){
-                <button type="button" (click)="verifyManually()"><svg lucidePackageCheck></svg><span>Verificar equipo<small>Confirmar revisión física y datos del equipo</small></span></button>
+              @if(canVerifyManually(device)){
+                <button type="button" (click)="verifyManually()"><svg lucidePackageCheck></svg><span>Verificar equipo<small>Acción opcional de auditoría física</small></span></button>
               }
               @if(isSmartphone(device) && !terminal()){<button type="button" (click)="openSimAssociation()"><svg lucidePlus></svg><span>{{ lineActionCopy(device).title }}<small>{{ lineActionCopy(device).description }}</small></span></button>}
               @if(device.estado.codigo==='EXTRAVIADO' || device.estado.codigo==='DADO_BAJA'){<button type="button" (click)="open('recover')"><svg lucideRotateCcw></svg><span>Registrar equipo encontrado<small>Reactivar con trazabilidad</small></span></button>}
@@ -270,6 +272,7 @@ type DeviceAction = 'assign-person' | 'assign-department' | 'return' | 'state' |
             </div>
           } @else {
             <form class="action-form" [formGroup]="actionForm" (ngSubmit)="execute()">
+              @if(action()==='service'){<section class="technical-order-identity"><strong>Orden de Trabajo - Servicio Técnico</strong><span>Revisa los antecedentes del equipo antes de registrar el envío.</span><dl><div><dt>Código ITAM</dt><dd>{{device.codigoInventario}}</dd></div><div><dt>Tipo de equipo</dt><dd>{{device.tipo.nombre}}</dd></div><div><dt>Marca / modelo</dt><dd>{{device.marca || 'Sin marca'}} {{device.modelo || ''}}</dd></div><div><dt>IMEI / serie</dt><dd>{{device.imei || device.numeroSerie || 'No informado'}}</dd></div><div><dt>Usuario / área</dt><dd>{{device.colaborador?.nombre || device.departamento?.nombre || 'No informado'}}</dd></div></dl></section>}
               <header><div><small>OPERACIÓN EN CURSO</small><h4>{{ actionTitle() }}</h4></div><button class="icon-button" type="button" aria-label="Cancelar operación" [disabled]="submitting()" (click)="action.set(null)"><svg lucideX></svg></button></header>
               @if(actionError()){<div class="notice notice--error" role="alert"><strong>{{ actionErrorTitle() || 'No se pudo registrar la operación' }}</strong><span>{{ actionError() }}</span></div>}
               @if(action()==='assign-person'){
@@ -354,6 +357,7 @@ type DeviceAction = 'assign-person' | 'assign-department' | 'return' | 'state' |
               @if(action()==='retire'){<div class="notice notice--info">La baja conservará el motivo, el valor comercial vigente y el responsable TI en la trazabilidad.</div><div class="field"><label for="retire-reason">Motivo *</label><select id="retire-reason" formControlName="motivoBaja"><option value="">Seleccionar</option><option value="IRREPARABLE">Irreparable</option><option value="REPARACION_NO_CONVENIENTE">Reparación no conveniente</option><option value="MULTIPLES_REPARACIONES">Múltiples reparaciones</option><option value="OBSOLESCENCIA">Obsolescencia</option><option value="DANO_FISICO">Daño físico</option><option value="SIN_REPUESTOS">Sin repuestos</option><option value="OTRO">Otro</option></select></div>}
               <div class="field action-notes"><label for="action-notes">Observaciones</label><textarea id="action-notes" formControlName="observaciones" placeholder="Motivo, condición o antecedentes relevantes"></textarea></div>
               <div class="action-form__buttons"><button class="btn btn--ghost" type="button" (click)="action.set(null)">Cancelar</button><button class="btn btn--primary" type="submit" [disabled]="submitting()">{{ submitting() ? 'Procesando…' : (action()==='service'?'Registrar envío':'Confirmar operación') }}</button></div>
+              @if(action()==='service'){<div class="form-grid"><div class="field"><label for="service-area">Área solicitante</label><input id="service-area" formControlName="areaSolicitante" maxlength="180" /></div><div class="field"><label for="service-contact">Contacto del servicio técnico</label><input id="service-contact" formControlName="contactoServicio" maxlength="180" /></div></div><div class="field"><label for="service-responsible">Responsable TI *</label><input id="service-responsible" formControlName="responsable" maxlength="150" /></div>}
             </form>
           }
         </aside>
@@ -432,13 +436,6 @@ export class DispositivoDetail implements OnInit {
   private showModalError(title: string, detail: string): void {
     this.modalError.set({ title, detail });
   }
-  private downloadServicePdf(order: OrdenServicio, blob: Blob): void {
-    const url=URL.createObjectURL(blob),link=document.createElement('a');
-    link.href=url;
-    link.download='OT-'+order.id+'-servicio-tecnico.pdf';
-    link.click();
-    URL.revokeObjectURL(url);
-  }
   private resetDetailStateForRoute(): void {
     this.submitting.set(false);
     this.action.set(null);
@@ -447,6 +444,7 @@ export class DispositivoDetail implements OnInit {
     this.returnProof.set(null);
     this.createdActa.set(null);
     this.activeServiceOrder.set(null);
+    this.serviceOrders.set([]);
     this.simAssociationOpen.set(false);
     this.selectedSim.set(null);
     this.simPhone.set('');
@@ -479,6 +477,7 @@ export class DispositivoDetail implements OnInit {
   protected readonly submitting = signal(false);
   protected readonly action = signal<DeviceAction | null>(null);
   protected readonly activeServiceOrder = signal<OrdenServicio | null>(null);
+  protected readonly serviceOrders = signal<OrdenServicio[]>([]);
   protected readonly returnProof = signal<ComprobanteDevolucion | null>(null);
   protected readonly createdActa=signal<ActaEntrega|null>(null);
   protected readonly clp=formatClp;
@@ -493,12 +492,12 @@ export class DispositivoDetail implements OnInit {
   protected readonly labelPhone=smartphonePhoneValue;
   protected technicalServiceActive(): boolean { return this.item()?.estado.codigo === 'SERVICIO_TECNICO' || !!this.activeServiceOrder(); }
   protected originLabel(origin: 'HISTORIAL'|'BAJA'|'COMPROBANTE'): string { return {HISTORIAL:'Historial',BAJA:'Registro de baja',COMPROBANTE:'Comprobante'}[origin]; }
-  protected eventLabel(event: string): string { return { ALTA_DISPOSITIVO: 'Equipo incorporado al inventario', ASIGNAR_COLABORADOR: 'Equipo entregado a un colaborador', CONCILIAR_DISPOSITIVO_EXISTENTE: 'Registro actualizado desde inventario anterior', DEVOLVER_A_BODEGA: 'Equipo recibido en bodega', CAMBIAR_ESTADO: 'Situación del equipo actualizada', REPORTAR_EXTRAVIO: 'Equipo reportado como perdido', DAR_DE_BAJA: 'Equipo retirado del inventario', VERIFICACION_FISICA: 'Verificación física', VERIFICACION_MANUAL_EQUIPO: 'Equipo verificado manualmente por usuario', SIM_ASOCIADA_A_DISPOSITIVO: 'SIM asociada al smartphone', ENTREGA_EQUIPO_CON_SIM: 'Smartphone entregado con SIM', LINEA_MOVIL_NUMERO_ACTUALIZADO: 'Número telefónico actualizado' }[event] || event.replaceAll('_', ' '); }
-  protected verificationEventLabel(event: HistorialEvento): string { const result = event.detalle['resultado']; return result === 'VERIFICADO' ? '✓ Equipo verificado' : '! Datos por revisar'; }
+  protected eventLabel(event: string): string { return { ALTA_DISPOSITIVO: 'Equipo incorporado al inventario', ASIGNAR_COLABORADOR: 'Equipo entregado a un colaborador', CONCILIAR_DISPOSITIVO_EXISTENTE: 'Registro actualizado desde inventario anterior', DEVOLVER_A_BODEGA: 'Equipo recibido en bodega', CAMBIAR_ESTADO: 'Situación del equipo actualizada', REPORTAR_EXTRAVIO: 'Equipo reportado como perdido', DAR_DE_BAJA: 'Equipo retirado del inventario', VERIFICACION_FISICA: 'Verificación física', VERIFICACION_MANUAL_EQUIPO: 'Equipo verificado manualmente por usuario', EQUIPO_VERIFICADO_POR_REGISTRO_MANUAL: 'Equipo verificado por registro manual', SIM_ASOCIADA_A_DISPOSITIVO: 'SIM asociada al smartphone', ENTREGA_EQUIPO_CON_SIM: 'Smartphone entregado con SIM', LINEA_MOVIL_NUMERO_ACTUALIZADO: 'Número telefónico actualizado' }[event] || event.replaceAll('_', ' '); }
+  protected verificationEventLabel(event: HistorialEvento): string { const result = event.detalle['resultado']; return result === 'VERIFICADO' ? '✓ Equipo verificado' : '○ Equipo no verificado'; }
   private codigo = 0;
   private id = '';
   private routeAction = '';
-  protected readonly actionForm = this.fb.nonNullable.group({ colaboradorId: [''], departamentoId: [''], recibidoPorId:[''], localidad: [''], ubicacionDetalle: [''], estadoId: [''], accionLineaExtravio: [''], proveedor:[''], fechaEnvio:[''], tipoServicio:[''], fallaReportada:[''], accesoriosEntregados:[''], motivoBaja:[''], motivoRecuperacion:[''], responsable: ['', [Validators.required, Validators.maxLength(150)]], observaciones: [''] });
+  protected readonly actionForm = this.fb.nonNullable.group({ colaboradorId: [''], departamentoId: [''], recibidoPorId:[''], localidad: [''], ubicacionDetalle: [''], estadoId: [''], accionLineaExtravio: [''], proveedor:[''], areaSolicitante:[''], contactoServicio:[''], fechaEnvio:[''], tipoServicio:[''], fallaReportada:[''], accesoriosEntregados:[''], motivoBaja:[''], motivoRecuperacion:[''], responsable: ['', [Validators.required, Validators.maxLength(150)]], observaciones: [''] });
 
   ngOnInit(): void {
     combineLatest([this.route.paramMap, this.route.queryParamMap])
@@ -517,13 +516,17 @@ export class DispositivoDetail implements OnInit {
   protected load(): void {
     const requestedId = this.id;
     this.loading.set(true); this.error.set('');
-    forkJoin({ traceability: this.service.trazabilidad(this.id), states: this.estadosService.listar('DISPOSITIVO'), collaborators: this.colaboradoresService.listar({ activo: true }), departments: this.departamentosService.listar(), serviceOrders: this.technicalService.listar().pipe(catchError(() => of([] as OrdenServicio[]))) }).subscribe({ next: (result) => { if (requestedId !== this.id) return; this.traceability.set(result.traceability); this.item.set(result.traceability.dispositivo); this.codigo = result.traceability.dispositivo.codigoInventario; this.activeServiceOrder.set(activeTechnicalServiceOrderForDevice(result.serviceOrders, this.codigo)); this.history.set(result.traceability.eventos); this.states.set(result.states.filter((state) => state.activo)); this.collaborators.set(result.collaborators); this.departments.set(result.departments.filter((department) => department.activo)); this.loading.set(false); if (this.routeAction === 'assign' && !this.terminal() && !this.technicalServiceActive()) this.open('assign-person'); }, error: (error) => { if (requestedId !== this.id) return; this.error.set(errorMessage(error)); this.loading.set(false); } });
+    forkJoin({ traceability: this.service.trazabilidad(this.id), states: this.estadosService.listar('DISPOSITIVO'), collaborators: this.colaboradoresService.listar({ activo: true }), departments: this.departamentosService.listar(), serviceOrders: this.technicalService.listar().pipe(catchError(() => of([] as OrdenServicio[]))) }).subscribe({ next: (result) => { if (requestedId !== this.id) return; this.traceability.set(result.traceability); this.item.set(result.traceability.dispositivo); this.codigo = result.traceability.dispositivo.codigoInventario; this.serviceOrders.set(result.serviceOrders.filter(order => String(order.dispositivo.id) === String(result.traceability.dispositivo.id))); this.activeServiceOrder.set(activeTechnicalServiceOrderForDevice(result.serviceOrders, this.codigo)); this.history.set(result.traceability.eventos); this.states.set(result.states.filter((state) => state.activo)); this.collaborators.set(result.collaborators); this.departments.set(result.departments.filter((department) => department.activo)); this.loading.set(false); if (this.routeAction === 'assign' && !this.terminal() && !this.technicalServiceActive()) this.open('assign-person'); }, error: (error) => { if (requestedId !== this.id) return; this.error.set(errorMessage(error)); this.loading.set(false); } });
   }
   protected terminal(): boolean { return this.states().find((state) => state.id === this.item()?.estado.id)?.esTerminal ?? false; }
   protected stateExists(code: string): boolean { return this.states().some((state) => state.codigo === code); }
+  protected canVerifyManually(device: Dispositivo): boolean {
+    return device.origenRegistro === 'IMPORTADO'
+      && (device.verificacionFisica?.resultado || 'PENDIENTE') === 'PENDIENTE';
+  }
   protected async verifyManually(): Promise<void> {
     if(this.submitting() || (this.item()?.verificacionFisica?.resultado || 'PENDIENTE')!=='PENDIENTE') return;
-    const confirmed=await this.confirmation.confirm('Antes de continuar, confirme que revisó correctamente el código ITAM, tipo de equipo, marca/modelo, IMEI o número de serie, responsable actual, ubicación y estado operativo. Esta acción registrará un evento único en el historial del equipo.',{title:'Verificar equipo',confirmLabel:'Confirmar verificación'});
+    const confirmed=await this.confirmation.confirm('Esta es una acción opcional de auditoría física. Confirme que revisó correctamente el código ITAM, tipo de equipo, marca/modelo, IMEI o número de serie, responsable actual, ubicación y estado operativo. Solo esta acción marcará el equipo como verificado y registrará un evento en su historial.',{title:'Verificar equipo',confirmLabel:'Confirmar verificación'});
     if(!confirmed)return;
     this.submitting.set(true);
     this.service.verificarManual(this.codigo).subscribe({next:()=>{this.submitting.set(false);this.toast.success('Equipo verificado','La verificación manual quedó registrada en el historial.');this.load();},error:error=>{this.submitting.set(false);this.toast.error('No se pudo verificar',errorMessage(error));}});
@@ -627,7 +630,8 @@ export class DispositivoDetail implements OnInit {
   protected open(action: DeviceAction): void { const actor=this.auth.user();if(!actor){this.actionError.set('La sesión no permite identificar al responsable TI.');this.toast.error('Sesión no válida','Vuelva a iniciar sesión antes de registrar una operación.');return;}if(action==='service'&&this.technicalServiceActive()){this.actionErrorTitle.set('No se pudo registrar el envío a servicio técnico');this.actionError.set('El equipo ya se encuentra en servicio técnico.');return;}this.actionForm.reset({ colaboradorId: '', departamentoId: '',recibidoPorId:'', localidad: this.item()?.localidad || '', ubicacionDetalle: this.item()?.ubicacionDetalle || '', estadoId: '',accionLineaExtravio:'',proveedor:'',fechaEnvio: action==='service' ? todayDateInputValue() : '',tipoServicio: action==='service' ? 'DIAGNOSTICO' : '',fallaReportada:'',accesoriosEntregados:'',motivoBaja:'',motivoRecuperacion:'', responsable: actor.nombre, observaciones: '' }); this.searchCollaborator(''); this.jointDelivery.set(false); this.deliveryPhone.set(action==='assign-person'&&this.item()&&isSmartphoneDevice(this.item()!) ? smartphonePhoneValue(this.item()!) || '' : ''); this.searchSim(''); this.actionError.set(''); this.actionErrorTitle.set(''); this.action.set(action); }
   protected openState(code: string): void { const state = this.states().find((item) => item.codigo === code); if (!state) return; this.open('state'); this.actionForm.controls.estadoId.setValue(state.id); if(code==='EXTRAVIADO'&&this.item()&&isSmartphoneDevice(this.item()!)&&!this.item()!.simAsociada)this.actionForm.controls.accionLineaExtravio.setValue('NO_APLICA'); }
   protected isReportingSmartphoneLost(): boolean { const target=this.states().find(state=>state.id===this.actionForm.controls.estadoId.value);const device=this.item();return this.action()==='state'&&!!device&&isSmartphoneDevice(device)&&target?.codigo==='EXTRAVIADO'; }
-  protected actionTitle(): string { return { 'assign-person': 'Registrar entrega', 'assign-department': 'Entregar a departamento', return: 'Registrar recepción', state: 'Cambiar situación del equipo', recover: 'Registrar equipo encontrado', service:'Enviar a revisión técnica',retire:'Retirar del inventario' }[this.action() || 'return']; }
+  protected actionTitle(): string { return { 'assign-person': 'Registrar entrega', 'assign-department': 'Entregar a departamento', return: 'Registrar recepción', state: 'Cambiar situación del equipo', recover: 'Registrar equipo encontrado', service:'Orden de Trabajo - Servicio Técnico',retire:'Retirar del inventario' }[this.action() || 'return']; }
+  protected openServiceOrder(): void { this.open('service'); const device=this.item(); if(device)this.actionForm.controls.areaSolicitante.setValue(device.departamento?.nombre || 'Area TI - Aguas San Isidro'); }
   protected departmentReceivers():Colaborador[]{return receiversForDepartment(this.collaborators(),this.actionForm.controls.departamentoId.value);}
   protected custodyText(event: HistorialEvento, key: 'custodiaAnterior'|'custodiaNueva'): string {
     const value = event.detalle[key];
@@ -669,7 +673,7 @@ export class DispositivoDetail implements OnInit {
     if (action === 'assign-person') request = this.service.asignarColaborador(this.codigo, { ...common, colaboradorId: Number(value.colaboradorId), ...(deliveryPhoneValue && this.item() && isSmartphoneDevice(this.item()!) ? { numeroTelefonico: deliveryPhoneValue } : {}), ...(this.jointDelivery() && this.selectedSim() ? { simCodigoInventario: this.selectedSim()!.codigoInventario } : {}) });
     else if (action === 'assign-department') request = this.service.asignarDepartamento(this.codigo, { ...common, departamentoId: Number(value.departamentoId),recibidoPorId:Number(value.recibidoPorId), localidad: value.localidad.trim() || null, ubicacionDetalle: value.ubicacionDetalle.trim() || null });
     else if (action === 'return') request = this.service.devolver(this.codigo, common);
-    else if(action==='service')request=this.technicalService.crear({dispositivoCodigo:this.codigo,proveedor:value.proveedor.trim()||null,fechaEnvio:value.fechaEnvio||null,tipoServicio:value.tipoServicio as 'GARANTIA'|'REPARACION'|'MANTENCION'|'DIAGNOSTICO',fallaReportada:value.fallaReportada.trim(),accesoriosEntregados:value.accesoriosEntregados.trim()||null,observaciones:value.observaciones.trim()||null,responsable:actor.nombre});
+    else if(action==='service')request=this.technicalService.crear({dispositivoCodigo:this.codigo,proveedor:value.proveedor.trim()||null,areaSolicitante:value.areaSolicitante.trim()||this.item()?.departamento?.nombre||'Area TI - Aguas San Isidro',contactoServicio:value.contactoServicio.trim()||null,fechaEnvio:value.fechaEnvio||null,tipoServicio:value.tipoServicio as 'GARANTIA'|'REPARACION'|'MANTENCION'|'DIAGNOSTICO',fallaReportada:value.fallaReportada.trim(),accesoriosEntregados:value.accesoriosEntregados.trim()||null,observaciones:value.observaciones.trim()||null,responsable:actor.nombre});
     else if(action==='retire')request=this.service.darBaja(this.codigo,{...common,motivo:value.motivoBaja as import('../../core/models/itam.models').MotivoBaja});
     else request = this.service.cambiarEstado(this.codigo, { ...common, estadoId: Number(value.estadoId), ...(action === 'recover' ? { recuperar: true, motivoRecuperacion: value.motivoRecuperacion.trim() } : {}), ...(action === 'state' && this.isReportingSmartphoneLost() ? { accionLineaExtravio: value.accionLineaExtravio as import('../../core/models/itam.models').AccionLineaExtravio } : {}) });
     this.submitting.set(true); this.actionError.set(''); this.actionErrorTitle.set('');
@@ -677,22 +681,7 @@ export class DispositivoDetail implements OnInit {
       next: (result) => {
         if(action==='service'&&'entregasTemporales' in result){
           const order=result;
-          this.technicalService.envioPdf(order.id).subscribe({
-            next:blob=>{
-              this.downloadServicePdf(order,blob);
-              this.activeServiceOrder.set(order);
-              this.action.set(null);
-              this.submitting.set(false);
-              this.showFeedback({type:'success',title:'Equipo enviado a servicio técnico',detail:'El envío fue registrado correctamente y se generó la orden de trabajo.'});
-              this.toast.success('Equipo enviado a servicio técnico','El envío fue registrado correctamente y se generó la orden de trabajo.');
-              this.load();
-            },
-            error:error=>{
-              this.actionErrorTitle.set('No se pudo registrar el envío a revisión técnica');
-              this.actionError.set(errorMessage(error));
-              this.submitting.set(false);
-            }
-          });
+          this.activeServiceOrder.set(order); this.action.set(null); this.submitting.set(false); this.showFeedback({type:'success',title:'Equipo enviado a servicio técnico',detail:'La orden de trabajo fue registrada correctamente y el PDF quedó disponible.'}); this.toast.success('Equipo enviado a servicio técnico','La orden de trabajo fue registrada correctamente y el PDF quedó disponible.'); this.load(); return;
           return;
         }
         this.action.set(null);
@@ -713,7 +702,7 @@ export class DispositivoDetail implements OnInit {
         else if('codigoInventario' in result&&(action==='assign-person'||action==='assign-department')){const updated=result;this.actasService.crear({colaboradorId:action==='assign-person'?Number(value.colaboradorId):null,departamentoId:action==='assign-department'?Number(value.departamentoId):null,recepcionanteId:action==='assign-department'?Number(value.recibidoPorId):null,localidad:value.localidad.trim()||updated.localidad,responsableTi:actor.nombre,observaciones:value.observaciones.trim()||null,dispositivosCodigos:[updated.codigoInventario]}).subscribe({next:acta=>this.createdActa.set(acta),error:error=>this.toast.warning('Asignación registrada',`No fue posible generar el acta: ${errorMessage(error)}`)});}
         this.load();
       },
-      error: (error) => { this.actionErrorTitle.set(action==='service'?'No se pudo registrar el envío a revisión técnica':'No se pudo registrar la operación'); this.actionError.set(action==='service'?errorMessage(error):deviceActionErrorMessage(error)); this.submitting.set(false); }
+      error: (error) => { this.actionErrorTitle.set(action==='service'?'No se pudo registrar el envío a servicio técnico':'No se pudo registrar la operación'); this.actionError.set(action==='service'?errorMessage(error):deviceActionErrorMessage(error)); this.submitting.set(false); }
     });
   }
 }

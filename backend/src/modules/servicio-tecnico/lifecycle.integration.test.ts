@@ -17,7 +17,7 @@ test("la recepción departamental conserva departamento y persona receptora",asy
 });
 
 test("las órdenes técnicas persisten diagnóstico, cotización y costos",async()=>{
- const columns=await pool.query<{column_name:string}>("SELECT column_name FROM information_schema.columns WHERE table_schema='itam' AND table_name='ordenes_servicio_tecnico'");const names=new Set(columns.rows.map(r=>r.column_name));for(const name of ["diagnostico","monto_cotizacion","decision","costo_final","estado"])assert.ok(names.has(name));
+ const columns=await pool.query<{column_name:string}>("SELECT column_name FROM information_schema.columns WHERE table_schema='itam' AND table_name='ordenes_servicio_tecnico'");const names=new Set(columns.rows.map(r=>r.column_name));for(const name of ["diagnostico","monto_cotizacion","decision","costo_final","fecha_retorno","resultado","estado_final","observaciones_retorno","estado"])assert.ok(names.has(name));
 });
 
 test("PostgreSQL rechaza montos negativos de cotización",async()=>{

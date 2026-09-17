@@ -1,4 +1,4 @@
-import { Colaborador, Dispositivo } from '../core/models/itam.models';
+import { Colaborador, Dispositivo, OrdenServicio } from '../core/models/itam.models';
 import { actaCommercialTotal } from '../shared/components/acta-preview/acta-preview';
 import { formatClp } from '../shared/utils/currency';
 import {
@@ -16,7 +16,7 @@ import {
   extractQuickSearchCode,
   quickSearchMode,
 } from './dispositivos/dispositivos-list';
-import { repairImpactPercentage, technicalStage } from './servicio-tecnico/servicio-tecnico';
+import { isTechnicalOrderEditable, repairImpactPercentage, technicalStage } from './servicio-tecnico/servicio-tecnico';
 import { formatRut, isValidRut, normalizeRut } from '../shared/utils/rut';
 
 describe('flujos operacionales del inventario', () => {
@@ -122,6 +122,13 @@ describe('flujos operacionales del inventario', () => {
     expect(technicalStage('COTIZACION_RECIBIDA')).toBe('DECISION');
     expect(technicalStage('REPARACION_APROBADA')).toBe('CLOSE');
     expect(technicalStage('CERRADA')).toBe('READ_ONLY');
+  });
+
+  it('permite editar una orden activa y bloquea las finalizadas', () => {
+    expect(isTechnicalOrderEditable({ estado: 'PENDIENTE_DIAGNOSTICO' } as OrdenServicio)).toBe(true);
+    expect(isTechnicalOrderEditable({ estado: 'REPARACION_TERMINADA' } as OrdenServicio)).toBe(true);
+    expect(isTechnicalOrderEditable({ estado: 'CERRADA' } as OrdenServicio)).toBe(false);
+    expect(isTechnicalOrderEditable({ estado: 'BAJA' } as OrdenServicio)).toBe(false);
   });
 
   it('calcula el impacto económico proyectado sin decidir automáticamente', () => {

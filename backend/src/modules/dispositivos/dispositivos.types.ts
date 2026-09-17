@@ -75,6 +75,8 @@ export interface DispositivoResumen {
   tipoCustodia: "NONE" | "COLABORADOR" | "DEPARTAMENTO";
   ultimoResponsableConocido: UltimoResponsableConocido | null;
   ultimoResultadoOffboarding: ResultadoOffboarding | null;
+  origenRegistro: "MANUAL" | "IMPORTADO" | "DESCONOCIDO";
+  creadoManualmente: boolean;
   verificacionFisica: {
     resultado: "PENDIENTE" | "VERIFICADO" | "REVISAR";
     fechaVerificacion: string;
@@ -168,6 +170,7 @@ export interface DispositivoRow {
   ultima_verificacion_resultado: "PENDIENTE" | "VERIFICADO" | "REVISAR" | null;
   ultima_verificacion_fecha: Date | string | null;
   ultima_verificacion_observacion: string | null;
+  origen_registro: "MANUAL" | "IMPORTADO" | "DESCONOCIDO";
 }
 
 export interface DispositivoFilters {
@@ -180,7 +183,7 @@ export interface DispositivoFilters {
   departamentoId?: number;
   departamentoColaboradorId?: number;
   localidad?: string;
-  verificacion?: "PENDIENTE" | "VERIFICADO" | "REVISAR";
+  verificacion?: "PENDIENTE" | "VERIFICADO";
 }
 
 export interface CrearDispositivoInput {

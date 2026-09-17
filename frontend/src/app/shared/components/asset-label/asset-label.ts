@@ -8,8 +8,11 @@ type LabelDevice = Pick<Dispositivo, 'colaborador' | 'departamento' | 'estado' |
 
 export const compactResponsibleName = (name: string): string => {
   const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length < 3) return parts.join(' ');
-  return `${parts[0]} ${parts.slice(1, -1).map((part) => `${part[0].toUpperCase()}.`).join(' ')} ${parts.at(-1)}`;
+  if (parts.length <= 2) return parts.join(' ');
+  const firstName = parts[0];
+  const firstSurname = parts.at(-2)!;
+  const secondSurnameInitial = parts.at(-1)!.charAt(0).toUpperCase();
+  return `${firstName} ${firstSurname} ${secondSurnameInitial}.`;
 };
 
 export const assetLabelResponsible = (device: LabelDevice): string => {

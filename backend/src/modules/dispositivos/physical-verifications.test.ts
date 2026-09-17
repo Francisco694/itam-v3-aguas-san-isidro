@@ -11,7 +11,8 @@ const dispositivo = (estado = "DISPONIBLE"): DispositivoVerificacionRow => ({
   numero_serie: "SER-001",
   imei: null,
   colaborador_id: null,
-  departamento_id: null
+  departamento_id: null,
+  origen_registro: "IMPORTADO"
 });
 
 test("verificación física: equipo no localizado requiere revisión", () => {

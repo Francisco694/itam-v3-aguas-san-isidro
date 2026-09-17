@@ -62,6 +62,9 @@ export const registrarVerificacionFisica = async (
 ): Promise<VerificacionFisica> => {
   const dispositivo = await obtenerDispositivoParaVerificacion(codigo);
   if (!dispositivo) throw new NotFoundError("Dispositivo no encontrado.");
+  if (dispositivo.origen_registro === "MANUAL") {
+    throw new ConflictError("El equipo ya está verificado por su registro manual.");
+  }
   const ultima = await obtenerUltimaVerificacionFisica(dispositivo.id);
   if (ultima && ultima !== "PENDIENTE") {
     throw new ConflictError("El equipo ya cuenta con evidencia de verificación.");
@@ -99,6 +102,9 @@ export const registrarVerificacionManual = async (
     await client.query("BEGIN");
     const dispositivo = await obtenerDispositivoParaVerificacion(codigo, client, true);
     if (!dispositivo) throw new NotFoundError("Dispositivo no encontrado.");
+    if (dispositivo.origen_registro !== "IMPORTADO") {
+      throw new ConflictError("El equipo ya está verificado por su registro manual.");
+    }
     const ultima = await obtenerUltimaVerificacionFisica(dispositivo.id, client);
     if (ultima && ultima !== "PENDIENTE") {
       throw new ConflictError("El equipo ya cuenta con evidencia de verificación.");

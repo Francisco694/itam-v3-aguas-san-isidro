@@ -1,9 +1,12 @@
 import {Router} from "express";
-import {cerrarOrdenController,cerrarTemporalController,cotizarOrdenController,crearOrdenController,decidirOrdenController,entregarTemporalController,envioPdfController,listarOrdenesController,obtenerOrdenController} from "./servicio-tecnico.controller";
+import {adjuntarCotizacionController,cerrarOrdenController,cerrarTemporalController,cotizarOrdenController,crearOrdenController,decidirOrdenController,editarOrdenController,entregarTemporalController,envioPdfController,listarOrdenesController,obtenerCotizacionArchivoController,obtenerOrdenController} from "./servicio-tecnico.controller";
+import {technicalQuoteUpload} from "./servicio-tecnico.upload";
 const router=Router();
 router.get("/",listarOrdenesController);router.get("/:id",obtenerOrdenController);
-router.post("/",crearOrdenController);router.patch("/:id/cotizacion",cotizarOrdenController);
+router.post("/",crearOrdenController);router.patch("/:id",editarOrdenController);router.patch("/:id/cotizacion",cotizarOrdenController);
 router.get("/:id/envio/pdf",envioPdfController);
+router.post("/:id/cotizacion/archivo",technicalQuoteUpload,adjuntarCotizacionController);
+router.get("/:id/cotizacion/archivo",obtenerCotizacionArchivoController);
 router.post("/:id/decision",decidirOrdenController);router.post("/:id/cerrar",cerrarOrdenController);
 router.post("/:id/equipo-temporal",entregarTemporalController);
 router.post("/:id/equipo-temporal/:entregaId/cerrar",cerrarTemporalController);

@@ -17,7 +17,8 @@
     "import:reconciled-inventory": "tsx src/scripts/import-reconciled-inventory.ts",
     "audit:automatic-verifications": "tsx src/scripts/audit-automatic-verifications.ts",
     "correction:automatic-verifications": "tsx src/scripts/correct-automatic-verifications.ts",
-    "backfill:device-verification:dry-run": "tsx src/scripts/backfill-device-verification.ts --dry-run"
+    "backfill:device-verification:dry-run": "tsx src/scripts/backfill-device-verification.ts --dry-run",
+    "correction:manual-verifications": "tsx src/scripts/correct-manual-verifications.ts"
   },
   "keywords": [],
   "author": "",

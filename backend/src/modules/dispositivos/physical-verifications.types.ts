@@ -31,6 +31,7 @@ export interface DispositivoVerificacionRow {
   imei: string | null;
   colaborador_id: string | null;
   departamento_id: string | null;
+  origen_registro: "MANUAL" | "IMPORTADO" | "DESCONOCIDO";
 }
 
 export interface VerificacionFisicaInsert {
@@ -41,7 +42,10 @@ export interface VerificacionFisicaInsert {
   observacion: string | null;
   responsable: string;
   motivo?: string | null;
-  tipoEvento?: "VERIFICACION_FISICA" | "VERIFICACION_MANUAL_EQUIPO";
+  tipoEvento?:
+    | "VERIFICACION_FISICA"
+    | "VERIFICACION_MANUAL_EQUIPO"
+    | "EQUIPO_VERIFICADO_POR_REGISTRO_MANUAL";
   descripcion?: string | null;
 }
 

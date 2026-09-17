@@ -18,10 +18,35 @@ export const obtenerDispositivoParaVerificacion = async (
   const result = await (client ?? pool).query<DispositivoVerificacionRow>(
     `SELECT d.id, d.estado_id, e.codigo AS estado_codigo,
             tipo.nombre AS tipo_nombre,
-            d.numero_serie, d.imei, d.colaborador_id, d.departamento_id
+            d.numero_serie, d.imei, d.colaborador_id, d.departamento_id,
+            CASE
+              WHEN ingreso_inventario.tipo_evento IN ('IMPORTAR_DISPOSITIVO','REGISTRO_IMPORTADO')
+                OR ingreso_inventario.detalle ? 'source'
+                OR ingreso_inventario.detalle ? 'importKey'
+                OR ingreso_inventario.detalle ? 'historicalCode'
+                OR COALESCE(ingreso_inventario.responsable,'') ILIKE 'Importador%'
+                OR COALESCE(ingreso_inventario.observaciones,'') ILIKE 'Origen:%'
+              THEN 'IMPORTADO'
+              WHEN ingreso_inventario.tipo_evento IN ('ALTA_DISPOSITIVO','EQUIPO_CREADO','DISPOSITIVO_CREADO','EQUIPO_INCORPORADO_AL_INVENTARIO')
+              THEN 'MANUAL'
+              ELSE 'DESCONOCIDO'
+            END AS origen_registro
        FROM itam.dispositivos d
        JOIN itam.estados e ON e.id = d.estado_id
        JOIN itam.tipos_dispositivo tipo ON tipo.id = d.tipo_dispositivo_id
+       LEFT JOIN LATERAL (
+         SELECT h.tipo_evento,h.detalle,h.responsable,h.observaciones
+           FROM itam.historial_eventos h
+          WHERE h.dispositivo_id = d.id
+            AND h.tipo_entidad = 'DISPOSITIVO'
+            AND h.tipo_evento IN (
+              'ALTA_DISPOSITIVO','IMPORTAR_DISPOSITIVO','REGISTRO_IMPORTADO',
+              'EQUIPO_CREADO','DISPOSITIVO_CREADO',
+              'EQUIPO_INCORPORADO_AL_INVENTARIO','CONCILIAR_DISPOSITIVO_EXISTENTE'
+            )
+          ORDER BY h.fecha_evento ASC,h.id ASC
+          LIMIT 1
+       ) ingreso_inventario ON TRUE
       WHERE d.codigo_inventario = $1
       ${bloquear ? "FOR UPDATE OF d" : ""}`,
     [codigo]

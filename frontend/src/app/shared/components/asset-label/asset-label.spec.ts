@@ -25,7 +25,7 @@ describe('AssetLabel', () => {
     fixture.componentRef.setInput('code', 1001);
     fixture.componentRef.setInput('assetType', 'SMARTPHONE');
     fixture.componentRef.setInput('detail', true);
-    fixture.componentRef.setInput('responsible', 'Segundo S. Tapia');
+    fixture.componentRef.setInput('responsible', 'Segundo Samuel T.');
     fixture.componentRef.setInput('phone', '56961220448');
     fixture.detectChanges();
     await fixture.whenStable();
@@ -34,7 +34,7 @@ describe('AssetLabel', () => {
     const canvas = element.querySelector('canvas');
     expect(element.textContent).toContain('1001');
     expect(element.textContent).toContain('SMARTPHONE');
-    expect(element.textContent).toContain('Resp: Segundo S. Tapia');
+    expect(element.textContent).toContain('Resp: Segundo Samuel T.');
     expect(element.textContent).toContain('Fono: 56961220448');
     expect(canvas).not.toBeNull();
   });
@@ -44,9 +44,16 @@ describe('AssetLabel', () => {
       colaborador: { id: '1', rut: '1-9', nombre: 'Segundo Samuel Tapia', cargo: null, localidad: null, departamento: null },
       simAsociada: { id: '2', codigoInventario: 7001, iccidCodigoFabrica: null, numeroAsociado: '56961220448', compania: null, estado: null },
     });
-    expect(compactResponsibleName(smartphone.colaborador!.nombre)).toBe('Segundo S. Tapia');
-    expect(assetLabelResponsible(smartphone)).toBe('Segundo S. Tapia');
+    expect(compactResponsibleName(smartphone.colaborador!.nombre)).toBe('Segundo Samuel T.');
+    expect(assetLabelResponsible(smartphone)).toBe('Segundo Samuel T.');
     expect(assetLabelPhone(smartphone)).toBe('56961220448');
+  });
+
+  it('formatea responsables usando primer nombre, primer apellido e inicial del segundo apellido', () => {
+    expect(compactResponsibleName('Francisco Javier Ponce Barril')).toBe('Francisco Ponce B.');
+    expect(compactResponsibleName('Elena Gabriela Yanez Gutierrez')).toBe('Elena Yanez G.');
+    expect(compactResponsibleName('Jose Llempe Blanco')).toBe('Jose Llempe B.');
+    expect(compactResponsibleName('Maria Soto')).toBe('Maria Soto');
   });
 
   it('resuelve departamento, bodega y ausencia de teléfono sin duplicarlo en el equipo', () => {

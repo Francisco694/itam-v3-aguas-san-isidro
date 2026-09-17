@@ -169,7 +169,7 @@ export const listarDispositivosController = asyncHandler(
         parseOptionalEnum(
           req.query.verificacion,
           "verificacion",
-          ["PENDIENTE", "VERIFICADO", "REVISAR"] as const
+          ["PENDIENTE", "VERIFICADO"] as const
         ) ?? undefined
     };
 

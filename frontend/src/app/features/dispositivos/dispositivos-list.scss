@@ -487,7 +487,7 @@
     margin: 10mm;
   }
   @page thermal {
-    size: 50mm 30mm;
+    size: 62mm 40mm;
     margin: 0;
   }
   :host {
@@ -560,15 +560,19 @@
     display: block;
     page: thermal;
     padding: 0;
+    width: 62mm;
   }
   .batch-label-print-root--thermal .batch-label {
     border: 0;
     break-after: page;
-    height: 30mm;
+    height: 38mm;
+    max-height: 38mm;
+    max-width: 60mm;
     margin: 0;
     page-break-after: always;
-    padding: 2.5mm;
-    width: 50mm;
+    overflow: hidden;
+    padding: 1mm;
+    width: 60mm;
   }
   .batch-label-print-root--thermal .batch-label:last-child {
     break-after: auto;

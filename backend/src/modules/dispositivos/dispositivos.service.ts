@@ -85,6 +85,7 @@ import type {
   TrazabilidadDispositivo,
   UltimoResponsableTrazabilidad
 } from "./dispositivos.types";
+import { insertarVerificacionFisica } from "./physical-verifications.repository";
 
 export const obtenerIndicadoresGerenciales = async (): Promise<ResumenGerencial> => {
   const row = await obtenerResumenGerencial();
@@ -342,6 +343,8 @@ const mapDispositivo = (
       : null,
   ultimoResultadoOffboarding: row.ultimo_resultado_offboarding
   ,
+  origenRegistro: row.origen_registro,
+  creadoManualmente: row.origen_registro === "MANUAL",
   verificacionFisica: row.ultima_verificacion_resultado
     ? {
         resultado: row.ultima_verificacion_resultado,
@@ -668,9 +671,43 @@ export const crearNuevoDispositivo = async (
       },
       client
     );
+
+    const identificadorEsperado = tipo.nombre.trim().toUpperCase() === "SMARTPHONE"
+      ? dispositivo.imei
+      : dispositivo.numero_serie;
+    await insertarVerificacionFisica(
+      {
+        id: dispositivo.dispositivo_id,
+        estado_id: dispositivo.estado_id,
+        estado_codigo: dispositivo.estado_codigo,
+        tipo_nombre: dispositivo.tipo_dispositivo_nombre,
+        numero_serie: dispositivo.numero_serie,
+        imei: dispositivo.imei,
+        colaborador_id: dispositivo.colaborador_id,
+        departamento_id: dispositivo.departamento_id,
+        origen_registro: "MANUAL"
+      },
+      {
+        encontrado: true,
+        identificadorComprobado: identificadorEsperado,
+        identificadorEsperado,
+        resultado: "VERIFICADO",
+        observacion: "Equipo verificado automáticamente al registrarse manualmente en ITAM.",
+        responsable: input.responsable,
+        motivo: "registro manual del equipo",
+        tipoEvento: "EQUIPO_VERIFICADO_POR_REGISTRO_MANUAL",
+        descripcion: "Equipo verificado automáticamente al registrarse manualmente en ITAM."
+      },
+      client
+    );
+
+    const dispositivoCreado = await obtenerDispositivoPorCodigo(codigoInventario, client);
+    if (!dispositivoCreado) {
+      throw new AppError(500, "DEVICE_CREATE_UNCONFIRMED", "No se pudo confirmar el registro del equipo.");
+    }
     await client.query("COMMIT");
 
-    return mapDispositivo(dispositivo);
+    return mapDispositivo(dispositivoCreado);
   } catch (error) {
     await client.query("ROLLBACK");
     return normalizarErrorDispositivo(error);

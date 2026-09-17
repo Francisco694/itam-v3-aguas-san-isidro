@@ -16,6 +16,19 @@ type DbExecutor = Pool | PoolClient;
 
 const getDb = (client?: PoolClient): DbExecutor => client ?? pool;
 
+const origenRegistroSql = `CASE
+  WHEN ingreso_inventario.tipo_evento IN ('IMPORTAR_DISPOSITIVO','REGISTRO_IMPORTADO')
+    OR ingreso_inventario.detalle ? 'source'
+    OR ingreso_inventario.detalle ? 'importKey'
+    OR ingreso_inventario.detalle ? 'historicalCode'
+    OR COALESCE(ingreso_inventario.responsable,'') ILIKE 'Importador%'
+    OR COALESCE(ingreso_inventario.observaciones,'') ILIKE 'Origen:%'
+  THEN 'IMPORTADO'
+  WHEN ingreso_inventario.tipo_evento IN ('ALTA_DISPOSITIVO','EQUIPO_CREADO','DISPOSITIVO_CREADO','EQUIPO_INCORPORADO_AL_INVENTARIO')
+  THEN 'MANUAL'
+  ELSE 'DESCONOCIDO'
+END`;
+
 const dispositivoSelect = `
   SELECT
     d.id AS dispositivo_id,
@@ -103,6 +116,7 @@ const dispositivoSelect = `
     ,verificacion.resultado AS ultima_verificacion_resultado
     ,verificacion.fecha_verificacion AS ultima_verificacion_fecha
     ,verificacion.observacion AS ultima_verificacion_observacion
+    ,${origenRegistroSql} AS origen_registro
   FROM itam.dispositivos d
   INNER JOIN itam.estados e
     ON e.id = d.estado_id
@@ -139,7 +153,7 @@ const dispositivoSelect = `
   LEFT JOIN itam.facturas_adquisicion factura
     ON factura.id = d.factura_adquisicion_id
   LEFT JOIN LATERAL (
-    SELECT h.fecha_evento
+    SELECT h.fecha_evento,h.tipo_evento,h.detalle,h.responsable,h.observaciones
     FROM itam.historial_eventos h
     WHERE h.dispositivo_id = d.id
       AND h.tipo_entidad = 'DISPOSITIVO'
@@ -149,7 +163,8 @@ const dispositivoSelect = `
         'REGISTRO_IMPORTADO',
         'EQUIPO_CREADO',
         'DISPOSITIVO_CREADO',
-        'EQUIPO_INCORPORADO_AL_INVENTARIO'
+        'EQUIPO_INCORPORADO_AL_INVENTARIO',
+        'CONCILIAR_DISPOSITIVO_EXISTENTE'
       )
     ORDER BY h.fecha_evento ASC, h.id ASC
     LIMIT 1
@@ -296,7 +311,14 @@ export const listarDispositivos = async (
 
   if (filters.verificacion !== undefined) {
     values.push(filters.verificacion);
-    where.push(`COALESCE(verificacion.resultado, 'PENDIENTE') = $${values.length}`);
+    where.push(`(
+      (${origenRegistroSql}) = 'MANUAL' AND $${values.length} = 'VERIFICADO'
+    ) OR (
+      (${origenRegistroSql}) = 'IMPORTADO' AND (
+        ($${values.length} = 'VERIFICADO' AND verificacion.resultado = 'VERIFICADO')
+        OR ($${values.length} = 'PENDIENTE' AND COALESCE(verificacion.resultado, 'PENDIENTE') <> 'VERIFICADO')
+      )
+    )`);
   }
 
   const result = await pool.query<DispositivoRow>(

@@ -8,6 +8,13 @@
 
 export type VerificationResult = "PENDIENTE" | "VERIFICADO" | "REVISAR";
 
+const manualRegistrationEventTypes = new Set([
+  "ALTA_DISPOSITIVO",
+  "EQUIPO_CREADO",
+  "DISPOSITIVO_CREADO",
+  "EQUIPO_INCORPORADO_AL_INVENTARIO"
+]);
+
 export interface VerificationEventEvidence {
   id: string;
   tipoEvento: string;
@@ -70,9 +77,9 @@ const latestEvent = (events: VerificationEventEvidence[]): VerificationEventEvid
   [...events].sort((left, right) => eventDate(right) - eventDate(left) || Number(right.id) - Number(left.id))[0] ?? null;
 
 /**
- * Determina el estado sin inferir verificación desde la creación manual ni
- * desde operaciones posteriores. Los resultados explícitos REVISAR/VERIFICADO
- * se conservan.
+ * Determina el estado conservando la regla de negocio: el alta manual es una
+ * verificación válida. Las operaciones posteriores a una importación no la
+ * sustituyen; los resultados explícitos REVISAR/VERIFICADO se conservan.
  */
 export const calcularEstadoVerificacion = (
   dispositivo: VerificationDeviceEvidence
@@ -80,8 +87,13 @@ export const calcularEstadoVerificacion = (
   const eventos = [...dispositivo.eventos].sort(
     (left, right) => eventDate(left) - eventDate(right) || Number(left.id) - Number(right.id)
   );
+  const altaManualEvidence = eventos.find((event) =>
+    manualRegistrationEventTypes.has(event.tipoEvento)
+    && event.usuarioEjecutorId !== null
+    && !esEventoImportado(event)
+  );
   const revisar = dispositivo.verificaciones.find((item) => item.resultado === "REVISAR");
-  if (revisar) {
+  if (revisar && !altaManualEvidence) {
     return {
       resultado: "REVISAR",
       motivo: "Se conserva una revisión física existente.",
@@ -109,9 +121,9 @@ export const calcularEstadoVerificacion = (
   );
   if (altaManual) {
     return {
-      resultado: "PENDIENTE",
-      motivo: "Equipo creado manualmente; queda pendiente hasta una verificación física explícita desde el botón Verificar equipo.",
-      categoria: "SIN_EVIDENCIA",
+      resultado: "VERIFICADO",
+      motivo: "Equipo creado manualmente; el registro de alta acredita la verificación.",
+      categoria: "MANUAL",
       eventoEvidencia: altaManual,
       verificacionExistenteId: dispositivo.verificaciones.find((item) => item.resultado === "PENDIENTE")?.id ?? null
     };

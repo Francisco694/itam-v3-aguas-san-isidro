@@ -59,11 +59,12 @@ export interface Dispositivo {
   facturaAdquisicion:{id:string;numeroFactura:string;fechaFactura:string|null;proveedor:string|null;montoTotal:number|null;observaciones:string|null;referenciaDocumental:string|null;documento:FacturaDocumento|null}|null;
   colaborador: ColaboradorResumen | null; departamento: DepartamentoResumen | null; recibidoPor: ColaboradorResumen | null; simAsociada: SimAsociadaResumen | null; lineaMovil: LineaMovilResumen | null; numeroTelefonico: string | null; labelPhone?: string | null; tipoCustodia: 'NONE'|'COLABORADOR'|'DEPARTAMENTO';
   ultimoResponsableConocido?:{tipo:'COLABORADOR'|'DEPARTAMENTO';nombre:string;rut:string|null;fechaMovimiento:string}|null;
-  ultimoResultadoOffboarding: ResultadoOffboarding | null;
+  ultimoResultadoOffboarding: ResultadoOffboarding | null; origenRegistro: 'MANUAL'|'IMPORTADO'|'DESCONOCIDO'; creadoManualmente: boolean;
   verificacionFisica: VerificacionFisicaResumen | null;
 }
 
 export type ResultadoVerificacionFisica = 'PENDIENTE' | 'VERIFICADO' | 'REVISAR';
+export type FiltroVerificacionDispositivo = 'PENDIENTE' | 'VERIFICADO';
 export interface VerificacionFisicaResumen {
   resultado: ResultadoVerificacionFisica;
   fechaVerificacion: string;
@@ -80,7 +81,7 @@ export interface VerificacionFisica {
   usuario: { id: string; nombre: string; email: string } | null;
   fechaVerificacion: string;
 }
-export interface DispositivoFilters { q?: string; tipo?: string; tipoDispositivoId?: number; familiaCodigoInventarioId?: number; estado?: string; colaboradorId?: number; departamentoId?: number; localidad?: string; verificacion?: ResultadoVerificacionFisica; }
+export interface DispositivoFilters { q?: string; tipo?: string; tipoDispositivoId?: number; familiaCodigoInventarioId?: number; estado?: string; colaboradorId?: number; departamentoId?: number; localidad?: string; verificacion?: FiltroVerificacionDispositivo; }
 export interface IndicadorEconomico { cantidad:number;valor:number; }
 export interface ResumenGerencial {inventarioOperacional:IndicadorEconomico;disponibles:IndicadorEconomico;asignados:IndicadorEconomico;servicioTecnico:IndicadorEconomico;extraviados:IndicadorEconomico;bajas:IndicadorEconomico;}
 export interface ReporteInventario {
@@ -158,9 +159,11 @@ export interface PendienteOffboarding {colaborador:Colaborador;activosPendientes
 
 export type EstadoOrdenServicio='PENDIENTE_DIAGNOSTICO'|'COTIZACION_RECIBIDA'|'REPARACION_APROBADA'|'REPARACION_RECHAZADA'|'EN_REPARACION'|'REPARACION_TERMINADA'|'CERRADA'|'BAJA';
 export interface EntregaTemporal {id:string;ordenServicioId:string;dispositivo:{id:string;codigoInventario:number;tipo:string;marca:string|null;modelo:string|null};colaborador:{id:string;nombre:string;rut:string};fechaEntrega:string;responsableEntrega:string;observacionesEntrega:string|null;fechaDevolucion:string|null;responsableDevolucion:string|null;observacionesDevolucion:string|null;estado:'ABIERTA'|'CERRADA'|'CANCELADA';}
-export interface OrdenServicio {id:string;dispositivo:{id:string;codigoInventario:number;tipo:string;marca:string|null;modelo:string|null;valorComercial:number};proveedor:string|null;tipoServicio:'GARANTIA'|'REPARACION'|'MANTENCION'|'DIAGNOSTICO';fechaEnvio:string;fallaReportada:string;accesoriosEntregados:string|null;observacionesEnvio:string|null;diagnostico:string|null;descripcionReparacion:string|null;montoCotizacion:number|null;plazoInformado:string|null;decision:string|null;motivoDecision:string|null;observacionDecision:string|null;fechaDecision:string|null;responsableDecision:string|null;costoFinal:number|null;fechaRetorno:string|null;resultado:string|null;estadoFinal:'OPERATIVO'|'SIN_REPARACION'|'BAJA'|null;observacionesRetorno:string|null;estado:EstadoOrdenServicio;responsableEnvio:string;reparacionesAnteriores:number;costoAcumulado:number;custodiaAlIngreso:{tipo:'COLABORADOR'|'DEPARTAMENTO';colaborador:{id:string;nombre:string;rut:string}|null;departamento:{id:string;nombre:string}|null;recibidoPor:{id:string;nombre:string}|null}|null;entregasTemporales:EntregaTemporal[];creadoEn:string;actualizadoEn:string;}
-export interface CrearOrdenServicioInput {dispositivoCodigo:number;proveedor?:string|null;fechaEnvio?:string|null;tipoServicio:'GARANTIA'|'REPARACION'|'MANTENCION'|'DIAGNOSTICO';fallaReportada:string;accesoriosEntregados?:string|null;observaciones?:string|null;responsable:string;}
-export interface CotizacionOrdenInput {diagnostico:string;descripcionReparacion:string;montoCotizacion:number;plazoInformado?:string|null;proveedor?:string|null;responsable:string;}
+export interface CotizacionArchivo {id:string;ordenServicioTecnicoId:string;dispositivoId:string;proveedor:string|null;nombreOriginal:string;mimeType:string;tamanioBytes:number;version:number;activo:boolean;subidoPor:string;creadoEn:string;}
+export interface OrdenServicio {id:string;dispositivo:{id:string;codigoInventario:number;tipo:string;marca:string|null;modelo:string|null;imei:string|null;numeroSerie:string|null;valorComercial:number};proveedor:string|null;areaSolicitante:string|null;contactoServicio:string|null;ticketProveedor:string|null;observacionesCotizacion:string|null;tipoServicio:'GARANTIA'|'REPARACION'|'MANTENCION'|'DIAGNOSTICO';fechaEnvio:string;fallaReportada:string;accesoriosEntregados:string|null;observacionesEnvio:string|null;diagnostico:string|null;descripcionReparacion:string|null;montoCotizacion:number|null;plazoInformado:string|null;decision:string|null;motivoDecision:string|null;observacionDecision:string|null;fechaDecision:string|null;responsableDecision:string|null;costoFinal:number|null;fechaRetorno:string|null;resultado:string|null;estadoFinal:'OPERATIVO'|'SIN_REPARACION'|'BAJA'|null;observacionesRetorno:string|null;cotizacionArchivo:CotizacionArchivo|null;estado:EstadoOrdenServicio;responsableEnvio:string;reparacionesAnteriores:number;costoAcumulado:number;custodiaAlIngreso:{tipo:'COLABORADOR'|'DEPARTAMENTO';colaborador:{id:string;nombre:string;rut:string}|null;departamento:{id:string;nombre:string}|null;recibidoPor:{id:string;nombre:string}|null}|null;entregasTemporales:EntregaTemporal[];creadoEn:string;actualizadoEn:string;}
+export interface CrearOrdenServicioInput {dispositivoCodigo:number;proveedor?:string|null;fechaEnvio?:string|null;areaSolicitante?:string|null;contactoServicio?:string|null;tipoServicio:'GARANTIA'|'REPARACION'|'MANTENCION'|'DIAGNOSTICO';fallaReportada:string;accesoriosEntregados?:string|null;observaciones?:string|null;responsable:string;}
+export interface EditarOrdenServicioInput {proveedor?:string|null;fechaEnvio?:string|null;areaSolicitante?:string|null;contactoServicio?:string|null;tipoServicio:'GARANTIA'|'REPARACION'|'MANTENCION'|'DIAGNOSTICO';fallaReportada:string;accesoriosEntregados?:string|null;observaciones?:string|null;responsable:string;}
+export interface CotizacionOrdenInput {diagnostico:string;descripcionReparacion:string;montoCotizacion:number;plazoInformado?:string|null;ticketProveedor?:string|null;observacionesCotizacion?:string|null;proveedor?:string|null;responsable:string;}
 export interface DecisionOrdenInput {decision:'APROBAR'|'RECHAZAR'|'DAR_BAJA';motivo?:string|null;observaciones?:string|null;responsable:string;}
 export interface CerrarOrdenInput {costoFinal:number;fechaRetorno?:string|null;resultado:string;estadoFinal:'OPERATIVO'|'SIN_REPARACION'|'BAJA';observacionesRetorno?:string|null;responsable:string;}
 export interface EntregarTemporalInput {dispositivoCodigo:number;responsable:string;observaciones?:string|null;}

@@ -5,7 +5,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { LucideCamera, LucideDownload, LucideEye, LucidePencil, LucidePrinter, LucidePlus, LucideScanBarcode, LucideSearch, LucideSlidersHorizontal, LucideTriangleAlert, LucideX } from '@lucide/angular';
 import QRCode from 'qrcode';
 import { catchError, forkJoin, of } from 'rxjs';
-import { Departamento, Dispositivo, Estado, ResultadoVerificacionFisica, TipoDispositivo } from '../../core/models/itam.models';
+import { Departamento, Dispositivo, Estado, FiltroVerificacionDispositivo, ResultadoVerificacionFisica, TipoDispositivo } from '../../core/models/itam.models';
 import { DepartamentosService } from '../../core/services/departamentos.service';
 import { DispositivosService } from '../../core/services/dispositivos.service';
 import { EstadosService } from '../../core/services/estados.service';
@@ -52,8 +52,12 @@ export const inventoryPhysicalIdentifier = (
     : 'Sin número de serie';
 };
 
-export const verificationLabel = (result: ResultadoVerificacionFisica | undefined): string =>
-  ({ PENDIENTE: '○ Pendiente', VERIFICADO: '✓ Verificado', REVISAR: '! Revisar' }[result || 'PENDIENTE']);
+export const verificationLabel = (
+  result: ResultadoVerificacionFisica | undefined,
+  origin: Dispositivo['origenRegistro'] = 'IMPORTADO',
+): string => origin === 'MANUAL'
+  ? '✓ Verificado'
+  : ({ PENDIENTE: '○ No verificado', VERIFICADO: '✓ Verificado', REVISAR: '○ No verificado' }[result || 'PENDIENTE']);
 
 export const isAssignedWithoutResponsible = (
   item: Pick<Dispositivo, 'estado' | 'colaborador' | 'departamento'>,
@@ -108,10 +112,11 @@ const printableDocument = (
   <meta charset="utf-8">
   <title>Etiquetas ITAM</title>
   <style>
-    @page { size: ${mode === 'A4' ? 'A4 portrait' : '50mm 30mm'}; margin: ${mode === 'A4' ? '10mm' : '0'}; }
+    @page { size: ${mode === 'A4' ? 'A4 portrait' : '62mm 40mm'}; margin: ${mode === 'A4' ? '10mm' : '0'}; }
     * { box-sizing: border-box; }
     html, body { background: #fff; color: #000; margin: 0; padding: 0; }
     body { font-family: Arial, sans-serif; }
+    ${mode === 'THERMAL' ? 'html, body { width: 62mm; }' : ''}
     .sheet { display: ${mode === 'A4' ? 'grid' : 'block'}; gap: 4mm 3mm; grid-template-columns: repeat(3, 60mm); }
     .label, .thermal-label { border: 1px solid #000; box-sizing: border-box; overflow: hidden; }
     .label { break-inside: avoid; display: flex; flex-direction: column; height: 35mm; page-break-inside: avoid; padding: 2mm; width: 60mm; }
@@ -121,10 +126,10 @@ const printableDocument = (
     .label-data, .thermal-label__info { display: flex; flex: 1; flex-direction: column; min-width: 0; }
     .label-data small, .label-data span, .label-data b { font-size: 6.5pt; line-height: 1.16; overflow-wrap: anywhere; }
     .label-data strong { font-family: Consolas, monospace; font-size: 12pt; line-height: 1.2; margin: .7mm 0; }
-    .thermal-label { break-after: page; display: grid; grid-template-columns: 18mm 1fr; column-gap: 2mm; height: 30mm; page-break-after: always; padding: 2mm; width: 50mm; }
+    .thermal-label { break-after: page; box-sizing: border-box; display: grid; grid-template-columns: 21mm 1fr; column-gap: 2mm; height: 38mm; max-height: 38mm; max-width: 60mm; overflow: hidden; page-break-after: always; padding: 1mm; width: 60mm; }
     .thermal-label header { grid-column: 1 / -1; font-size: 7pt; margin-bottom: 0; }
     .thermal-label__body { grid-column: 1 / -1; }
-    .thermal-label__qr { flex: 0 0 17mm; height: 17mm; width: 17mm; }
+    .thermal-label__qr { flex: 0 0 21mm; height: 21mm; max-height: 21mm; max-width: 21mm; width: 21mm; }
     .thermal-label__info { font-size: 6pt; line-height: 1.15; overflow: hidden; }
     .thermal-label__info small, .thermal-label__info span { font-size: 6pt; line-height: 1.15; overflow-wrap: anywhere; }
     .thermal-label__code { font-size: 10pt; font-weight: 700; }
@@ -181,7 +186,7 @@ const printableDocument = (
         <div class="field"><label for="estado">Estado</label><select id="estado" name="estado" [(ngModel)]="filters.estado"><option value="">Todos</option>@for(e of states(); track e.id){<option [value]="e.codigo">{{ e.nombre }}</option>}</select></div>
         <div class="field"><label for="department">Departamento</label><select id="department" name="department" [(ngModel)]="filters.departamentoId"><option value="">Todos</option>@for(d of departments(); track d.id){<option [value]="d.id">{{ d.nombre }}</option>}</select></div>
         <div class="field"><label for="location">Localidad</label><input id="location" name="location" [(ngModel)]="filters.localidad" /></div>
-        <div class="field"><label for="verification">Verificación</label><select id="verification" name="verification" [(ngModel)]="filters.verificacion"><option value="">Todos</option><option value="PENDIENTE">Pendientes</option><option value="VERIFICADO">Verificados</option><option value="REVISAR">Revisar</option></select></div>
+        <div class="field"><label for="verification">Verificación física</label><select id="verification" name="verification" [(ngModel)]="filters.verificacion"><option value="">Todos</option><option value="PENDIENTE">No verificados</option><option value="VERIFICADO">Verificados</option></select></div>
         <div class="filter-panel__actions"><button class="btn btn--primary" type="submit">Aplicar</button><button class="btn btn--ghost" type="button" (click)="clear()">Limpiar</button></div>
       </form>
       @if (loading()) { <app-view-state kind="loading" title="Cargando dispositivos" message="Consultando el inventario real…" /> }
@@ -206,7 +211,7 @@ const printableDocument = (
             } @else {
               <span class="cell-primary">{{ custody(item) }}</span><span class="cell-secondary">{{ item.colaborador?.rut ? rut(item.colaborador!.rut) : item.departamento?.nombre || 'Sin responsable actual' }}</span>
             }
-          </td><td><span class="verification-badge" [class.verification-badge--PENDIENTE]="(item.verificacionFisica?.resultado || 'PENDIENTE') === 'PENDIENTE'" [class.verification-badge--VERIFICADO]="item.verificacionFisica?.resultado === 'VERIFICADO'" [class.verification-badge--REVISAR]="item.verificacionFisica?.resultado === 'REVISAR'">{{ verification(item.verificacionFisica?.resultado) }}</span></td><td class="location-cell"><span class="cell-primary">{{ item.localidad || 'Sin localidad' }}</span><span class="cell-secondary">{{ item.ubicacionDetalle || 'Sin detalle de ubicación' }}</span></td><td><div class="actions"><a class="btn btn--secondary btn--small table-icon-action" [routerLink]="[item.codigoInventario]" title="Gestionar ficha" [attr.aria-label]="'Gestionar ficha de ITAM ' + item.codigoInventario"><svg lucideEye aria-hidden="true"></svg></a><a class="btn btn--secondary btn--small table-icon-action" [routerLink]="[item.codigoInventario,'editar']" title="Editar" [attr.aria-label]="'Editar ITAM ' + item.codigoInventario"><svg lucidePencil aria-hidden="true"></svg></a></div></td></tr>}
+          </td><td><span class="verification-badge" [class.verification-badge--PENDIENTE]="item.origenRegistro === 'IMPORTADO' && item.verificacionFisica?.resultado !== 'VERIFICADO'" [class.verification-badge--VERIFICADO]="item.origenRegistro === 'MANUAL' || item.verificacionFisica?.resultado === 'VERIFICADO'" [class.verification-badge--REVISAR]="false">{{ verification(item.verificacionFisica?.resultado, item.origenRegistro) }}</span></td><td class="location-cell"><span class="cell-primary">{{ item.localidad || 'Sin localidad' }}</span><span class="cell-secondary">{{ item.ubicacionDetalle || 'Sin detalle de ubicación' }}</span></td><td><div class="actions"><a class="btn btn--secondary btn--small table-icon-action" [routerLink]="[item.codigoInventario]" title="Ver detalle" [attr.aria-label]="'Ver detalle de ITAM ' + item.codigoInventario"><svg lucideEye aria-hidden="true"></svg></a><a class="btn btn--secondary btn--small table-icon-action" [routerLink]="[item.codigoInventario,'editar']" title="Editar ficha" [attr.aria-label]="'Editar ficha de ITAM ' + item.codigoInventario"><svg lucidePencil aria-hidden="true"></svg></a></div></td></tr>}
         </tbody></table></div>
         <div class="mobile-record-list inventory-mobile-list">
           @for(item of items(); track item.id) {
@@ -221,7 +226,7 @@ const printableDocument = (
                 <app-status-badge [code]="item.estado.codigo" [label]="item.estado.nombre" />
               </header>
               <dl class="mobile-record-card__details">
-                <div><dt>Verificación</dt><dd><span class="verification-badge" [class.verification-badge--PENDIENTE]="(item.verificacionFisica?.resultado || 'PENDIENTE') === 'PENDIENTE'" [class.verification-badge--VERIFICADO]="item.verificacionFisica?.resultado === 'VERIFICADO'" [class.verification-badge--REVISAR]="item.verificacionFisica?.resultado === 'REVISAR'">{{ verification(item.verificacionFisica?.resultado) }}</span></dd></div>
+                <div><dt>Verificación</dt><dd><span class="verification-badge" [class.verification-badge--PENDIENTE]="item.origenRegistro === 'IMPORTADO' && item.verificacionFisica?.resultado !== 'VERIFICADO'" [class.verification-badge--VERIFICADO]="item.origenRegistro === 'MANUAL' || item.verificacionFisica?.resultado === 'VERIFICADO'" [class.verification-badge--REVISAR]="false">{{ verification(item.verificacionFisica?.resultado, item.origenRegistro) }}</span></dd></div>
                 <div><dt>Responsable</dt><dd>@if(assignedWithoutResponsible(item)){<span class="custody-warning"><svg lucideTriangleAlert></svg>Asignado sin responsable</span><small>Revisar custodia</small>}@else if(closedCustody(item)){<span>Último responsable: {{ lastResponsibleName(item) }}</span>@if(item.ultimoResponsableConocido;as previous){<small>{{ previous.tipo === 'COLABORADOR' ? 'Colaborador' : 'Departamento' }} · {{ previous.fechaMovimiento | date:'dd/MM/yyyy' }}</small>}}@else{<span>{{ custody(item) }}</span>}</dd></div>
                 <div><dt>Ubicaci&oacute;n</dt><dd>{{ item.localidad || item.ubicacionDetalle || 'Sin ubicaci&oacute;n' }}</dd></div>
               </dl>
@@ -241,7 +246,7 @@ const printableDocument = (
           <p>Elija el formato de salida. Las etiquetas incluyen el responsable actual y el teléfono asociado cuando existe; omiten RUT y valores comerciales.</p>
           <div class="print-choice-grid">
             <button type="button" (click)="printLabels('A4')"><svg lucidePrinter></svg><strong>Hoja A4</strong><span>Varias etiquetas organizadas en grilla por hoja.</span></button>
-            <button type="button" (click)="printLabels('THERMAL')"><svg lucidePrinter></svg><strong>Impresora de etiquetas</strong><span>Una etiqueta por dispositivo para impresora térmica Zebra.</span></button>
+            <button type="button" (click)="printLabels('THERMAL')"><svg lucidePrinter></svg><strong>Brother QL-800</strong><span>Una etiqueta de 62 × 40 mm por dispositivo.</span></button>
           </div>
         </section>
       </div>
@@ -277,7 +282,7 @@ export class DispositivosList implements OnInit {
   protected readonly verification = verificationLabel;
   protected readonly rut = formatRut;
   protected quickQuery = '';
-  protected filters: { q: string; tipoDispositivoId: string; estado: string; departamentoId: string; localidad: string; verificacion: '' | ResultadoVerificacionFisica } = { q: '', tipoDispositivoId: '', estado: '', departamentoId: '', localidad: '', verificacion: '' };
+  protected filters: { q: string; tipoDispositivoId: string; estado: string; departamentoId: string; localidad: string; verificacion: '' | FiltroVerificacionDispositivo } = { q: '', tipoDispositivoId: '', estado: '', departamentoId: '', localidad: '', verificacion: '' };
 
   ngOnInit(): void {
     this.filters.estado=this.route.snapshot.queryParamMap.get('estado')||'';
