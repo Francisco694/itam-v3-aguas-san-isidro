@@ -50,15 +50,15 @@ export const crearActaEntrega=async(input:CrearActaInput)=>{
  if(input.departamentoId&&!input.recepcionanteId)throw new ValidationError("La persona que recepciona es obligatoria para un departamento.");
  if(!input.dispositivosCodigos.length)throw new ValidationError("El acta requiere al menos un dispositivo.");
  const client=await pool.connect();try{await client.query("BEGIN");
-  let collaborator=null;let department=null;let receiver=null;let actaDepartmentId=input.departamentoId??null;
-  if(input.colaboradorId){collaborator=await obtenerColaboradorPorId(input.colaboradorId,client);if(!collaborator)throw new NotFoundError("Colaborador no encontrado.");actaDepartmentId=collaborator.departamento_id?Number(collaborator.departamento_id):null;}
-  if(input.departamentoId){department=await obtenerDepartamentoPorId(input.departamentoId);if(!department)throw new NotFoundError("Departamento no encontrado.");receiver=await obtenerColaboradorPorId(input.recepcionanteId!,client);if(!receiver||receiver.departamento_id!==department.id)throw new ValidationError("El recepcionante debe pertenecer al departamento.");}
+  let collaborator=null;let department=null;let receiver=null;
+  if(input.colaboradorId){collaborator=await obtenerColaboradorPorId(input.colaboradorId);if(!collaborator)throw new NotFoundError("Colaborador no encontrado.");}
+  if(input.departamentoId){department=await obtenerDepartamentoPorId(input.departamentoId);if(!department)throw new NotFoundError("Departamento no encontrado.");receiver=await obtenerColaboradorPorId(input.recepcionanteId!);if(!receiver||receiver.departamento_id!==department.id)throw new ValidationError("El recepcionante debe pertenecer al departamento.");}
   const year=new Date().getFullYear();const seq=await client.query<{ultimo_numero:number}>(`INSERT INTO itam.secuencias_acta_entrega(anio,ultimo_numero)
    VALUES($1,1) ON CONFLICT(anio) DO UPDATE SET ultimo_numero=itam.secuencias_acta_entrega.ultimo_numero+1 RETURNING ultimo_numero`,[year]);
   const number=`AE-${year}-${String(seq.rows[0]!.ultimo_numero).padStart(6,"0")}`;
   const declaracion=input.colaboradorId?DECLARACION_OBLIGATORIA_TRABAJADOR:(input.declaracion??null);
   const inserted=await client.query<{id:string}>(`INSERT INTO itam.actas_entrega(numero_acta,colaborador_id,departamento_id,recepcionante_id,localidad,responsable_ti,observaciones,declaracion)
-   VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,[number,input.colaboradorId??null,actaDepartmentId,input.recepcionanteId??null,input.localidad??null,input.responsableTi,input.observaciones??null,declaracion]);
+   VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,[number,input.colaboradorId??null,input.departamentoId??null,input.recepcionanteId??null,input.localidad??null,input.responsableTi,input.observaciones??null,declaracion]);
   for(const code of [...new Set(input.dispositivosCodigos)]){const device=await obtenerDispositivoPorCodigo(code,client);if(!device)throw new NotFoundError(`Dispositivo ${code} no encontrado.`);
    if(input.colaboradorId&&Number(device.colaborador_id)!==input.colaboradorId)throw new ConflictError(`El dispositivo ${code} no está bajo custodia del colaborador.`);
    if(input.departamentoId&&Number(device.departamento_id)!==input.departamentoId)throw new ConflictError(`El dispositivo ${code} no está bajo custodia del departamento.`);
@@ -77,7 +77,7 @@ export const generarPdfActa=async(id:number):Promise<{buffer:Buffer;filename:str
  doc.fontSize(16).fillColor("#03045E").text("AGUAS SAN ISIDRO",{align:"center"});doc.fontSize(10).text("Departamento de Tecnología",{align:"center"});
  doc.moveDown().fontSize(15).text("ACTA DE ENTREGA DE EQUIPOS",{align:"center"});doc.fontSize(10).fillColor("#111827").text(`N° ${acta.numeroActa}`,{align:"center"});
  doc.moveDown().text(`Fecha: ${new Date(acta.fecha).toLocaleDateString("es-CL")}    Localidad: ${acta.localidad??"—"}`);
- const person=acta.colaborador??acta.recepcionante;doc.moveDown().fontSize(12).fillColor("#03045E").text("FUNCIONARIO RESPONSABLE");doc.fontSize(10).fillColor("#111827").text(`Nombre: ${person?.nombre??"—"}\nRUT: ${person?.rut??"—"}\nCargo: ${person?.cargo??"—"}\nDepartamento: ${acta.departamento?.nombre??"Sin departamento registrado"}`);
+ const person=acta.colaborador??acta.recepcionante;doc.moveDown().fontSize(12).fillColor("#03045E").text("FUNCIONARIO RESPONSABLE");doc.fontSize(10).fillColor("#111827").text(`Nombre: ${person?.nombre??"—"}\nRUT: ${person?.rut??"—"}\nCargo: ${person?.cargo??"—"}\nDepartamento: ${acta.departamento?.nombre??"—"}`);
  doc.moveDown().fontSize(12).fillColor("#03045E").text("EQUIPOS ENTREGADOS");doc.fontSize(9).fillColor("#111827");for(const device of acta.dispositivos){doc.moveDown(.4).text(`${device.codigoInventario} · ${device.tipo} · ${device.marca??"—"} ${device.modelo??""}\nSerie: ${device.numeroSerie??"—"} · IMEI: ${device.imei??"—"} · ${clp(device.valorComercial)}`)}
  doc.moveDown().fontSize(12).text(`VALOR COMERCIAL TOTAL: ${clp(acta.valorTotal)}`);
  doc.moveDown().fontSize(11).fillColor("#03045E").text("INFORMACIÓN IMPORTANTE / DECLARACIÓN DEL FUNCIONARIO");doc.fontSize(8.7).fillColor("#111827").text(acta.declaracion??"—",{align:"justify",lineGap:1.5});
