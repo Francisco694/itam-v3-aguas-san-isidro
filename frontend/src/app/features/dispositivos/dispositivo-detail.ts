@@ -219,7 +219,7 @@ type DeviceAction = 'assign-person' | 'assign-department' | 'return' | 'state' |
       </section>
       <section class="traceability-overview" aria-label="Resumen de trazabilidad">
         <article><small>ESTADO DEL EQUIPO</small><strong>{{ device.estado.nombre }}</strong><span>{{ terminal() ? 'Fuera de la operación normal' : 'Estado registrado actualmente' }}</span></article>
-        <article><small>VERIFICACIÓN FÍSICA</small><strong>{{ device.origenRegistro === 'MANUAL' || device.verificacionFisica?.resultado === 'VERIFICADO' ? 'Verificado' : 'No verificado' }}</strong><span>{{ device.origenRegistro === 'MANUAL' ? 'Acreditada por registro manual' : 'Auditoría física del inventario' }}</span></article>
+        <article><small>VERIFICACIÓN FÍSICA</small><strong>{{ verificationStatusLabel(device) }}</strong><span>{{ verificationSourceLabel(device) }}</span></article>
         <article><small>RESPONSABLE ACTUAL</small>@if(traceability()?.responsableActual;as current){<strong>En poder de {{current.nombre}}</strong><span>{{current.tipo==='COLABORADOR' ? ('RUT '+(current.rut||'no informado')) : 'Departamento responsable'}}</span>}@else{<strong>Sin responsable actual</strong><span>{{device.estado.codigo==='DISPONIBLE' ? 'Disponible para entregar' : 'No registra una entrega vigente'}}</span>}</article>
         <article><small>ÚLTIMO RESPONSABLE CONOCIDO</small>@if(traceability()?.ultimoResponsableConocido;as previous){<strong>{{previous.nombre}}</strong><span>{{previous.tipo==='COLABORADOR' ? ('RUT '+(previous.rut||'no informado')) : 'Departamento'}} · {{previous.fechaUltimoMovimiento|date:'dd/MM/yyyy HH:mm'}} · {{originLabel(previous.origenDato)}}</span>}@else{<strong>Sin responsable conocido</strong><span>No existe evidencia histórica vinculada</span>}</article>
       </section>
@@ -523,6 +523,16 @@ export class DispositivoDetail implements OnInit {
   protected canVerifyManually(device: Dispositivo): boolean {
     return device.origenRegistro === 'IMPORTADO'
       && (device.verificacionFisica?.resultado || 'PENDIENTE') === 'PENDIENTE';
+  }
+  protected verificationStatusLabel(device: Dispositivo): string {
+    return device.origenRegistro === 'MANUAL' || device.verificacionFisica?.resultado === 'VERIFICADO'
+      ? 'Verificado'
+      : 'No verificado';
+  }
+  protected verificationSourceLabel(device: Dispositivo): string {
+    return device.origenRegistro === 'MANUAL'
+      ? 'Acreditada por registro manual'
+      : 'Auditoría física del inventario';
   }
   protected async verifyManually(): Promise<void> {
     if(this.submitting() || (this.item()?.verificacionFisica?.resultado || 'PENDIENTE')!=='PENDIENTE') return;
