@@ -2,10 +2,12 @@ import type {PoolClient} from "pg";
 import {pool} from "../../config/database";
 import type {ActaDetalleRow,ActaRow} from "./actas-entrega.types";
 
-const selectActa=`SELECT a.*,c.nombre colaborador_nombre,c.rut colaborador_rut,c.cargo colaborador_cargo,
- d.nombre departamento_nombre,r.nombre recepcionante_nombre,r.rut recepcionante_rut,r.cargo recepcionante_cargo
+const selectActa=`SELECT a.id,a.numero_acta,a.colaborador_id,c.nombre colaborador_nombre,c.rut colaborador_rut,c.cargo colaborador_cargo,
+ COALESCE(a.departamento_id,c.departamento_id) departamento_id,d.nombre departamento_nombre,
+ a.recepcionante_id,r.nombre recepcionante_nombre,r.rut recepcionante_rut,r.cargo recepcionante_cargo,
+ a.localidad,a.fecha,a.estado,a.responsable_ti,a.observaciones,a.declaracion,a.creado_en,a.actualizado_en
  FROM itam.actas_entrega a LEFT JOIN itam.colaboradores c ON c.id=a.colaborador_id
- LEFT JOIN itam.departamentos d ON d.id=a.departamento_id
+ LEFT JOIN itam.departamentos d ON d.id=COALESCE(a.departamento_id,c.departamento_id)
  LEFT JOIN itam.colaboradores r ON r.id=a.recepcionante_id`;
 export const listarActas=async():Promise<ActaRow[]>=>
  (await pool.query<ActaRow>(`${selectActa} ORDER BY a.fecha DESC`)).rows;
