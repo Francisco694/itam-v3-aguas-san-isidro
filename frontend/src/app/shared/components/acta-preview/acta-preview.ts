@@ -70,7 +70,7 @@ export const actaCommercialTotal = (devices: readonly { valorComercial: number }
           </div>
           <div>
             <dt>Departamento</dt>
-            <dd>{{ acta().departamento?.nombre || '—' }}</dd>
+            <dd>{{ acta().departamento?.nombre || 'Sin departamento registrado' }}</dd>
           </div>
           <div>
             <dt>Responsable TI</dt>

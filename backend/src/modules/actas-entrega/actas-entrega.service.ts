@@ -30,9 +30,9 @@ export const DECLARACION_OBLIGATORIA_TRABAJADOR = `El trabajador declara saber q
   sanciones y descuentos que deberá ser asumido por el trabajador y le será descontado de su remuneración, a efectos de lo
   dispuesto en dicho procedimiento, pudiendo el trabajador solicitar el pago en cuotas.`;
 
-const mapActa=(row:ActaRow,details:ActaDetalleRow[])=>({id:row.id,numeroActa:row.numero_acta,
+const mapActa=(row:ActaRow,details:ActaDetalleRow[])=>{const departamentoId=row.departamento_id??row.colaborador_departamento_id;return {id:row.id,numeroActa:row.numero_acta,
  colaborador:row.colaborador_id?{id:row.colaborador_id,nombre:row.colaborador_nombre!,rut:row.colaborador_rut!,cargo:row.colaborador_cargo}:null,
- departamento:row.departamento_id?{id:row.departamento_id,nombre:row.departamento_nombre!}:null,
+ departamento:departamentoId?{id:departamentoId,nombre:row.departamento_nombre!}:null,
  recepcionante:row.recepcionante_id?{id:row.recepcionante_id,nombre:row.recepcionante_nombre!,rut:row.recepcionante_rut!,cargo:row.recepcionante_cargo}:null,
  localidad:row.localidad,fecha:toIsoDateTime(row.fecha),estado:row.estado,responsableTi:row.responsable_ti,
  observaciones:row.observaciones,declaracion:row.declaracion,valorTotal:details.reduce((sum,d)=>sum+Number(d.valor_comercial),0),
@@ -40,7 +40,7 @@ const mapActa=(row:ActaRow,details:ActaDetalleRow[])=>({id:row.id,numeroActa:row
  dispositivos:details.map(d=>({id:d.dispositivo_id,codigoInventario:d.codigo_inventario,tipo:d.tipo_dispositivo,
   marca:d.marca,modelo:d.modelo,numeroSerie:d.numero_serie,imei:d.imei,valorComercial:Number(d.valor_comercial),
   devuelto:Boolean(d.comprobante_id||d.devuelto_historico),devolucion:d.comprobante_id?{id:d.comprobante_id,numeroComprobante:d.numero_comprobante!,fecha:toIsoDateTime(d.fecha_devolucion!),resultado:d.resultado_devolucion!}:null})),
- creadoEn:toIsoDateTime(row.creado_en),actualizadoEn:toIsoDateTime(row.actualizado_en)});
+ creadoEn:toIsoDateTime(row.creado_en),actualizadoEn:toIsoDateTime(row.actualizado_en)};};
 
 export const obtenerActas=async()=>Promise.all((await listarActas()).map(async row=>mapActa(row,await listarDetalleActa(Number(row.id)))));
 export const obtenerActaEntrega=async(id:number)=>{const row=await obtenerActa(id);if(!row)throw new NotFoundError("Acta no encontrada.");return mapActa(row,await listarDetalleActa(id))};
@@ -77,7 +77,7 @@ export const generarPdfActa=async(id:number):Promise<{buffer:Buffer;filename:str
  doc.fontSize(16).fillColor("#03045E").text("AGUAS SAN ISIDRO",{align:"center"});doc.fontSize(10).text("Departamento de Tecnología",{align:"center"});
  doc.moveDown().fontSize(15).text("ACTA DE ENTREGA DE EQUIPOS",{align:"center"});doc.fontSize(10).fillColor("#111827").text(`N° ${acta.numeroActa}`,{align:"center"});
  doc.moveDown().text(`Fecha: ${new Date(acta.fecha).toLocaleDateString("es-CL")}    Localidad: ${acta.localidad??"—"}`);
- const person=acta.colaborador??acta.recepcionante;doc.moveDown().fontSize(12).fillColor("#03045E").text("FUNCIONARIO RESPONSABLE");doc.fontSize(10).fillColor("#111827").text(`Nombre: ${person?.nombre??"—"}\nRUT: ${person?.rut??"—"}\nCargo: ${person?.cargo??"—"}\nDepartamento: ${acta.departamento?.nombre??"—"}`);
+ const person=acta.colaborador??acta.recepcionante;doc.moveDown().fontSize(12).fillColor("#03045E").text("FUNCIONARIO RESPONSABLE");doc.fontSize(10).fillColor("#111827").text(`Nombre: ${person?.nombre??"—"}\nRUT: ${person?.rut??"—"}\nCargo: ${person?.cargo??"—"}\nDepartamento: ${acta.departamento?.nombre??"Sin departamento registrado"}`);
  doc.moveDown().fontSize(12).fillColor("#03045E").text("EQUIPOS ENTREGADOS");doc.fontSize(9).fillColor("#111827");for(const device of acta.dispositivos){doc.moveDown(.4).text(`${device.codigoInventario} · ${device.tipo} · ${device.marca??"—"} ${device.modelo??""}\nSerie: ${device.numeroSerie??"—"} · IMEI: ${device.imei??"—"} · ${clp(device.valorComercial)}`)}
  doc.moveDown().fontSize(12).text(`VALOR COMERCIAL TOTAL: ${clp(acta.valorTotal)}`);
  doc.moveDown().fontSize(11).fillColor("#03045E").text("INFORMACIÓN IMPORTANTE / DECLARACIÓN DEL FUNCIONARIO");doc.fontSize(8.7).fillColor("#111827").text(acta.declaracion??"—",{align:"justify",lineGap:1.5});

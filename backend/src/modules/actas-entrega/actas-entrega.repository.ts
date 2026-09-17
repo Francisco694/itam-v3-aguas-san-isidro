@@ -3,9 +3,9 @@ import {pool} from "../../config/database";
 import type {ActaDetalleRow,ActaRow} from "./actas-entrega.types";
 
 const selectActa=`SELECT a.*,c.nombre colaborador_nombre,c.rut colaborador_rut,c.cargo colaborador_cargo,
- d.nombre departamento_nombre,r.nombre recepcionante_nombre,r.rut recepcionante_rut,r.cargo recepcionante_cargo
+ c.departamento_id colaborador_departamento_id,d.nombre departamento_nombre,r.nombre recepcionante_nombre,r.rut recepcionante_rut,r.cargo recepcionante_cargo
  FROM itam.actas_entrega a LEFT JOIN itam.colaboradores c ON c.id=a.colaborador_id
- LEFT JOIN itam.departamentos d ON d.id=a.departamento_id
+ LEFT JOIN itam.departamentos d ON d.id=COALESCE(a.departamento_id,c.departamento_id)
  LEFT JOIN itam.colaboradores r ON r.id=a.recepcionante_id`;
 export const listarActas=async():Promise<ActaRow[]>=>
  (await pool.query<ActaRow>(`${selectActa} ORDER BY a.fecha DESC`)).rows;

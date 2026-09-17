@@ -5,7 +5,7 @@ export interface CrearActaInput {
 }
 export interface ActaRow {
   id:string;numero_acta:string;colaborador_id:string|null;colaborador_nombre:string|null;
-  colaborador_rut:string|null;colaborador_cargo:string|null;departamento_id:string|null;
+  colaborador_rut:string|null;colaborador_cargo:string|null;colaborador_departamento_id:string|null;departamento_id:string|null;
   departamento_nombre:string|null;recepcionante_id:string|null;recepcionante_nombre:string|null;
   recepcionante_rut:string|null;recepcionante_cargo:string|null;localidad:string|null;
   fecha:Date|string;estado:string;responsable_ti:string;observaciones:string|null;
