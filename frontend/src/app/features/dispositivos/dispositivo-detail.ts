@@ -3,7 +3,7 @@ import { Component, DestroyRef, OnInit, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { LucideBuilding, LucideCircleAlert, LucideDownload, LucideExternalLink, LucideFileText, LucideHistory, LucidePackageCheck, LucidePencil, LucidePlus, LucideRotateCcw, LucideShieldAlert, LucideUserCheck, LucideWrench, LucideX } from '@lucide/angular';
+import { LucideBuilding, LucideCircleAlert, LucideDownload, LucideExternalLink, LucideFileText, LucideHistory, LucidePackageCheck, LucidePencil, LucidePlus, LucideRotateCcw, LucideShieldAlert, LucideShieldCheck, LucideUserCheck, LucideUsers, LucideWrench, LucideX } from '@lucide/angular';
 import { catchError, combineLatest, forkJoin, Observable, of } from 'rxjs';
 import { ActaEntrega, Colaborador, ComprobanteDevolucion, Departamento, Dispositivo, Estado, HistorialEvento, LineaMovilResumen, OrdenServicio, ResultadoDevolucion, Sim, TrazabilidadDispositivo } from '../../core/models/itam.models';
 import { ColaboradoresService } from '../../core/services/colaboradores.service';
@@ -98,6 +98,13 @@ export const technicalServiceOrderStatusLabel = (state: OrdenServicio['estado'])
   CERRADA: 'Finalizado',
   BAJA: 'Finalizado',
 })[state];
+
+export const latestTechnicalServiceOrder = (orders: readonly OrdenServicio[]): OrdenServicio | null =>
+  [...orders].sort((left, right) => {
+    const leftDate = Date.parse(left.actualizadoEn || left.fechaEnvio);
+    const rightDate = Date.parse(right.actualizadoEn || right.fechaEnvio);
+    return rightDate - leftDate || Number(right.id) - Number(left.id);
+  })[0] ?? null;
 
 const todayDateInputValue = (): string => {
   const now = new Date();
@@ -199,7 +206,7 @@ type DeviceAction = 'assign-person' | 'assign-department' | 'return' | 'state' |
 @Component({
   selector: 'app-dispositivo-detail',
   standalone: true,
-  imports: [DatePipe, FormsModule, ReactiveFormsModule, RouterLink, PageHeader, StatusBadge, ViewState, ComprobanteDevolucionPreview, ActaPreview, AssetLabel, LucideBuilding, LucideCircleAlert, LucideDownload, LucideExternalLink, LucideFileText, LucideHistory, LucidePackageCheck, LucidePencil, LucidePlus, LucideRotateCcw, LucideShieldAlert, LucideUserCheck, LucideWrench, LucideX],
+  imports: [DatePipe, FormsModule, ReactiveFormsModule, RouterLink, PageHeader, StatusBadge, ViewState, ComprobanteDevolucionPreview, ActaPreview, AssetLabel, LucideBuilding, LucideCircleAlert, LucideDownload, LucideExternalLink, LucideFileText, LucideHistory, LucidePackageCheck, LucidePencil, LucidePlus, LucideRotateCcw, LucideShieldAlert, LucideShieldCheck, LucideUserCheck, LucideUsers, LucideWrench, LucideX],
   template: `
     <app-page-header title="Ficha de Equipo" subtitle="Información del equipo y acciones disponibles.">
       <a class="btn btn--secondary" [routerLink]="['/dispositivos']">Volver al inventario</a>
@@ -218,14 +225,14 @@ type DeviceAction = 'assign-person' | 'assign-department' | 'return' | 'state' |
         <div><app-status-badge [code]="device.estado.codigo" [label]="device.estado.nombre" /><a class="btn btn--secondary btn--small" [routerLink]="['editar']"><svg lucidePencil></svg>Editar ficha</a></div>
       </section>
       <section class="traceability-overview" aria-label="Resumen de trazabilidad">
-        <article><small>ESTADO DEL EQUIPO</small><strong>{{ device.estado.nombre }}</strong><span>{{ terminal() ? 'Fuera de la operación normal' : 'Estado registrado actualmente' }}</span></article>
-        <article><small>VERIFICACIÓN FÍSICA</small><strong>{{ verificationStatusLabel(device) }}</strong><span>{{ verificationSourceLabel(device) }}</span></article>
-        <article><small>RESPONSABLE ACTUAL</small>@if(traceability()?.responsableActual;as current){<strong>En poder de {{current.nombre}}</strong><span>{{current.tipo==='COLABORADOR' ? ('RUT '+(current.rut||'no informado')) : 'Departamento responsable'}}</span>}@else{<strong>Sin responsable actual</strong><span>{{device.estado.codigo==='DISPONIBLE' ? 'Disponible para entregar' : 'No registra una entrega vigente'}}</span>}</article>
-        <article><small>ÚLTIMO RESPONSABLE CONOCIDO</small>@if(traceability()?.ultimoResponsableConocido;as previous){<strong>{{previous.nombre}}</strong><span>{{previous.tipo==='COLABORADOR' ? ('RUT '+(previous.rut||'no informado')) : 'Departamento'}} · {{previous.fechaUltimoMovimiento|date:'dd/MM/yyyy HH:mm'}} · {{originLabel(previous.origenDato)}}</span>}@else{<strong>Sin responsable conocido</strong><span>No existe evidencia histórica vinculada</span>}</article>
+        <article class="traceability-card traceability-card--state"><span class="traceability-card__icon"><svg lucidePackageCheck></svg></span><div><small>ESTADO DEL EQUIPO</small><strong>{{ device.estado.nombre }}</strong><span>{{ terminal() ? 'Fuera de la operación normal' : 'Estado registrado actualmente' }}</span></div></article>
+        <article class="traceability-card traceability-card--verification"><span class="traceability-card__icon"><svg lucideShieldCheck></svg></span><div><small>VERIFICACIÓN FÍSICA</small><strong>{{ verificationStatusLabel(device) }}</strong><span>{{ verificationSourceLabel(device) }}</span></div></article>
+        <article class="traceability-card traceability-card--current"><span class="traceability-card__icon"><svg lucideUserCheck></svg></span><div><small>RESPONSABLE ACTUAL</small>@if(traceability()?.responsableActual;as current){<strong>En poder de {{current.nombre}}</strong><span>{{current.tipo==='COLABORADOR' ? ('RUT '+(current.rut||'no informado')) : 'Departamento responsable'}}</span>}@else{<strong>Sin responsable actual</strong><span>{{device.estado.codigo==='DISPONIBLE' ? 'Disponible para entregar' : 'No registra una entrega vigente'}}</span>}</div></article>
+        <article class="traceability-card traceability-card--previous"><span class="traceability-card__icon"><svg lucideUsers></svg></span><div><small>ÚLTIMO RESPONSABLE CONOCIDO</small>@if(traceability()?.ultimoResponsableConocido;as previous){<strong>{{previous.nombre}}</strong><span>{{previous.tipo==='COLABORADOR' ? ('RUT '+(previous.rut||'no informado')) : 'Departamento'}} · {{previous.fechaUltimoMovimiento|date:'dd/MM/yyyy HH:mm'}} · {{originLabel(previous.origenDato)}}</span>}@else{<strong>Sin responsable conocido</strong><span>No existe evidencia histórica vinculada</span>}</div></article>
       </section>
       @for(alert of traceability()?.alertas || [];track alert){<div class="notice notice--warning traceability-alert"><svg lucideCircleAlert></svg><div><strong>{{ alert.includes('Asignado') ? 'Requiere revisión' : (device.estado.codigo==='EXTRAVIADO' ? 'Equipo perdido' : 'Equipo retirado del inventario') }}</strong><span>{{alert}}</span></div></div>}
       @if(activeServiceOrder(); as order){<section class="notice technical-service-card" role="status"><svg lucideWrench></svg><div><strong>Equipo en servicio técnico</strong><span>Este equipo está apartado del inventario operativo mientras se encuentra en revisión técnica.</span><dl><div><dt>Revisión N°</dt><dd>#{{order.id}}</dd></div><div><dt>Fecha de envío</dt><dd>{{serviceDateLabel(order.fechaEnvio)}}</dd></div><div><dt>Proveedor / técnico / destino</dt><dd>{{order.proveedor || 'No informado'}}</dd></div><div><dt>Falla reportada</dt><dd>{{order.fallaReportada}}</dd></div><div><dt>Estado de la revisión</dt><dd>{{technicalServiceStatusLabel(order.estado)}}</dd></div></dl><a class="btn btn--secondary btn--small" [routerLink]="['/servicio-tecnico']" [queryParams]="{orden: order.id}">Ver revisión técnica</a></div></section>}
-      @if(serviceOrders().length){<section class="technical-history"><div class="column-title"><span>04</span><div><small>SERVICIO TÉCNICO</small><h3>Historial de servicio técnico</h3></div></div><div class="technical-history__list">@for(order of serviceOrders(); track order.id){<article><header><strong>Revisión #{{order.id}}</strong><span>{{technicalServiceStatusLabel(order.estado)}}</span></header><dl><div><dt>Fecha</dt><dd>{{serviceDateLabel(order.fechaEnvio)}}</dd></div><div><dt>Proveedor</dt><dd>{{order.proveedor || 'No informado'}}</dd></div><div><dt>Falla</dt><dd>{{order.fallaReportada}}</dd></div><div><dt>Costo cotizado / final</dt><dd>{{order.montoCotizacion === null ? 'No informado' : clp(order.montoCotizacion)}} / {{order.costoFinal === null ? 'No informado' : clp(order.costoFinal)}}</dd></div></dl><a class="btn btn--secondary btn--small" [routerLink]="['/servicio-tecnico']" [queryParams]="{orden: order.id}">Ver orden y cotización</a></article>}</div></section>}
+      @if(latestServiceOrder(); as latest){<section class="technical-history"><header class="technical-history__header"><div class="technical-history__title"><span class="technical-history__icon"><svg lucideWrench></svg></span><div><small>SERVICIO TÉCNICO</small><h3>Historial de servicio técnico</h3><p>Última revisión registrada para este equipo.</p></div></div><a class="btn btn--secondary btn--small" [routerLink]="['/servicio-tecnico']" [queryParams]="{dispositivo: codigo}"><svg lucideHistory></svg>Ver historial completo</a></header><article class="technical-history__latest"><div class="technical-history__summary"><div class="technical-history__status"><span>{{technicalServiceStatusLabel(latest.estado)}}</span><strong>Revisión #{{latest.id}}</strong><small>{{serviceDateLabel(latest.fechaEnvio)}}</small></div><div class="technical-history__details"><div><small>PROVEEDOR</small><strong>{{latest.proveedor || 'No informado'}}</strong></div><div><small>FALLA REPORTADA</small><strong>{{latest.fallaReportada || 'No informada'}}</strong></div><div><small>COSTO COTIZADO / FINAL</small><strong>{{latest.montoCotizacion === null ? 'No informado' : clp(latest.montoCotizacion)}} / {{latest.costoFinal === null ? 'No informado' : clp(latest.costoFinal)}}</strong></div></div></div><div class="technical-history__costs"><div><div><span>Costo cotizado</span><strong>{{latest.montoCotizacion === null ? 'No informado' : clp(latest.montoCotizacion)}}</strong></div><div class="technical-history__bar"><span [style.width.%]="technicalCostPercent(latest.montoCotizacion, latest)"></span></div></div><div><div><span>Costo final</span><strong>{{latest.costoFinal === null ? 'No informado' : clp(latest.costoFinal)}}</strong></div><div class="technical-history__bar technical-history__bar--final"><span [style.width.%]="technicalCostPercent(latest.costoFinal, latest)"></span></div></div></div><a class="btn btn--primary btn--small" [routerLink]="['/servicio-tecnico']" [queryParams]="{orden: latest.id}"><svg lucideFileText></svg>Ver orden y cotización</a></article></section>}
       <section class="panoramic-card">
         <article class="panoramic-column details-column">
           <div class="column-title"><span>01</span><div><small>IDENTIFICACIÓN</small><h3>Detalles</h3></div></div>
@@ -384,7 +391,49 @@ type DeviceAction = 'assign-person' | 'assign-department' | 'return' | 'state' |
     }
   `,
   styleUrl: './dispositivo-detail.scss',
-  styles: [`.invoice-document{align-items:center;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:.7rem;display:flex;flex-wrap:wrap;gap:.6rem;margin-top:.8rem;padding:.7rem}.invoice-document>span{align-items:center;color:var(--slate-500);display:flex;font-size:.74rem;gap:.45rem;margin-right:auto}.invoice-document>span svg{color:var(--blue);height:1rem;width:1rem}.device-feedback{align-items:flex-start;display:flex;gap:.75rem;justify-content:space-between;margin-bottom:1rem;position:relative;z-index:1}.device-feedback div,.modal-save-error{display:grid;gap:.25rem}.device-feedback span,.modal-save-error span{display:block}`]
+  styles: [`
+    .invoice-document{align-items:center;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:.7rem;display:flex;flex-wrap:wrap;gap:.6rem;margin-top:.8rem;padding:.7rem}.invoice-document>span{align-items:center;color:var(--slate-500);display:flex;font-size:.74rem;gap:.45rem;margin-right:auto}.invoice-document>span svg{color:var(--blue);height:1rem;width:1rem}.device-feedback{align-items:flex-start;display:flex;gap:.75rem;justify-content:space-between;margin-bottom:1rem;position:relative;z-index:1}.device-feedback div,.modal-save-error{display:grid;gap:.25rem}.device-feedback span,.modal-save-error span{display:block}
+    .traceability-overview { background: transparent; border: 0; display: grid; gap: .75rem; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: .75rem 0; }
+    .traceability-card { align-items: flex-start; background: #fff; border: 1px solid var(--gray-200); border-radius: .85rem; box-shadow: var(--shadow-sm); display: flex; gap: .7rem; min-width: 0; padding: .95rem; }
+    .traceability-overview .traceability-card + .traceability-card { border-left: 1px solid var(--gray-200); }
+    .traceability-card > div { display: grid; gap: .24rem; min-width: 0; }
+    .traceability-card__icon { align-items: center; background: var(--cyan-soft); border-radius: .65rem; color: var(--blue); display: flex; flex: 0 0 2rem; height: 2rem; justify-content: center; width: 2rem; }
+    .traceability-card__icon svg { height: 1rem; width: 1rem; }
+    .traceability-card--verification .traceability-card__icon { background: #ecfdf5; color: #15803d; }
+    .traceability-card--current .traceability-card__icon { background: #eff6ff; color: #1d4ed8; }
+    .traceability-card--previous .traceability-card__icon { background: #f8fafc; color: #475569; }
+    .traceability-card small { color: var(--blue); font-size: .55rem; font-weight: 850; letter-spacing: .09em; }
+    .traceability-card strong { font-size: .78rem; overflow-wrap: anywhere; }
+    .traceability-card span:not(.traceability-card__icon) { color: var(--slate-500); font-size: .64rem; overflow-wrap: anywhere; }
+    .technical-history { background: #fff; border: 1px solid var(--gray-200); border-radius: var(--radius-xl); box-shadow: var(--shadow-md); margin: .5rem 0 1rem; padding: 1.25rem 1.35rem; }
+    .technical-history__header { align-items: flex-start; display: flex; gap: 1rem; justify-content: space-between; }
+    .technical-history__title { align-items: flex-start; display: flex; gap: .7rem; }
+    .technical-history__title > div { display: grid; gap: .2rem; }
+    .technical-history__title small { color: var(--blue); font-size: .56rem; font-weight: 850; letter-spacing: .12em; }
+    .technical-history__title h3 { font-size: 1.05rem; margin: 0; }
+    .technical-history__title p { color: var(--slate-500); font-size: .7rem; margin: 0; }
+    .technical-history__icon { align-items: center; background: #eff6ff; border-radius: .7rem; color: var(--blue); display: flex; height: 2.35rem; justify-content: center; width: 2.35rem; }
+    .technical-history__icon svg { height: 1.1rem; width: 1.1rem; }
+    .technical-history__latest { background: #f8fbff; border: 1px solid #dbeafe; border-radius: .9rem; display: grid; gap: 1rem; margin-top: 1rem; padding: 1rem; }
+    .technical-history__summary { display: grid; gap: 1rem; grid-template-columns: minmax(13rem, .8fr) minmax(0, 2fr); }
+    .technical-history__status { align-items: center; display: flex; flex-wrap: wrap; gap: .55rem .8rem; }
+    .technical-history__status span { background: #dcfce7; border-radius: 999px; color: #166534; font-size: .63rem; font-weight: 800; padding: .35rem .6rem; }
+    .technical-history__status strong { color: var(--navy); font-size: .95rem; }
+    .technical-history__status small { color: var(--slate-500); font-size: .68rem; }
+    .technical-history__details { display: grid; gap: .65rem; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .technical-history__details > div { border-left: 2px solid #bfdbfe; display: grid; gap: .2rem; min-width: 0; padding-left: .7rem; }
+    .technical-history__details small, .technical-history__costs span { color: var(--slate-500); font-size: .56rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+    .technical-history__details strong { font-size: .72rem; overflow-wrap: anywhere; }
+    .technical-history__costs { display: grid; gap: 1rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .technical-history__costs > div > div:first-child { align-items: center; display: flex; justify-content: space-between; margin-bottom: .35rem; }
+    .technical-history__costs strong { color: var(--navy); font-size: .75rem; }
+    .technical-history__bar { background: #dbeafe; border-radius: 999px; height: .45rem; overflow: hidden; }
+    .technical-history__bar span { background: #60a5fa; border-radius: inherit; display: block; height: 100%; min-width: 0; transition: width .2s ease; }
+    .technical-history__bar--final { background: #dcfce7; }
+    .technical-history__bar--final span { background: #22c55e; }
+    @media (max-width: 1100px) { .traceability-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); } .technical-history__summary { grid-template-columns: 1fr; } }
+    @media (max-width: 760px) { .traceability-overview { grid-template-columns: 1fr; } .technical-history { padding: 1rem; } .technical-history__header { flex-direction: column; } .technical-history__header .btn { width: 100%; } .technical-history__details, .technical-history__costs { grid-template-columns: 1fr; } }
+  `]
 })
 export class DispositivoDetail implements OnInit {
   private readonly auth = inject(AuthService);
@@ -487,6 +536,11 @@ export class DispositivoDetail implements OnInit {
   protected readonly smartphonePhonePending=smartphonePhonePending;
   protected readonly lineActionCopy=smartphoneLineActionCopy;
   protected readonly technicalServiceStatusLabel=technicalServiceOrderStatusLabel;
+  protected latestServiceOrder(): OrdenServicio | null { return latestTechnicalServiceOrder(this.serviceOrders()); }
+  protected technicalCostPercent(value: number | null, order: OrdenServicio): number {
+    const maximum = Math.max(order.montoCotizacion ?? 0, order.costoFinal ?? 0);
+    return maximum > 0 && value !== null ? Math.min(100, (value / maximum) * 100) : 0;
+  }
   protected serviceDateLabel(value: string): string { const [year,month,day]=value.slice(0,10).split('-');return `${day}/${month}/${year}`; }
   protected readonly labelResponsible=assetLabelResponsible;
   protected readonly labelPhone=smartphonePhoneValue;
@@ -494,7 +548,7 @@ export class DispositivoDetail implements OnInit {
   protected originLabel(origin: 'HISTORIAL'|'BAJA'|'COMPROBANTE'): string { return {HISTORIAL:'Historial',BAJA:'Registro de baja',COMPROBANTE:'Comprobante'}[origin]; }
   protected eventLabel(event: string): string { return { ALTA_DISPOSITIVO: 'Equipo incorporado al inventario', ASIGNAR_COLABORADOR: 'Equipo entregado a un colaborador', CONCILIAR_DISPOSITIVO_EXISTENTE: 'Registro actualizado desde inventario anterior', DEVOLVER_A_BODEGA: 'Equipo recibido en bodega', CAMBIAR_ESTADO: 'Situación del equipo actualizada', REPORTAR_EXTRAVIO: 'Equipo reportado como perdido', DAR_DE_BAJA: 'Equipo retirado del inventario', VERIFICACION_FISICA: 'Verificación física', VERIFICACION_MANUAL_EQUIPO: 'Equipo verificado manualmente por usuario', EQUIPO_VERIFICADO_POR_REGISTRO_MANUAL: 'Equipo verificado por registro manual', SIM_ASOCIADA_A_DISPOSITIVO: 'SIM asociada al smartphone', ENTREGA_EQUIPO_CON_SIM: 'Smartphone entregado con SIM', LINEA_MOVIL_NUMERO_ACTUALIZADO: 'Número telefónico actualizado' }[event] || event.replaceAll('_', ' '); }
   protected verificationEventLabel(event: HistorialEvento): string { const result = event.detalle['resultado']; return result === 'VERIFICADO' ? '✓ Equipo verificado' : '○ Equipo no verificado'; }
-  private codigo = 0;
+  protected codigo = 0;
   private id = '';
   private routeAction = '';
   protected readonly actionForm = this.fb.nonNullable.group({ colaboradorId: [''], departamentoId: [''], recibidoPorId:[''], localidad: [''], ubicacionDetalle: [''], estadoId: [''], accionLineaExtravio: [''], proveedor:[''], areaSolicitante:[''], contactoServicio:[''], fechaEnvio:[''], tipoServicio:[''], fallaReportada:[''], accesoriosEntregados:[''], motivoBaja:[''], motivoRecuperacion:[''], responsable: ['', [Validators.required, Validators.maxLength(150)]], observaciones: [''] });

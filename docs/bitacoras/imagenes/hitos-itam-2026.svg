@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1150" viewBox="0 0 1000 1150" role="img" aria-labelledby="title desc">
+  <title id="title">Hitos ITAM del 25 de agosto al 22 de septiembre de 2026</title>
+  <desc id="desc">Línea de tiempo con ocho hitos del proyecto ITAM, desde la preparación del piloto hasta las mejoras ejecutivas del Dashboard.</desc>
+  <rect width="1000" height="1150" rx="28" fill="#f8fafc"/>
+  <text x="70" y="78" fill="#03045e" font-family="Segoe UI, Arial, sans-serif" font-size="32" font-weight="800">Hitos principales · ITAM</text>
+  <text x="70" y="112" fill="#64748b" font-family="Segoe UI, Arial, sans-serif" font-size="17">Avances confirmados en conversaciones y cambios del proyecto</text>
+  <line x1="112" y1="170" x2="112" y2="1065" stroke="#b6e7f1" stroke-width="8" stroke-linecap="round"/>
+
+  <g font-family="Segoe UI, Arial, sans-serif">
+    <circle cx="112" cy="190" r="18" fill="#0077b6"/>
+    <text x="158" y="184" fill="#0077b6" font-size="15" font-weight="800" letter-spacing="1.2">25 Y 31 AGO</text>
+    <text x="158" y="216" fill="#0f172a" font-size="23" font-weight="750">Preparación piloto LAN y marcha blanca</text>
+    <text x="158" y="245" fill="#475569" font-size="16">Autenticación, QR, estructura organizacional, sesión segura, importación y módulos operativos.</text>
+
+    <circle cx="112" cy="308" r="18" fill="#0077b6"/>
+    <text x="158" y="302" fill="#0077b6" font-size="15" font-weight="800" letter-spacing="1.2">26–27 AGO</text>
+    <text x="158" y="334" fill="#0f172a" font-size="23" font-weight="750">Conciliación de inventario y RR. HH.</text>
+    <text x="158" y="363" fill="#475569" font-size="16">938 registros revisados; propuesta de asignaciones y casos pendientes, sin editar fuentes originales.</text>
+
+    <circle cx="112" cy="426" r="18" fill="#0077b6"/>
+    <text x="158" y="420" fill="#0077b6" font-size="15" font-weight="800" letter-spacing="1.2">30 AGO</text>
+    <text x="158" y="452" fill="#0f172a" font-size="23" font-weight="750">Auditoría QA de solo lectura</text>
+    <text x="158" y="481" fill="#475569" font-size="16">Asignaciones sin custodio e historial incompleto; escrituras bloqueadas y datos intactos.</text>
+
+    <circle cx="112" cy="544" r="18" fill="#0077b6"/>
+    <text x="158" y="538" fill="#0077b6" font-size="15" font-weight="800" letter-spacing="1.2">31 AGO–4 SEP</text>
+    <text x="158" y="570" fill="#0f172a" font-size="23" font-weight="750">Trazabilidad y control patrimonial</text>
+    <text x="158" y="599" fill="#475569" font-size="16">Separación vigente/histórico, reactivación trazable y distribución por tipo.</text>
+
+    <circle cx="112" cy="662" r="18" fill="#0077b6"/>
+    <text x="158" y="656" fill="#0077b6" font-size="15" font-weight="800" letter-spacing="1.2">3–8 SEP</text>
+    <text x="158" y="688" fill="#0f172a" font-size="23" font-weight="750">Identificación física y experiencia de uso</text>
+    <text x="158" y="717" fill="#475569" font-size="16">Etiquetas térmicas y por lote, QR, búsqueda por escáner y textos más claros.</text>
+
+    <circle cx="112" cy="780" r="18" fill="#00b4d8"/>
+    <text x="158" y="774" fill="#0077b6" font-size="15" font-weight="800" letter-spacing="1.2">9–10 SEP</text>
+    <text x="158" y="806" fill="#0f172a" font-size="23" font-weight="750">Verificación física y alertas de stock</text>
+    <text x="158" y="835" fill="#475569" font-size="16">Verificación basada en evidencia, backfill y alertas configurables hasta el Dashboard.</text>
+
+    <circle cx="112" cy="898" r="18" fill="#00b4d8"/>
+    <text x="158" y="892" fill="#0077b6" font-size="15" font-weight="800" letter-spacing="1.2">14–17 SEP</text>
+    <text x="158" y="924" fill="#0f172a" font-size="23" font-weight="750">Líneas móviles y servicio técnico</text>
+    <text x="158" y="953" fill="#475569" font-size="16">Separación teléfono/SIM/equipo; ciclo técnico con diagnóstico, cotización y retorno.</text>
+
+    <circle cx="112" cy="1016" r="18" fill="#00b4d8"/>
+    <text x="158" y="1010" fill="#0077b6" font-size="15" font-weight="800" letter-spacing="1.2">20–22 SEP</text>
+    <text x="158" y="1042" fill="#0f172a" font-size="23" font-weight="750">Dashboard y controles de inventario</text>
+    <text x="158" y="1071" fill="#475569" font-size="16">Valor por tipo, validación de duplicados, KPI ejecutivos y desgloses más legibles.</text>
+  </g>
+
+  <rect x="70" y="1095" width="860" height="1" fill="#e2e8f0"/>
+  <text x="70" y="1135" fill="#64748b" font-family="Segoe UI, Arial, sans-serif" font-size="14">Alcance visual orientativo; las bitácoras diarias detallan qué quedó implementado, validado o pendiente.</text>
+</svg>

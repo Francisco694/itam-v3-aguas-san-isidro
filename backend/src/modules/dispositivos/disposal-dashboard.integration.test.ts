@@ -259,20 +259,65 @@ test("QA-10: inventario operacional incluye todo salvo extraviados y bajas", asy
       ), 0) AS valor,
       COUNT(*) FILTER (WHERE e.codigo = 'ASIGNADO') AS asignados,
       COUNT(*) FILTER (WHERE e.codigo = 'DISPONIBLE') AS disponibles,
-      COUNT(*) FILTER (WHERE e.codigo = 'SERVICIO_TECNICO') AS servicio_tecnico
+      COUNT(*) FILTER (WHERE e.codigo IN ('SERVICIO_TECNICO', 'EN_SERVICIO_TECNICO')) AS servicio_tecnico
     FROM itam.dispositivos d
     LEFT JOIN itam.estados e ON e.id = d.estado_id
+  `);
+  const expectedActive = await pool.query<{ cantidad: string; valor: string }>(`
+    SELECT COUNT(*) AS cantidad, COALESCE(SUM(d.valor_comercial), 0) AS valor
+    FROM itam.dispositivos d
+    INNER JOIN itam.estados e ON e.id = d.estado_id
+    WHERE e.codigo NOT IN ('EXTRAVIADO', 'DADO_BAJA')
   `);
   const metrics = await obtenerIndicadoresGerenciales();
   assert.equal(metrics.inventarioOperacional.cantidad, Number(expected.rows[0]!.cantidad));
   assert.equal(metrics.inventarioOperacional.valor, Number(expected.rows[0]!.valor));
+  assert.deepEqual(metrics.inventarioActual, {
+    cantidad: Number(expectedActive.rows[0]!.cantidad),
+    valorTotal: Number(expectedActive.rows[0]!.valor)
+  });
+  assert.ok(metrics.dispositivosVerificados.cantidad <= metrics.inventarioActual.cantidad);
+  assert.equal(
+    metrics.dispositivosVerificados.pendientes,
+    metrics.inventarioActual.cantidad - metrics.dispositivosVerificados.cantidad
+  );
+  assert.deepEqual(metrics.verificadosPorTipo, metrics.inventarioActivoRealVerificadoPorTipo);
   assert.equal(metrics.asignados.cantidad, Number(expected.rows[0]!.asignados));
   assert.equal(metrics.disponibles.cantidad, Number(expected.rows[0]!.disponibles));
   assert.equal(metrics.servicioTecnico.cantidad, Number(expected.rows[0]!.servicio_tecnico));
+  assert.equal(metrics.valorInventarioActivoReal, Number(expectedActive.rows[0]!.valor));
+  assert.equal(
+    metrics.valorInventarioActivoPorTipo.reduce((total, item) => total + item.valorTotal, 0),
+    metrics.valorInventarioActivoReal
+  );
+  assert.equal(
+    metrics.valorInventarioActivoPorTipo.reduce((total, item) => total + item.cantidad, 0),
+    Number(expectedActive.rows[0]!.cantidad)
+  );
   assert.equal(
     metrics.inventarioOperacional.cantidad + metrics.extraviados.cantidad + metrics.bajas.cantidad,
     Number((await pool.query("SELECT COUNT(*) AS total FROM itam.dispositivos")).rows[0]!.total)
   );
+  assert.equal(
+    metrics.historicoRegistradoPorTipo.reduce((total, item) => total + item.cantidad, 0),
+    Number((await pool.query("SELECT COUNT(*) AS total FROM itam.dispositivos")).rows[0]!.total)
+  );
+  assert.equal(
+    metrics.inventarioActivoRealVerificadoPorTipo.reduce((total, item) => total + item.cantidad, 0),
+    metrics.dispositivosVerificados.cantidad
+  );
+  assert.equal(
+    metrics.inventarioActivoRealVerificadoPorTipo.reduce((total, item) => total + item.valorTotal, 0),
+    metrics.dispositivosVerificados.valorTotal
+  );
+  const sumPercentages = (values: number[]) => values.reduce((total, value) => total + value, 0);
+  assert.ok(Math.abs(sumPercentages(metrics.inventarioActivoRealPorTipo.map((item) => item.porcentajeCantidad)) - 100) <= 0.5);
+  if (metrics.dispositivosVerificados.cantidad > 0) {
+    assert.ok(Math.abs(sumPercentages(metrics.inventarioActivoRealVerificadoPorTipo.map((item) => item.porcentajeCantidad)) - 100) <= 0.5);
+  }
+  if (metrics.dispositivosVerificados.valorTotal > 0) {
+    assert.ok(Math.abs(sumPercentages(metrics.inventarioActivoRealVerificadoPorTipo.map((item) => item.porcentajeValor)) - 100) <= 0.5);
+  }
 });
 
 test("P1-06: una segunda asignacion condicional no sobrescribe la primera", async () => {

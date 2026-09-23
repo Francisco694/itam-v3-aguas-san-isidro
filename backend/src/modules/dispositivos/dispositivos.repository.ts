@@ -9,12 +9,51 @@ import type {
   EvidenciaResponsableRow,
   EstadoRow,
   HistorialDispositivoRow,
-  ResumenGerencialRow
+  ResumenGerencialRow,
+  ResumenGerencialHistoricoPorTipo,
+  ResumenInventarioActivoPorTipoRow,
+  TipoIdentificadorDispositivo
 } from "./dispositivos.types";
 
 type DbExecutor = Pool | PoolClient;
 
 const getDb = (client?: PoolClient): DbExecutor => client ?? pool;
+
+export const buscarDispositivoPorIdentificador = async (
+  tipo: TipoIdentificadorDispositivo,
+  valor: string,
+  excludeCodigoInventario?: number
+): Promise<{
+  codigo_inventario: number;
+  tipo_dispositivo: string;
+  marca: string | null;
+  modelo: string | null;
+} | null> => {
+  const columna = tipo === "imei" ? "imei" : "numero_serie";
+  const values: Array<string | number> = [valor.trim().toUpperCase()];
+  const exclude = excludeCodigoInventario === undefined
+    ? ""
+    : `AND d.codigo_inventario <> $${values.push(excludeCodigoInventario)}`;
+  const result = await pool.query<{
+    codigo_inventario: number;
+    tipo_dispositivo: string;
+    marca: string | null;
+    modelo: string | null;
+  }>(
+    `
+      SELECT d.codigo_inventario, tipo.nombre AS tipo_dispositivo, d.marca, d.modelo
+      FROM itam.dispositivos d
+      INNER JOIN itam.tipos_dispositivo tipo ON tipo.id = d.tipo_dispositivo_id
+      WHERE NULLIF(BTRIM(d.${columna}), '') IS NOT NULL
+        AND UPPER(BTRIM(d.${columna})) = UPPER(BTRIM($1))
+        ${exclude}
+      LIMIT 1
+    `,
+    values
+  );
+
+  return result.rows[0] ?? null;
+};
 
 const origenRegistroSql = `CASE
   WHEN ingreso_inventario.tipo_evento IN ('IMPORTAR_DISPOSITIVO','REGISTRO_IMPORTADO')
@@ -533,17 +572,23 @@ export const obtenerResumenGerencial = async (): Promise<ResumenGerencialRow> =>
   const result = await pool.query<ResumenGerencialRow>(`
     SELECT
       COUNT(*) FILTER (
-        WHERE COALESCE(e.codigo, '') NOT IN ('EXTRAVIADO', 'DADO_BAJA')
+        WHERE e.codigo IN (
+          'DISPONIBLE', 'ASIGNADO', 'PRESTAMO_TEMPORAL', 'SERVICIO_TECNICO',
+          'EN_SERVICIO_TECNICO', 'RETENIDO_REVISION', 'EN_BODEGA'
+        )
       ) AS inventario_operacional_cantidad,
       COALESCE(SUM(d.valor_comercial) FILTER (
-        WHERE COALESCE(e.codigo, '') NOT IN ('EXTRAVIADO', 'DADO_BAJA')
+        WHERE e.codigo IN (
+          'DISPONIBLE', 'ASIGNADO', 'PRESTAMO_TEMPORAL', 'SERVICIO_TECNICO',
+          'EN_SERVICIO_TECNICO', 'RETENIDO_REVISION', 'EN_BODEGA'
+        )
       ), 0) AS inventario_operacional_valor,
       COUNT(*) FILTER (WHERE e.codigo = 'DISPONIBLE') AS disponibles_cantidad,
       COALESCE(SUM(d.valor_comercial) FILTER (WHERE e.codigo = 'DISPONIBLE'), 0) AS disponibles_valor,
       COUNT(*) FILTER (WHERE e.codigo = 'ASIGNADO') AS asignados_cantidad,
       COALESCE(SUM(d.valor_comercial) FILTER (WHERE e.codigo = 'ASIGNADO'), 0) AS asignados_valor,
-      COUNT(*) FILTER (WHERE e.codigo = 'SERVICIO_TECNICO') AS servicio_tecnico_cantidad,
-      COALESCE(SUM(d.valor_comercial) FILTER (WHERE e.codigo = 'SERVICIO_TECNICO'), 0) AS servicio_tecnico_valor,
+      COUNT(*) FILTER (WHERE e.codigo IN ('SERVICIO_TECNICO', 'EN_SERVICIO_TECNICO')) AS servicio_tecnico_cantidad,
+      COALESCE(SUM(d.valor_comercial) FILTER (WHERE e.codigo IN ('SERVICIO_TECNICO', 'EN_SERVICIO_TECNICO')), 0) AS servicio_tecnico_valor,
       COUNT(*) FILTER (WHERE e.codigo = 'EXTRAVIADO') AS extraviados_cantidad,
       COALESCE(SUM(d.valor_comercial) FILTER (WHERE e.codigo = 'EXTRAVIADO'), 0) AS extraviados_valor,
       COUNT(*) FILTER (WHERE e.codigo = 'DADO_BAJA') AS bajas_cantidad,
@@ -561,6 +606,106 @@ export const obtenerResumenGerencial = async (): Promise<ResumenGerencialRow> =>
     ) baja ON TRUE
   `);
   return result.rows[0]!;
+};
+
+export const obtenerResumenInventarioActivoPorTipo = async (): Promise<ResumenInventarioActivoPorTipoRow[]> => {
+  const result = await pool.query<ResumenInventarioActivoPorTipoRow>(`
+    SELECT
+      tipo.nombre AS tipo_nombre,
+      COUNT(*) AS cantidad,
+      COALESCE(SUM(d.valor_comercial), 0) AS valor_total
+    FROM itam.dispositivos d
+    INNER JOIN itam.estados e ON e.id = d.estado_id
+    INNER JOIN itam.tipos_dispositivo tipo ON tipo.id = d.tipo_dispositivo_id
+    WHERE e.codigo IN (
+      'DISPONIBLE', 'ASIGNADO', 'PRESTAMO_TEMPORAL', 'SERVICIO_TECNICO',
+      'EN_SERVICIO_TECNICO', 'RETENIDO_REVISION', 'EN_BODEGA'
+    )
+    GROUP BY tipo.id, tipo.nombre
+    ORDER BY COUNT(*) DESC, tipo.nombre ASC
+  `);
+  return result.rows;
+};
+
+const dashboardScopeSql = `
+  estado_codigo IN (
+    'DISPONIBLE', 'ASIGNADO', 'PRESTAMO_TEMPORAL', 'SERVICIO_TECNICO',
+    'EN_SERVICIO_TECNICO', 'RETENIDO_REVISION', 'EN_BODEGA'
+  )
+`;
+
+const dashboardOriginSql = `CASE
+  WHEN ingreso.tipo_evento IN ('IMPORTAR_DISPOSITIVO','REGISTRO_IMPORTADO')
+    OR ingreso.detalle ? 'source'
+    OR ingreso.detalle ? 'importKey'
+    OR ingreso.detalle ? 'historicalCode'
+    OR COALESCE(ingreso.responsable,'') ILIKE 'Importador%'
+    OR COALESCE(ingreso.observaciones,'') ILIKE 'Origen:%'
+  THEN 'IMPORTADO'
+  WHEN ingreso.tipo_evento IN ('ALTA_DISPOSITIVO','EQUIPO_CREADO','DISPOSITIVO_CREADO','EQUIPO_INCORPORADO_AL_INVENTARIO')
+  THEN 'MANUAL'
+  ELSE 'DESCONOCIDO'
+END`;
+
+const dashboardVerificationCte = `
+  WITH dashboard_devices AS (
+    SELECT
+      d.id,
+      tipo.nombre AS tipo_nombre,
+      d.valor_comercial,
+      e.codigo AS estado_codigo,
+      ultima_verificacion.resultado AS verificacion_resultado,
+      ${dashboardOriginSql} AS origen_registro
+    FROM itam.dispositivos d
+    INNER JOIN itam.estados e ON e.id = d.estado_id
+    INNER JOIN itam.tipos_dispositivo tipo ON tipo.id = d.tipo_dispositivo_id
+    LEFT JOIN LATERAL (
+      SELECT h.fecha_evento, h.tipo_evento, h.detalle, h.responsable, h.observaciones
+      FROM itam.historial_eventos h
+      WHERE h.dispositivo_id = d.id
+        AND h.tipo_entidad = 'DISPOSITIVO'
+        AND h.tipo_evento IN (
+          'ALTA_DISPOSITIVO', 'IMPORTAR_DISPOSITIVO', 'REGISTRO_IMPORTADO',
+          'EQUIPO_CREADO', 'DISPOSITIVO_CREADO',
+          'EQUIPO_INCORPORADO_AL_INVENTARIO', 'CONCILIAR_DISPOSITIVO_EXISTENTE'
+        )
+      ORDER BY h.fecha_evento ASC, h.id ASC
+      LIMIT 1
+    ) ingreso ON TRUE
+    LEFT JOIN LATERAL (
+      SELECT v.resultado
+      FROM itam.verificaciones_fisicas_dispositivo v
+      WHERE v.dispositivo_id = d.id
+      ORDER BY v.fecha_verificacion DESC, v.id DESC
+      LIMIT 1
+    ) ultima_verificacion ON TRUE
+  )
+`;
+
+export const obtenerResumenInventarioActivoVerificadoPorTipo = async (): Promise<ResumenInventarioActivoPorTipoRow[]> => {
+  const result = await pool.query<ResumenInventarioActivoPorTipoRow>(`${dashboardVerificationCte}
+    SELECT tipo_nombre, COUNT(*) AS cantidad, COALESCE(SUM(valor_comercial), 0) AS valor_total
+    FROM dashboard_devices
+    WHERE ${dashboardScopeSql}
+      AND (origen_registro = 'MANUAL' OR verificacion_resultado = 'VERIFICADO')
+    GROUP BY tipo_nombre
+    ORDER BY COUNT(*) DESC, tipo_nombre ASC
+  `);
+  return result.rows;
+};
+
+export const obtenerResumenHistoricoPorTipo = async (): Promise<ResumenInventarioActivoPorTipoRow[]> => {
+  const result = await pool.query<ResumenInventarioActivoPorTipoRow>(`
+    SELECT
+      tipo.nombre AS tipo_nombre,
+      COUNT(*) AS cantidad,
+      COALESCE(SUM(d.valor_comercial), 0) AS valor_total
+    FROM itam.dispositivos d
+    INNER JOIN itam.tipos_dispositivo tipo ON tipo.id = d.tipo_dispositivo_id
+    GROUP BY tipo.id, tipo.nombre
+    ORDER BY COUNT(*) DESC, tipo.nombre ASC
+  `);
+  return result.rows;
 };
 
 export const asignarDispositivoAColaborador = async (

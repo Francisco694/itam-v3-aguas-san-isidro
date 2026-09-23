@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable, tap } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { ApiCollectionResponse, ApiItemResponse } from '../models/api.models';
-import { AsociarLineaDispositivoInput, AsignarDispositivoColaboradorInput, AsignarDispositivoDepartamentoInput, CambiarEstadoInput, DarBajaInput, DevolverDispositivoInput, Dispositivo, DispositivoFilters, DispositivoInput, HistorialEvento, LineaMovilResumen, ResultadoDevolucion, ResultadoOffboardingInput, ResumenGerencial, TrazabilidadDispositivo, VerificacionFisica, VerificacionFisicaResumen } from '../models/itam.models';
+import { AsociarLineaDispositivoInput, AsignarDispositivoColaboradorInput, AsignarDispositivoDepartamentoInput, CambiarEstadoInput, DarBajaInput, DevolverDispositivoInput, Dispositivo, DispositivoFilters, DispositivoInput, HistorialEvento, LineaMovilResumen, ResultadoDevolucion, ResultadoOffboardingInput, ResumenGerencial, TipoIdentificadorDispositivo, TrazabilidadDispositivo, ValidacionIdentificadorDispositivo, VerificacionFisica, VerificacionFisicaResumen } from '../models/itam.models';
 
 interface LineaMovilApiRow {
   id: string | number;
@@ -18,6 +18,36 @@ interface LineaMovilApiRow {
   colaboradorId?: string | null;
 }
 
+const firstNonEmptyDashboardArray = (...candidates: unknown[]): unknown[] => {
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate) && candidate.length > 0) return candidate;
+  }
+  return [];
+};
+
+const normalizeDashboardSummary = (response: unknown): ResumenGerencial => {
+  const outer = response && typeof response === 'object'
+    ? response as Record<string, unknown>
+    : {};
+  const payload = outer['data'] && typeof outer['data'] === 'object'
+    ? outer['data'] as Record<string, unknown>
+    : outer;
+  const verificadosPorTipo = firstNonEmptyDashboardArray(
+    payload['verificadosPorTipo'],
+    payload['inventarioActivoRealVerificadoPorTipo'],
+  );
+  const historicoRegistradoPorTipo = firstNonEmptyDashboardArray(
+    payload['historicoRegistradoPorTipo'],
+    payload['historicoPorTipo'],
+  );
+  return {
+    ...payload,
+    verificadosPorTipo,
+    inventarioActivoRealVerificadoPorTipo: verificadosPorTipo,
+    historicoRegistradoPorTipo,
+  } as unknown as ResumenGerencial;
+};
+
 @Injectable({ providedIn: 'root' })
 export class DispositivosService {
   private readonly http = inject(HttpClient);
@@ -27,7 +57,7 @@ export class DispositivosService {
     Object.entries(filters).forEach(([key, value]) => { if (value !== undefined && value !== '') params = params.set(key, String(value)); });
     return this.http.get<ApiCollectionResponse<Dispositivo>>(this.url, { params }).pipe(map((r) => r.data));
   }
-  resumenGerencial(){return this.http.get<ApiItemResponse<ResumenGerencial>>(`${this.url}/resumen-gerencial`).pipe(map(r=>r.data));}
+  resumenGerencial(){return this.http.get<ApiItemResponse<ResumenGerencial>>(`${this.url}/resumen-gerencial`).pipe(map(normalizeDashboardSummary));}
   obtener(codigo: string | number) { return this.item(this.http.get<ApiItemResponse<Dispositivo>>(`${this.url}/${codigo}`)); }
   buscarPorCodigoInventario(codigo: number) {
     return this.listar({ q: String(codigo) }).pipe(map((items) => {
@@ -38,6 +68,11 @@ export class DispositivosService {
   }
   crear(input: DispositivoInput) { return this.item(this.http.post<ApiItemResponse<Dispositivo>>(this.url, input)); }
   actualizar(codigo: number, input: Partial<DispositivoInput>) { return this.item(this.http.patch<ApiItemResponse<Dispositivo>>(`${this.url}/${codigo}`, input)); }
+  validarIdentificadorDispositivo(tipo: TipoIdentificadorDispositivo, valor: string, excludeCodigoInventario?: number) {
+    let params = new HttpParams().set('tipo', tipo).set('valor', valor);
+    if (excludeCodigoInventario !== undefined) params = params.set('excludeCodigoInventario', String(excludeCodigoInventario));
+    return this.http.get<ApiItemResponse<ValidacionIdentificadorDispositivo>>(`${this.url}/validar-identificador`, { params }).pipe(map((response) => response.data));
+  }
   asociarLinea(codigo: number, input: AsociarLineaDispositivoInput) {
     const endpoint = `${this.url}/${codigo}/asociar-linea`;
     console.log('[asociar-linea] URL', endpoint);

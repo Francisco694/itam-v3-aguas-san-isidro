@@ -1,10 +1,10 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { LucideDownload, LucideExternalLink, LucideFileText, LucideMapPin, LucidePackagePlus, LucideSave, LucideTrash2 } from '@lucide/angular';
-import { forkJoin, map, of, switchMap } from 'rxjs';
+import { Subject, catchError, debounceTime, distinctUntilChanged, forkJoin, map, of, switchMap, takeUntil, tap } from 'rxjs';
 import { ApiError } from '../../core/models/api.models';
-import { CampoEspecificoFormulario, Dispositivo, FacturaDocumento, TipoDispositivo } from '../../core/models/itam.models';
+import { CampoEspecificoFormulario, Dispositivo, FacturaDocumento, TipoDispositivo, TipoIdentificadorDispositivo, ValidacionIdentificadorDispositivo } from '../../core/models/itam.models';
 import { DispositivosService } from '../../core/services/dispositivos.service';
 import { AuthService } from '../../core/services/auth.service';
 import { FacturasAdquisicionService } from '../../core/services/facturas-adquisicion.service';
@@ -15,6 +15,14 @@ import { ViewState } from '../../shared/components/view-state/view-state';
 import { errorMessage } from '../../shared/utils/error-message';
 
 export const COMMERCIAL_VALUE_PATTERN = /^\d+$/;
+
+export type IdentifierValidationStatus = 'idle' | 'validating' | 'available' | 'duplicate' | 'error';
+export interface IdentifierValidationState {
+  status: IdentifierValidationStatus;
+  existing?: ValidacionIdentificadorDispositivo;
+}
+
+export const normalizeDeviceIdentifier = (value: string): string => value.trim().toUpperCase();
 
 export const allowsDeviceCreation = (type: TipoDispositivo): boolean =>
   type.activo && !!type.familiaCodigoInventario?.activo;
@@ -115,8 +123,8 @@ export const typesForOperationalGroup = (
           @if (selectedType()) {
             @if (visibility().marca) { <div class="field"><label for="marca">Marca</label><input id="marca" maxlength="100" formControlName="marca" /></div> }
             @if (visibility().modelo) { <div class="field"><label for="modelo">Modelo</label><input id="modelo" maxlength="150" formControlName="modelo" /></div> }
-            @if (visibility().numeroSerie) { <div class="field"><label for="serie">Número de serie</label><input class="code" id="serie" maxlength="150" formControlName="numeroSerie" /></div> }
-            @if (visibility().imei) { <div class="field"><label for="imei">IMEI</label><input class="code" id="imei" maxlength="30" formControlName="imei" /></div> }
+            @if (visibility().numeroSerie) { <div class="field"><label for="serie">Número de serie</label><input class="code" id="serie" maxlength="150" formControlName="numeroSerie" [class.invalid]="identifierInvalid('serie')" />@if (identifierState('serie'); as state) { @switch (state.status) { @case ('validating') { <p class="hint identifier-status">Validando disponibilidad...</p> } @case ('available') { <p class="hint identifier-status identifier-status--available">Disponible para registrar.</p> } @case ('duplicate') { <p class="field-error identifier-status">Este número de serie ya está registrado en ITAM.</p> @if (state.existing; as existing) { <p class="hint">Equipo existente: ITAM {{ existing.codigoInventario }} · {{ existing.marca || '' }}{{ existing.marca && existing.modelo ? ' ' : '' }}{{ existing.modelo || '' }}</p><a class="identifier-link" [routerLink]="['/dispositivos', existing.codigoInventario]">Ver equipo registrado</a> } } @case ('error') { <p class="field-error identifier-status">No se pudo validar el número de serie. Intente nuevamente.</p> } } }</div> }
+            @if (visibility().imei) { <div class="field"><label for="imei">IMEI</label><input class="code" id="imei" maxlength="30" formControlName="imei" [class.invalid]="identifierInvalid('imei')" />@if (identifierState('imei'); as state) { @switch (state.status) { @case ('validating') { <p class="hint identifier-status">Validando disponibilidad...</p> } @case ('available') { <p class="hint identifier-status identifier-status--available">Disponible para registrar.</p> } @case ('duplicate') { <p class="field-error identifier-status">Este IMEI ya está registrado en ITAM.</p> @if (state.existing; as existing) { <p class="hint">Equipo existente: ITAM {{ existing.codigoInventario }} · {{ existing.marca || '' }}{{ existing.marca && existing.modelo ? ' ' : '' }}{{ existing.modelo || '' }}</p><a class="identifier-link" [routerLink]="['/dispositivos', existing.codigoInventario]">Ver equipo registrado</a> } } @case ('error') { <p class="field-error identifier-status">No se pudo validar el IMEI. Intente nuevamente.</p> } } }</div> }
             @if (selectedType()?.nombre === 'Impresora') { <div class="field"><label for="printer-state">Estado</label><input id="printer-state" value="Disponible (automático)" disabled /></div> }
             <div class="field"><label for="commercial-value">Valor comercial (CLP)</label><input id="commercial-value" type="number" min="0" step="1" formControlName="valorComercial" /><p class="hint">Ingrese solamente el valor numérico, sin puntos ni signo peso.</p>@if(form.controls.valorComercial.invalid&&form.controls.valorComercial.touched){<p class="field-error">Debe ser un valor entero mayor o igual a cero.</p>}</div>
             <ng-container formGroupName="atributosEspecificos">
@@ -170,14 +178,14 @@ export const typesForOperationalGroup = (
           <div class="field span-2"><label for="observaciones">Observaciones</label><textarea id="observaciones" formControlName="observaciones"></textarea></div>
           @if (!id) { <div class="field span-2"><label for="responsable">Responsable del registro *</label><input id="responsable" maxlength="150" formControlName="responsable" readonly [class.invalid]="invalid('responsable')" />@if (invalid('responsable')) { <p class="field-error">El responsable es obligatorio.</p> }</div> }
         </div>
-        <div class="form-actions"><a class="btn btn--secondary" [routerLink]="id ? ['/dispositivos', id] : ['/dispositivos']">Cancelar</a><button class="btn btn--primary" type="submit" [disabled]="submitting()"><svg lucideSave></svg>{{ submitting() ? 'Guardando…' : 'Guardar Equipo' }}</button></div>
+        <div class="form-actions"><a class="btn btn--secondary" [routerLink]="id ? ['/dispositivos', id] : ['/dispositivos']">Cancelar</a><button class="btn btn--primary" type="submit" [disabled]="saveDisabled()"><svg lucideSave></svg>{{ submitting() ? 'Guardando…' : 'Guardar Equipo' }}</button></div>
       </form>
     }
     @if (created(); as device) { <app-asset-created-dialog [code]="device.codigoInventario" [assetType]="device.tipo.nombre" [brandModel]="(device.marca || '') + (device.marca && device.modelo ? ' ' : '') + (device.modelo || '')" [imei]="device.imei || ''" [numeroSerie]="device.numeroSerie || ''" [detailLink]="['/dispositivos', device.codigoInventario]" [canAssign]="true" (close)="finish(device)" /> }
   `,
-  styles: [`.equipment-form{max-width:62rem;padding:0 1.5rem 1.5rem}.form-section-heading{align-items:center;background:linear-gradient(135deg,var(--navy),#07147c);color:#fff;display:flex;gap:.8rem;margin:0 -1.5rem 1.4rem;padding:1.15rem 1.5rem}.form-section-heading>span{align-items:center;background:rgba(0,180,216,.2);border-radius:.7rem;color:var(--cyan);display:flex;height:2.5rem;justify-content:center;width:2.5rem}.form-section-heading svg{height:1.15rem}.form-section-heading h2{font-size:1rem;margin:0}.form-section-heading p{color:#cbd5e1;font-size:.7rem;margin:.2rem 0 0}.form-section-heading--secondary{background:var(--gray-50);border-block:1px solid var(--gray-200);color:var(--navy);margin-top:1.4rem}.form-section-heading--secondary p{color:var(--slate-500)}.form-section-heading--secondary>span{background:var(--cyan-soft);color:var(--blue)}.selection-hint{background:var(--gray-50);border:1px dashed var(--gray-200);border-radius:.75rem;color:var(--slate-500);font-size:.78rem;padding:.9rem}.file-input{clip:rect(0 0 0 0);clip-path:inset(50%);height:1px;overflow:hidden;position:absolute;white-space:nowrap;width:1px}.file-actions,.existing-document{align-items:center;display:flex;flex-wrap:wrap;gap:.6rem}.selected-file{color:var(--slate-700);font-size:.78rem;font-weight:700;overflow-wrap:anywhere}.existing-document{background:var(--gray-50);border:1px solid var(--gray-200);border-radius:.7rem;margin-top:.7rem;padding:.7rem}.existing-document span{font-size:.74rem;margin-right:auto}.invoice-document-field .hint{margin:.25rem 0 .65rem}`]
+  styles: [`.equipment-form{max-width:62rem;padding:0 1.5rem 1.5rem}.form-section-heading{align-items:center;background:linear-gradient(135deg,var(--navy),#07147c);color:#fff;display:flex;gap:.8rem;margin:0 -1.5rem 1.4rem;padding:1.15rem 1.5rem}.form-section-heading>span{align-items:center;background:rgba(0,180,216,.2);border-radius:.7rem;color:var(--cyan);display:flex;height:2.5rem;justify-content:center;width:2.5rem}.form-section-heading svg{height:1.15rem}.form-section-heading h2{font-size:1rem;margin:0}.form-section-heading p{color:#cbd5e1;font-size:.7rem;margin:.2rem 0 0}.form-section-heading--secondary{background:var(--gray-50);border-block:1px solid var(--gray-200);color:var(--navy);margin-top:1.4rem}.form-section-heading--secondary p{color:var(--slate-500)}.form-section-heading--secondary>span{background:var(--cyan-soft);color:var(--blue)}.selection-hint{background:var(--gray-50);border:1px dashed var(--gray-200);border-radius:.75rem;color:var(--slate-500);font-size:.78rem;padding:.9rem}.identifier-status{margin:.35rem 0 0}.identifier-status--available{color:var(--green,#15803d)}.identifier-link{display:inline-block;font-size:.75rem;font-weight:700;margin-top:.25rem}.file-input{clip:rect(0 0 0 0);clip-path:inset(50%);height:1px;overflow:hidden;position:absolute;white-space:nowrap;width:1px}.file-actions,.existing-document{align-items:center;display:flex;flex-wrap:wrap;gap:.6rem}.selected-file{color:var(--slate-700);font-size:.78rem;font-weight:700;overflow-wrap:anywhere}.existing-document{background:var(--gray-50);border:1px solid var(--gray-200);border-radius:.7rem;margin-top:.7rem;padding:.7rem}.existing-document span{font-size:.74rem;margin-right:auto}.invoice-document-field .hint{margin:.25rem 0 .65rem}`]
 })
-export class DispositivoForm implements OnInit {
+export class DispositivoForm implements OnInit, OnDestroy {
   private readonly fb = inject(FormBuilder);
   private readonly auth = inject(AuthService);
   private readonly service = inject(DispositivosService);
@@ -185,6 +193,7 @@ export class DispositivoForm implements OnInit {
   private readonly typeService = inject(TiposDispositivoService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly destroy$ = new Subject<void>();
   protected id = '';
   protected codigo = 0;
   protected readonly loading = signal(false);
@@ -197,6 +206,10 @@ export class DispositivoForm implements OnInit {
   protected readonly invoiceFileError = signal('');
   protected readonly existingInvoiceDocument = signal<FacturaDocumento | null>(null);
   protected readonly existingInvoiceId = signal('');
+  protected readonly identifierStates = {
+    serie: signal<IdentifierValidationState>({ status: 'idle' }),
+    imei: signal<IdentifierValidationState>({ status: 'idle' })
+  };
   protected readonly attributesForm = this.fb.group({ partNumber: [''], tipoCable: [''], longitud: [''], potencia: [''], tipoAdaptador: [''], cantidadPuertos: [''], nombrePeriferico: [''] });
   protected readonly form = this.fb.nonNullable.group({
     tipoPrincipal: ['', Validators.required], tipoDispositivoId: [''], marca: ['', Validators.maxLength(100)], modelo: ['', Validators.maxLength(150)],
@@ -218,9 +231,61 @@ export class DispositivoForm implements OnInit {
 
   ngOnInit(): void {
     this.id = this.route.snapshot.paramMap.get('codigo') || ''; this.form.controls.responsable.setValue(this.auth.user()?.nombre || ''); if (this.id) this.form.controls.responsable.clearValidators(); this.loading.set(true);
+    this.setupIdentifierValidation('serie');
+    this.setupIdentifierValidation('imei');
     forkJoin({ types: this.typeService.listar(this.id ? undefined : true), device: this.id ? this.service.obtener(this.id) : of(null) }).subscribe({
       next: ({ types, device }) => { this.types.set(types); if (device) this.patchDevice(device); this.loading.set(false); },
       error: (error) => { this.apiError.set(errorMessage(error)); this.loading.set(false); }
+    });
+  }
+  ngOnDestroy(): void { this.destroy$.next(); this.destroy$.complete(); }
+  private setupIdentifierValidation(kind: TipoIdentificadorDispositivo): void {
+    const control = kind === 'imei' ? this.form.controls.imei : this.form.controls.numeroSerie;
+    control.valueChanges.pipe(
+      map((value) => normalizeDeviceIdentifier(value)),
+      distinctUntilChanged(),
+      tap((value) => {
+        if (value.length < 4 || !this.identifierVisible(kind)) this.setIdentifierState(kind, { status: 'idle' });
+        else this.setIdentifierState(kind, { status: 'validating' });
+      }),
+      debounceTime(400),
+      switchMap((value) => {
+        if (value.length < 4 || !this.identifierVisible(kind)) return of(null);
+        return this.service.validarIdentificadorDispositivo(kind, value, this.codigo || undefined).pipe(
+          map((result) => ({ result })),
+          catchError(() => of({ result: null }))
+        );
+      }),
+      takeUntil(this.destroy$)
+    ).subscribe((response) => {
+      if (!response) return;
+      if (!response.result) { this.setIdentifierState(kind, { status: 'error' }); return; }
+      this.setIdentifierState(kind, response.result.disponible
+        ? { status: 'available' }
+        : { status: 'duplicate', existing: response.result });
+    });
+  }
+  private identifierVisible(kind: TipoIdentificadorDispositivo): boolean {
+    return kind === 'imei' ? this.visibility().imei : this.visibility().numeroSerie;
+  }
+  private setIdentifierState(kind: TipoIdentificadorDispositivo, state: IdentifierValidationState): void {
+    this.identifierStates[kind].set(state);
+    const control = kind === 'imei' ? this.form.controls.imei : this.form.controls.numeroSerie;
+    const errors = { ...(control.errors ?? {}) };
+    delete errors['duplicateIdentifier'];
+    if (state.status === 'duplicate') errors['duplicateIdentifier'] = true;
+    control.setErrors(Object.keys(errors).length ? errors : null);
+  }
+  protected identifierState(kind: TipoIdentificadorDispositivo): IdentifierValidationState { return this.identifierStates[kind](); }
+  protected identifierInvalid(kind: TipoIdentificadorDispositivo): boolean {
+    const control = kind === 'imei' ? this.form.controls.imei : this.form.controls.numeroSerie;
+    return this.identifierState(kind).status === 'duplicate' || (control.invalid && (control.dirty || control.touched));
+  }
+  protected saveDisabled(): boolean {
+    if (this.submitting()) return true;
+    return (['imei', 'serie'] as TipoIdentificadorDispositivo[]).some((kind) => {
+      const state = this.identifierState(kind);
+      return this.identifierVisible(kind) && (state.status === 'validating' || state.status === 'duplicate');
     });
   }
   private patchDevice(device: Dispositivo): void {

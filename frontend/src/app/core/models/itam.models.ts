@@ -63,6 +63,15 @@ export interface Dispositivo {
   verificacionFisica: VerificacionFisicaResumen | null;
 }
 
+export type TipoIdentificadorDispositivo = 'imei' | 'serie';
+export interface ValidacionIdentificadorDispositivo {
+  disponible: boolean;
+  codigoInventario?: number;
+  tipoDispositivo?: string;
+  marca?: string | null;
+  modelo?: string | null;
+}
+
 export type ResultadoVerificacionFisica = 'PENDIENTE' | 'VERIFICADO' | 'REVISAR';
 export type FiltroVerificacionDispositivo = 'PENDIENTE' | 'VERIFICADO';
 export interface VerificacionFisicaResumen {
@@ -83,7 +92,25 @@ export interface VerificacionFisica {
 }
 export interface DispositivoFilters { q?: string; tipo?: string; tipoDispositivoId?: number; familiaCodigoInventarioId?: number; estado?: string; colaboradorId?: number; departamentoId?: number; localidad?: string; verificacion?: FiltroVerificacionDispositivo; }
 export interface IndicadorEconomico { cantidad:number;valor:number; }
-export interface ResumenGerencial {inventarioOperacional:IndicadorEconomico;disponibles:IndicadorEconomico;asignados:IndicadorEconomico;servicioTecnico:IndicadorEconomico;extraviados:IndicadorEconomico;bajas:IndicadorEconomico;}
+export interface ResumenInventarioActivoPorTipo { tipo: string; cantidad: number; valorTotal: number; porcentajeCantidad: number; }
+export interface ResumenInventarioActivoRealVerificadoPorTipo extends ResumenInventarioActivoPorTipo { porcentajeValor: number; }
+export interface ResumenHistoricoRegistradoPorTipo { tipo: string; cantidad: number; porcentajeCantidad: number; valorHistorico: number; }
+export interface ResumenGerencial {
+  inventarioActual: { cantidad: number; valorTotal: number };
+  dispositivosVerificados: { cantidad: number; porcentajeSobreInventarioActual: number; valorTotal: number; pendientes: number };
+  inventarioActivoRealPorTipo: ResumenInventarioActivoPorTipo[];
+  inventarioActivoRealVerificadoPorTipo: ResumenInventarioActivoRealVerificadoPorTipo[];
+  verificadosPorTipo: ResumenInventarioActivoRealVerificadoPorTipo[];
+  historicoRegistradoPorTipo: ResumenHistoricoRegistradoPorTipo[];
+  inventarioOperacional:IndicadorEconomico;
+  disponibles:IndicadorEconomico;
+  asignados:IndicadorEconomico;
+  servicioTecnico:IndicadorEconomico;
+  extraviados:IndicadorEconomico;
+  bajas:IndicadorEconomico;
+  valorInventarioActivoReal:number;
+  valorInventarioActivoPorTipo:ResumenInventarioActivoPorTipo[];
+}
 export interface ReporteInventario {
   periodo:{desde:string;hasta:string};generadoEn:string;
   resumen:{total:IndicadorEconomico;disponibles:IndicadorEconomico;asignados:IndicadorEconomico;asignadosColaboradores:IndicadorEconomico;asignadosDepartamentos:IndicadorEconomico;servicioTecnico:IndicadorEconomico;extraviados:IndicadorEconomico;bajas:IndicadorEconomico};

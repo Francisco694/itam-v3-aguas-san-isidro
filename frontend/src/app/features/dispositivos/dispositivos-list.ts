@@ -96,7 +96,7 @@ const printableLabel = (device: Dispositivo, qrDataUrl: string, mode: 'A4' | 'TH
           : ''}
         <small>${escapeHtml(batchLabelIdentifier(device))}</small>
         <small>Resp: ${escapeHtml(assetLabelResponsible(device))}</small>
-        ${assetLabelPhone(device) ? `<small>Fono: ${escapeHtml(assetLabelPhone(device))}</small>` : ''}
+        ${assetLabelPhone(device) ? `<small class="thermal-label__phone">Fono: ${escapeHtml(assetLabelPhone(device))}</small>` : ''}
       </div>
     </div>
   </article>`;
@@ -112,28 +112,35 @@ const printableDocument = (
   <meta charset="utf-8">
   <title>Etiquetas ITAM</title>
   <style>
-    @page { size: ${mode === 'A4' ? 'A4 portrait' : '62mm 40mm'}; margin: ${mode === 'A4' ? '10mm' : '0'}; }
+    @page { size: ${mode === 'A4' ? 'A4 portrait' : '60mm 38mm'}; margin: ${mode === 'A4' ? '10mm' : '0'}; }
     * { box-sizing: border-box; }
-    html, body { background: #fff; color: #000; margin: 0; padding: 0; }
+    html, body { background: #fff; color: #000; margin: 0; max-width: 100%; min-height: 0; min-width: 0; padding: 0; }
     body { font-family: Arial, sans-serif; }
-    ${mode === 'THERMAL' ? 'html, body { width: 62mm; }' : ''}
-    .sheet { display: ${mode === 'A4' ? 'grid' : 'block'}; gap: 4mm 3mm; grid-template-columns: repeat(3, 60mm); }
-    .label, .thermal-label { border: 1px solid #000; box-sizing: border-box; overflow: hidden; }
-    .label { break-inside: avoid; display: flex; flex-direction: column; height: 35mm; page-break-inside: avoid; padding: 2mm; width: 60mm; }
-    .label header, .thermal-label header { border-bottom: 1px solid #000; font-size: 8pt; font-weight: 800; line-height: 1; margin-bottom: 1.5mm; padding-bottom: 1mm; text-align: center; }
-    .label-body, .thermal-label__body { align-items: center; display: flex; gap: 2mm; min-height: 0; }
-    .label-qr { flex: 0 0 20mm; height: 20mm; width: 20mm; }
-    .label-data, .thermal-label__info { display: flex; flex: 1; flex-direction: column; min-width: 0; }
-    .label-data small, .label-data span, .label-data b { font-size: 6.5pt; line-height: 1.16; overflow-wrap: anywhere; }
-    .label-data strong { font-family: Consolas, monospace; font-size: 12pt; line-height: 1.2; margin: .7mm 0; }
-    .thermal-label { break-after: page; box-sizing: border-box; display: grid; grid-template-columns: 21mm 1fr; column-gap: 2mm; height: 38mm; max-height: 38mm; max-width: 60mm; overflow: hidden; page-break-after: always; padding: 1mm; width: 60mm; }
-    .thermal-label header { grid-column: 1 / -1; font-size: 7pt; margin-bottom: 0; }
-    .thermal-label__body { grid-column: 1 / -1; }
-    .thermal-label__qr { flex: 0 0 21mm; height: 21mm; max-height: 21mm; max-width: 21mm; width: 21mm; }
-    .thermal-label__info { font-size: 6pt; line-height: 1.15; overflow: hidden; }
-    .thermal-label__info small, .thermal-label__info span { font-size: 6pt; line-height: 1.15; overflow-wrap: anywhere; }
-    .thermal-label__code { font-size: 10pt; font-weight: 700; }
+    ${mode === 'THERMAL' ? 'html, body, .sheet { height: 38mm; width: 60mm; }' : ''}
+    .sheet { display: ${mode === 'A4' ? 'grid' : 'block'}; gap: 4mm 3mm; grid-template-columns: repeat(3, 60mm); margin: 0; max-width: 100%; min-height: 0; min-width: 0; padding: 0; }
+    .label, .thermal-label { border: 1px solid #000; box-sizing: border-box; height: 38mm; max-height: 38mm; max-width: 60mm; min-height: 0; min-width: 0; overflow: hidden; padding: 2mm; width: 60mm; }
+    .label { break-inside: avoid; display: flex; flex-direction: column; page-break-inside: avoid; }
+    .label header, .thermal-label header { border-bottom: 1px solid #000; font-size: 7pt; font-weight: 800; line-height: 1; margin-bottom: 1mm; overflow: hidden; padding-bottom: .8mm; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
+    .label-body, .thermal-label__body { align-items: center; display: flex; gap: 2mm; min-height: 0; min-width: 0; overflow: hidden; }
+    .label-qr { flex: 0 0 21mm; height: 21mm; max-height: 21mm; max-width: 21mm; width: 21mm; }
+    .label-data, .thermal-label__info { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden; }
+    .label-data small, .label-data span, .label-data b { font-size: 6.2pt; line-height: 1.1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .label-data strong { font-family: Consolas, monospace; font-size: 10pt; line-height: 1.1; margin: .45mm 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .thermal-label { background: #fff; border: 0; break-after: page; color: #000; display: grid; grid-template-columns: 20mm minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); column-gap: 1.5mm; margin: 0; padding: 1.5mm 2mm; page-break-after: always; }
+    .thermal-label header { border-color: #000; color: #000; grid-column: 1 / -1; font-size: 6pt; margin-bottom: .6mm; padding-bottom: .5mm; }
+    .thermal-label__body { align-items: center; grid-column: 1 / -1; justify-content: center; gap: 1.5mm; height: 100%; }
+    .thermal-label__qr { flex: 0 0 20mm; height: 20mm; max-height: 20mm; max-width: 20mm; object-fit: contain; width: 20mm; }
+    .thermal-label__info { color: #000; font-size: 5.2pt; line-height: 1; }
+    .thermal-label__info > * { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .thermal-label__info small, .thermal-label__info span { font-size: 5.2pt; line-height: 1; }
+    .thermal-label__code { font-size: 8.5pt; font-weight: 800; line-height: 1; margin: .25mm 0; }
+    .thermal-label__phone { display: block; }
     .thermal-label:last-child { break-after: auto; page-break-after: auto; }
+    @media print {
+      @page { size: ${mode === 'A4' ? 'A4 portrait' : '60mm 38mm'}; margin: ${mode === 'A4' ? '10mm' : '0'}; }
+      html, body { margin: 0 !important; padding: 0 !important; }
+      ${mode === 'THERMAL' ? 'html, body { background: #fff !important; color: #000 !important; height: 38mm !important; margin: 0 !important; padding: 0 !important; width: 60mm !important; } .sheet { margin: 0 !important; padding: 0 !important; } .thermal-label { background: #fff !important; border: 0 !important; color: #000 !important; height: 38mm !important; margin: 0 !important; max-height: 38mm !important; max-width: 60mm !important; padding: 1.5mm 2mm !important; width: 60mm !important; } .thermal-label header { border-color: #000 !important; color: #000 !important; } .thermal-label__info, .thermal-label__info * { color: #000 !important; }' : ''}
+    }
   </style>
 </head>
 <body>
@@ -246,7 +253,7 @@ const printableDocument = (
           <p>Elija el formato de salida. Las etiquetas incluyen el responsable actual y el teléfono asociado cuando existe; omiten RUT y valores comerciales.</p>
           <div class="print-choice-grid">
             <button type="button" (click)="printLabels('A4')"><svg lucidePrinter></svg><strong>Hoja A4</strong><span>Varias etiquetas organizadas en grilla por hoja.</span></button>
-            <button type="button" (click)="printLabels('THERMAL')"><svg lucidePrinter></svg><strong>Brother QL-800</strong><span>Una etiqueta de 62 × 40 mm por dispositivo.</span></button>
+            <button type="button" (click)="printLabels('THERMAL')"><svg lucidePrinter></svg><strong>Brother QL-800</strong><span>Una etiqueta de 60 × 38 mm por dispositivo.</span></button>
           </div>
         </section>
       </div>

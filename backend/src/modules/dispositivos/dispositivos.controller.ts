@@ -11,6 +11,7 @@ import {
   parseOptionalPositiveInteger,
   parseOptionalString,
   parsePositiveInteger,
+  parseRequiredString,
   requireAtLeastOneDefined
 } from "../../shared/validation";
 import {
@@ -27,7 +28,8 @@ import {
   obtenerDispositivos,
   obtenerIndicadoresGerenciales,
   obtenerHistorialDispositivo,
-  obtenerTrazabilidadDispositivo
+  obtenerTrazabilidadDispositivo,
+  validarIdentificadorDispositivo
 } from "./dispositivos.service";
 export {
   listarVerificacionesFisicasController,
@@ -74,6 +76,26 @@ export const parseCodigoItam = (value: unknown): number => {
 
   return codigo;
 };
+
+export const validarIdentificadorController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const tipo = parseEnum(req.query.tipo, "tipo", ["imei", "serie"] as const);
+    const valor = parseRequiredString(
+      req.query.valor,
+      "valor",
+      tipo === "imei" ? 30 : 150
+    );
+    const excludeCodigoInventario = parseOptionalPositiveInteger(
+      req.query.excludeCodigoInventario,
+      "excludeCodigoInventario"
+    ) ?? undefined;
+
+    sendItem(
+      res,
+      await validarIdentificadorDispositivo(tipo, valor, excludeCodigoInventario)
+    );
+  }
+);
 
 const assertNoProtectedPatchFields = (
   body: Record<string, unknown>

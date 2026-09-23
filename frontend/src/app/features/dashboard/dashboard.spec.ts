@@ -15,12 +15,35 @@ import type { Dispositivo } from '../../core/models/itam.models';
 import { Dashboard } from './dashboard';
 
 const operationalSummary = {
+  inventarioActual: { cantidad: 3, valorTotal: 380_000 },
+  dispositivosVerificados: {
+    cantidad: 1,
+    porcentajeSobreInventarioActual: 33.3,
+    valorTotal: 100_000,
+    pendientes: 2,
+  },
+  inventarioActivoRealPorTipo: [
+    { tipo: 'Notebook', cantidad: 3, valorTotal: 380_000, porcentajeCantidad: 100 },
+  ],
+  inventarioActivoRealVerificadoPorTipo: [
+    { tipo: 'Notebook', cantidad: 1, valorTotal: 100_000, porcentajeCantidad: 100, porcentajeValor: 100 },
+  ],
+  verificadosPorTipo: [
+    { tipo: 'Notebook', cantidad: 1, valorTotal: 100_000, porcentajeCantidad: 100, porcentajeValor: 100 },
+  ],
+  historicoRegistradoPorTipo: [
+    { tipo: 'Notebook', cantidad: 6, porcentajeCantidad: 100 },
+  ],
   inventarioOperacional: { cantidad: 10, valor: 1_000_000 },
   disponibles: { cantidad: 2, valor: 200_000 },
   asignados: { cantidad: 7, valor: 700_000 },
   servicioTecnico: { cantidad: 1, valor: 100_000 },
   extraviados: { cantidad: 3, valor: 300_000 },
   bajas: { cantidad: 4, valor: 400_000 },
+  valorInventarioActivoReal: 380_000,
+  valorInventarioActivoPorTipo: [
+    { tipo: 'Notebook', cantidad: 3, valorTotal: 380_000, porcentajeCantidad: 100 },
+  ],
 };
 
 const process = (
@@ -128,29 +151,42 @@ describe('Dashboard QA-10 y QA-15', () => {
     expect(firstMetric.textContent).toContain('Equipos disponibles o en uso actualmente');
     expect(text).toContain('Histórico registrado');
     expect(text).toContain('Total de registros en ITAM, incluyendo bajas y extravíos');
+    expect(text).toContain('Dispositivos verificados');
+    expect(text).toContain('33.3% del inventario actual');
+    expect(text).toContain('Valor verificado: $100.000');
+    expect(text).toContain('$380.000');
     expect(text).not.toContain('Valor de equipos activos');
   });
 
   it('distribuye por tipo exactamente la misma cantidad del inventario actual', () => {
     fixture.detectChanges();
     const text = fixture.nativeElement.textContent;
-    expect(text).toContain('Histórico registrado por tipo');
+    expect(text).toContain('Equipos registrados por tipo');
     expect(text).toContain('6 registros históricos');
-    expect(text).toContain('Incluye equipos actuales, extraviados, dados de baja y registros antiguos.');
+    expect(text).toContain('Incluye todos los equipos registrados en ITAM: actuales, extraviados, dados de baja y antiguos.');
     expect(text).not.toContain('Registros disponibles');
   });
 
   it('separa la distribución activa real de la distribución histórica', () => {
     fixture.detectChanges();
     const cards = fixture.nativeElement.querySelectorAll('.type-card');
-    expect(cards).toHaveLength(2);
-    expect(cards[0].textContent).toContain('Inventario activo real por tipo');
+    expect(cards).toHaveLength(3);
+    expect(cards[0].textContent).toContain('Inventario activo real');
     expect(cards[0].textContent).toContain('3 equipos activos reales');
     expect(cards[0].textContent).toContain('3 activos reales');
+    expect(cards[0].textContent).toContain('$380.000');
     expect(cards[0].textContent).not.toContain('EXTRAVIADO');
     expect(cards[0].textContent).not.toContain('DADO_BAJA');
-    expect(cards[1].textContent).toContain('Histórico registrado por tipo');
-    expect(cards[1].textContent).toContain('6 registros históricos');
+    expect(cards[1].textContent).toContain('Desglose por tipo de activo verificado');
+    expect(cards[1].textContent).toContain('1 equipos verificados');
+    expect(cards[1].textContent).toContain('Participación en equipos');
+    expect(cards[1].textContent).toContain('Participación en valor');
+    expect(cards[1].textContent).not.toContain('Del total de equipos');
+    expect(cards[1].textContent).not.toContain('Del valor total');
+    expect(cards[2].textContent).toContain('Equipos registrados por tipo');
+    expect(cards[2].textContent).toContain('6 registros históricos');
+    expect(cards[2].textContent).toContain('100%');
+    expect(cards[2].textContent).not.toContain('100% del histórico total');
   });
 
   it('separa servicio técnico y custodias por revisar cuando aplican', () => {

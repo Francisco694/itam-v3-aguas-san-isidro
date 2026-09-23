@@ -42,6 +42,7 @@ import {
   actualizarDispositivo,
   asignarDispositivoAColaborador,
   asignarDispositivoADepartamento,
+  buscarDispositivoPorIdentificador,
   cambiarEstadoDispositivo,
   anularBajaDispositivo,
   crearDispositivo,
@@ -56,6 +57,9 @@ import {
   obtenerEstadoDispositivoPorCodigo,
   obtenerEstadoDispositivoPorId,
   obtenerResumenGerencial,
+  obtenerResumenHistoricoPorTipo,
+  obtenerResumenInventarioActivoPorTipo,
+  obtenerResumenInventarioActivoVerificadoPorTipo,
   registrarBajaDispositivo
 } from "./dispositivos.repository";
 import type {
@@ -83,17 +87,78 @@ import type {
   ResumenGerencial,
   SimAsociadaResumen,
   TrazabilidadDispositivo,
+  TipoIdentificadorDispositivo,
   UltimoResponsableTrazabilidad
 } from "./dispositivos.types";
 import { insertarVerificacionFisica } from "./physical-verifications.repository";
 
 export const obtenerIndicadoresGerenciales = async (): Promise<ResumenGerencial> => {
-  const row = await obtenerResumenGerencial();
+  const [row, porTipo, verificadoPorTipo, historicoPorTipo] = await Promise.all([
+    obtenerResumenGerencial(),
+    obtenerResumenInventarioActivoPorTipo(),
+    obtenerResumenInventarioActivoVerificadoPorTipo(),
+    obtenerResumenHistoricoPorTipo()
+  ]);
   const metric = (cantidad: string | number, valor: string | number) => ({
     cantidad: Number(cantidad) || 0,
     valor: Number(valor) || 0
   });
+  const inventarioActivoCantidad = porTipo.reduce(
+    (total, item) => total + Number(item.cantidad),
+    0
+  );
+  const valorInventarioActivoReal = porTipo.reduce(
+    (total, item) => total + (Number(item.valor_total) || 0),
+    0
+  );
+  const porcentaje = (parte: number, total: number) =>
+    total ? Math.round((parte * 1000) / total) / 10 : 0;
+  const inventarioActual = {
+    cantidad: inventarioActivoCantidad,
+    valorTotal: valorInventarioActivoReal
+  };
+  const cantidadVerificada = verificadoPorTipo.reduce(
+    (total, item) => total + Number(item.cantidad),
+    0
+  );
+  const valorVerificado = verificadoPorTipo.reduce(
+    (total, item) => total + (Number(item.valor_total) || 0),
+    0
+  );
+  const inventarioActivoRealPorTipo = porTipo.map((item) => ({
+    tipo: item.tipo_nombre,
+    cantidad: Number(item.cantidad) || 0,
+    valorTotal: Number(item.valor_total) || 0,
+    porcentajeCantidad: porcentaje(Number(item.cantidad) || 0, inventarioActivoCantidad)
+  }));
+  const inventarioActivoRealVerificadoPorTipo = verificadoPorTipo.map((item) => ({
+    tipo: item.tipo_nombre,
+    cantidad: Number(item.cantidad) || 0,
+    valorTotal: Number(item.valor_total) || 0,
+    porcentajeCantidad: porcentaje(Number(item.cantidad) || 0, cantidadVerificada),
+    porcentajeValor: porcentaje(Number(item.valor_total) || 0, valorVerificado)
+  }));
+  const historicoTotal = historicoPorTipo.reduce(
+    (total, item) => total + Number(item.cantidad),
+    0
+  );
   return {
+    inventarioActual,
+    dispositivosVerificados: {
+      cantidad: cantidadVerificada,
+      porcentajeSobreInventarioActual: porcentaje(cantidadVerificada, inventarioActual.cantidad),
+      valorTotal: valorVerificado,
+      pendientes: Math.max(0, inventarioActual.cantidad - cantidadVerificada)
+    },
+    inventarioActivoRealPorTipo,
+    inventarioActivoRealVerificadoPorTipo,
+    verificadosPorTipo: inventarioActivoRealVerificadoPorTipo,
+    historicoRegistradoPorTipo: historicoPorTipo.map((item) => ({
+      tipo: item.tipo_nombre,
+      cantidad: Number(item.cantidad) || 0,
+      porcentajeCantidad: porcentaje(Number(item.cantidad) || 0, historicoTotal),
+      valorHistorico: Number(item.valor_total) || 0
+    })),
     inventarioOperacional: metric(
       row.inventario_operacional_cantidad,
       row.inventario_operacional_valor
@@ -105,8 +170,32 @@ export const obtenerIndicadoresGerenciales = async (): Promise<ResumenGerencial>
       row.servicio_tecnico_valor
     ),
     extraviados: metric(row.extraviados_cantidad, row.extraviados_valor),
-    bajas: metric(row.bajas_cantidad, row.bajas_valor)
+    bajas: metric(row.bajas_cantidad, row.bajas_valor),
+    valorInventarioActivoReal,
+    valorInventarioActivoPorTipo: inventarioActivoRealPorTipo
   };
+};
+
+export const validarIdentificadorDispositivo = async (
+  tipo: TipoIdentificadorDispositivo,
+  valor: string,
+  excludeCodigoInventario?: number
+) => {
+  const encontrado = await buscarDispositivoPorIdentificador(
+    tipo,
+    valor,
+    excludeCodigoInventario
+  );
+
+  return encontrado
+    ? {
+        disponible: false,
+        codigoInventario: encontrado.codigo_inventario,
+        tipoDispositivo: encontrado.tipo_dispositivo,
+        marca: encontrado.marca,
+        modelo: encontrado.modelo
+      }
+    : { disponible: true };
 };
 import type { ConfiguracionFormularioTipo } from "../tipos-dispositivo/tipos-dispositivo.types";
 
@@ -421,6 +510,15 @@ const mapHistorial = (
 
 const normalizarErrorDispositivo = (error: unknown): never => {
   if (isUniqueViolation(error)) {
+    const constraint = typeof error === "object" && error !== null && "constraint" in error
+      ? String(error.constraint)
+      : "";
+    if (constraint === "uq_dispositivos_imei") {
+      throw new ConflictError("Este IMEI ya está registrado en ITAM.");
+    }
+    if (constraint === "uq_dispositivos_numero_serie") {
+      throw new ConflictError("Este número de serie ya está registrado en ITAM.");
+    }
     throw new ConflictError(
       "Ya existe un recurso con alguno de los identificadores informados."
     );

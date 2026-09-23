@@ -15,6 +15,7 @@ import {
   resumenGerencialController,
   resultadoOffboardingController,
   trazabilidadDispositivoController,
+  validarIdentificadorController,
   registrarVerificacionManualController,
   registrarVerificacionFisicaController
 } from "./dispositivos.controller";
@@ -23,6 +24,7 @@ const router = Router();
 
 router.get("/", listarDispositivosController);
 router.get("/resumen-gerencial", resumenGerencialController);
+router.get("/validar-identificador", validarIdentificadorController);
 router.post("/:codigo/asociar-linea", asociarLineaController);
 router.get("/:codigo/historial", historialDispositivoController);
 router.get("/:codigo/trazabilidad", trazabilidadDispositivoController);

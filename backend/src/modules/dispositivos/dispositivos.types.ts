@@ -186,6 +186,16 @@ export interface DispositivoFilters {
   verificacion?: "PENDIENTE" | "VERIFICADO";
 }
 
+export type TipoIdentificadorDispositivo = "imei" | "serie";
+
+export interface ValidacionIdentificadorDispositivo {
+  disponible: boolean;
+  codigoInventario?: number;
+  tipoDispositivo?: string;
+  marca?: string | null;
+  modelo?: string | null;
+}
+
 export interface CrearDispositivoInput {
   tipoDispositivoId: number;
   marca?: string | null;
@@ -229,13 +239,50 @@ export interface ResumenGerencialRow {
   bajas_valor: string | number;
 }
 
+export interface ResumenInventarioActivoPorTipoRow {
+  tipo_nombre: string;
+  cantidad: string | number;
+  valor_total: string | number;
+}
+
+export interface ResumenGerencialPorTipo {
+  tipo: string;
+  cantidad: number;
+  valorTotal: number;
+  porcentajeCantidad: number;
+}
+
+export interface ResumenGerencialVerificadoPorTipo extends ResumenGerencialPorTipo {
+  porcentajeValor: number;
+}
+
+export interface ResumenGerencialHistoricoPorTipo {
+  tipo: string;
+  cantidad: number;
+  porcentajeCantidad: number;
+  valorHistorico: number;
+}
+
 export interface ResumenGerencial {
+  inventarioActual: { cantidad: number; valorTotal: number };
+  dispositivosVerificados: {
+    cantidad: number;
+    porcentajeSobreInventarioActual: number;
+    valorTotal: number;
+    pendientes: number;
+  };
+  inventarioActivoRealPorTipo: ResumenGerencialPorTipo[];
+  inventarioActivoRealVerificadoPorTipo: ResumenGerencialVerificadoPorTipo[];
+  verificadosPorTipo: ResumenGerencialVerificadoPorTipo[];
+  historicoRegistradoPorTipo: ResumenGerencialHistoricoPorTipo[];
   inventarioOperacional: { cantidad: number; valor: number };
   disponibles: { cantidad: number; valor: number };
   asignados: { cantidad: number; valor: number };
   servicioTecnico: { cantidad: number; valor: number };
   extraviados: { cantidad: number; valor: number };
   bajas: { cantidad: number; valor: number };
+  valorInventarioActivoReal: number;
+  valorInventarioActivoPorTipo: ResumenGerencialPorTipo[];
 }
 
 export interface AsignarColaboradorInput {
