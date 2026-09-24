@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 import { createRequire } from "node:module";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { exec } from "node:child_process";
 import fs from "node:fs/promises";
+import https from "node:https";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
@@ -26,6 +27,9 @@ const okChecks = [];
 const commands = [];
 const queries = [];
 const notes = new Map();
+let auditRunStamp = "";
+let auditLogDir = "";
+let auditScreenshotDir = "";
 
 function nowStamp() {
   const now = new Date();
@@ -56,9 +60,138 @@ function compact(value, maxLength = 1200) {
 
 function redact(value) {
   return String(value ?? "")
-    .replace(/(DB_PASSWORD\s*[=:]\s*)([^\s"'`]+)/gi, "$1[REDACTED]")
-    .replace(/((JWT_SECRET|SESSION_SECRET|API_KEY|TOKEN)\s*[=:]\s*)([^\s"'`]+)/gi, "$1[REDACTED]")
+    .replace(/((?:DB_PASSWORD|JWT_SECRET|SESSION_SECRET|PRIVATE_KEY|API_KEY|ACCESS_TOKEN|SECRET_KEY)\s*["']?\s*[=:]\s*["']?)([^"'`\s,}]+)(["']?)/gi, "$1[REDACTED]$3")
     .replace(/(password=)([^&\s]+)/gi, "$1[REDACTED]");
+}
+
+function summarizeFailureOutput(value, maxTailLines = 150) {
+  const lines = String(value ?? "").split(/\r?\n/).filter((line) => line.trim());
+  if (lines.length <= maxTailLines + 25) return redact(lines.join("\n"));
+  const first = lines.slice(0, 25);
+  const relevant = lines.filter((line) => /\bERROR\b|Error:|\bNG\d|\bTS\d|budget|failed|exception/i.test(line));
+  const tail = lines.slice(-maxTailLines);
+  const merged = [...first, ...relevant, ...tail].filter((line, index, all) => all.indexOf(line) === index);
+  return redact(merged.join("\n"));
+}
+
+function failureEvidence(value, maxLength = 1200) {
+  const text = String(value ?? "");
+  if (text.length <= maxLength) return text;
+  const headLength = Math.min(320, Math.floor(maxLength * 0.3));
+  const tailLength = maxLength - headLength - 45;
+  return `${text.slice(0, headLength)}\n... [se prioriza el final del fallo] ...\n${text.slice(-tailLength)}`;
+}
+
+function parsePort(value, fallback = 3000) {
+  if (value === undefined || value === null || String(value).trim() === "") return fallback;
+  const port = Number(value);
+  return Number.isInteger(port) && port >= 1 && port <= 65535 ? port : null;
+}
+
+function resolveBackendPort(env = {}) {
+  return parsePort(env.PORT ?? process.env.PORT, 3000);
+}
+
+function parseCliFlag(command, flag, fallback = undefined) {
+  const pattern = new RegExp(`(?:^|\\s)--${flag}(?:=|\\s+)([^\\s]+)`);
+  const match = String(command ?? "").match(pattern);
+  return match ? match[1].replace(/^['"]|['"]$/g, "") : fallback;
+}
+
+function detectFrontendConfig(packageJson = {}, env = process.env, lanAddress = undefined) {
+  const explicitUrl = String(env.AUDIT_FRONTEND_URL ?? "").trim();
+  if (explicitUrl) {
+    try {
+      const parsed = new URL(explicitUrl);
+      return {
+        url: parsed.toString().replace(/\/$/, ""),
+        protocol: parsed.protocol.replace(":", ""),
+        host: parsed.hostname,
+        port: Number(parsed.port || (parsed.protocol === "https:" ? 443 : 80)),
+        scriptName: "AUDIT_FRONTEND_URL",
+        script: ""
+      };
+    } catch {
+      // Se informa en auditAvailability y se usa la configuracion del package.json.
+    }
+  }
+
+  const scripts = packageJson.scripts ?? {};
+  const candidates = Object.entries(scripts)
+    .filter(([name]) => /^(start|serve)/i.test(name))
+    .map(([name, script]) => ({ name, script: String(script) }));
+  const selected = candidates.find(({ script }) => /(?:^|\s)--ssl(?:\s|$)/i.test(script))
+    ?? candidates.find(({ name }) => name === "start")
+    ?? candidates[0]
+    ?? { name: "default", script: "" };
+  const ssl = /(?:^|\s)--ssl(?:\s|$)/i.test(selected.script);
+  const port = Number(parseCliFlag(selected.script, "port", 4200));
+  const configuredHost = parseCliFlag(selected.script, "host", "127.0.0.1");
+  const host = configuredHost === "0.0.0.0" || configuredHost === "::"
+    ? (lanAddress ?? "127.0.0.1")
+    : configuredHost;
+  return {
+    url: `${ssl ? "https" : "http"}://${host}:${Number.isInteger(port) && port > 0 ? port : 4200}`,
+    protocol: ssl ? "https" : "http",
+    host,
+    port: Number.isInteger(port) && port > 0 ? port : 4200,
+    scriptName: selected.name,
+    script: selected.script
+  };
+}
+
+function detectLanAddress() {
+  const interfaces = os.networkInterfaces();
+  for (const entries of Object.values(interfaces)) {
+    for (const entry of entries ?? []) {
+      if (entry.family === "IPv4" && !entry.internal && !/^169\.254\./.test(entry.address)) return entry.address;
+    }
+  }
+  return "127.0.0.1";
+}
+
+function isMeaningfulSecretLine(line) {
+  return Boolean(extractMeaningfulSecretName(line));
+}
+
+function extractMeaningfulSecretName(line) {
+  const trimmed = String(line ?? "").trim();
+  if (!trimmed || trimmed.startsWith("#") || trimmed.startsWith("//")) return null;
+  const match = trimmed.match(/^(?:export\s+)?(?:(?:const|let|var)\s+)?["']?(DB_PASSWORD|JWT_SECRET|SESSION_SECRET|PRIVATE_KEY|API_KEY|ACCESS_TOKEN|SECRET_KEY)["']?\s*[:=]\s*(.+?)\s*,?\s*(?:#.*)?$/i);
+  if (!match) return null;
+  const value = match[2]
+    .trim()
+    .replace(/;\s*$/, "")
+    .replace(/^['"]|['"]$/g, "")
+    .trim();
+  if (!value || /^(?:process\.env|import\.meta\.env|\$\{?[A-Z_][A-Z0-9_]*\}?|undefined|null)$/i.test(value)) return null;
+  if (/change_me|example|placeholder|your_|dummy|replace[_-]?me|secret_here/i.test(value)) return null;
+  if (value.length < 8) return null;
+  return match[1].toUpperCase();
+}
+
+function isRobustSecretValue(value) {
+  const text = String(value ?? "");
+  const classes = [/[a-z]/, /[A-Z]/, /\d/, /[^A-Za-z0-9]/].filter((pattern) => pattern.test(text)).length;
+  return text.length >= 16 && classes >= 3;
+}
+
+function shouldSkipSecretScan(file) {
+  const normalized = normalizeSlashes(file).toLowerCase();
+  return normalized === "scripts/itam-environment-audit.mjs"
+    || normalized.includes("/node_modules/")
+    || normalized.startsWith("node_modules/")
+    || normalized.includes("/dist/")
+    || normalized.startsWith("dist/")
+    || normalized.includes("/coverage/")
+    || normalized.startsWith("coverage/")
+    || normalized.includes("/reports/")
+    || normalized.startsWith("reports/")
+    || normalized.includes("/.angular/")
+    || normalized.startsWith(".angular/")
+    || normalized.endsWith("package-lock.json")
+    || normalized.endsWith(".env.example")
+    || /\.(?:png|jpe?g|gif|webp|ico|pdf|xlsx?|zip|gz|tar|7z|exe|dll|so|dylib|pem|key)$/i.test(normalized);
 }
 
 function addFinding({ code, severity, area, description, evidence, recommendation, command, query }) {
@@ -139,6 +272,49 @@ async function readJson(target) {
   return JSON.parse(await fs.readFile(target, "utf8"));
 }
 
+async function writeAuditArtifact(fileName, contents) {
+  if (!auditLogDir) return;
+  await fs.mkdir(auditLogDir, { recursive: true });
+  await fs.writeFile(path.join(auditLogDir, fileName), contents, "utf8");
+}
+
+function isLocalAuditUrl(url) {
+  try {
+    const hostname = new URL(url).hostname;
+    return hostname === "localhost"
+      || hostname === "127.0.0.1"
+      || hostname === "::1"
+      || /^10\./.test(hostname)
+      || /^192\.168\./.test(hostname)
+      || /^172\.(1[6-9]|2\d|3[0-1])\./.test(hostname);
+  } catch {
+    return false;
+  }
+}
+
+async function requestHttp(url, allowSelfSigned = false) {
+  if (!allowSelfSigned || !url.startsWith("https://") || !isLocalAuditUrl(url)) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    try {
+      const response = await fetch(url, { signal: controller.signal });
+      return { status: response.status, body: await response.text() };
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+  return new Promise((resolve, reject) => {
+    const request = https.get(url, { rejectUnauthorized: false, timeout: 5000 }, (response) => {
+      const chunks = [];
+      response.setEncoding("utf8");
+      response.on("data", (chunk) => chunks.push(chunk));
+      response.on("end", () => resolve({ status: response.statusCode ?? 0, body: chunks.join("") }));
+    });
+    request.on("timeout", () => request.destroy(new Error("HTTPS request timed out")));
+    request.on("error", reject);
+  });
+}
+
 async function runCommand(command, options = {}) {
   const cwd = options.cwd ?? rootDir;
   const timeout = options.timeout ?? 120000;
@@ -168,8 +344,8 @@ async function runCommand(command, options = {}) {
     return { ok: true, exitCode: 0, stdout, stderr, record };
   } catch (error) {
     record.exitCode = typeof error.code === "number" ? error.code : 1;
-    record.stdout = compact(error.stdout ?? "", options.captureLimit ?? 6000);
-    record.stderr = compact(error.stderr ?? error.message ?? "", options.captureLimit ?? 6000);
+    record.stdout = summarizeFailureOutput(error.stdout ?? "");
+    record.stderr = summarizeFailureOutput(error.stderr ?? error.message ?? "");
     record.timedOut = error.killed || /timed out/i.test(error.message ?? "");
     return {
       ok: false,
@@ -182,16 +358,13 @@ async function runCommand(command, options = {}) {
   }
 }
 
-async function httpCheck(url, label, area, severityWhenDown = "MEDIUM") {
+async function httpCheck(url, label, area, severityWhenDown = "MEDIUM", options = {}) {
   const started = performance.now();
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
-    const response = await fetch(url, { signal: controller.signal });
-    clearTimeout(timeout);
+    const response = await requestHttp(url, options.allowSelfSigned === true);
     const elapsed = Math.round(performance.now() - started);
-    const body = await response.text();
-    if (response.ok) {
+    const body = response.body;
+    if (response.status >= 200 && response.status < 300) {
       addOk(area, `${label} disponible`, `HTTP ${response.status}; ${elapsed} ms`, `GET ${url}`);
       return { ok: true, status: response.status, elapsed, body };
     }
@@ -275,22 +448,58 @@ async function listMigrationFiles() {
     .sort((a, b) => a.version.localeCompare(b.version));
 }
 
-function isMeaningfulSecretLine(line) {
-  const trimmed = line.trim();
-  if (!trimmed || trimmed.startsWith("#")) return false;
-  if (!/(DB_PASSWORD|JWT_SECRET|SESSION_SECRET|PRIVATE_KEY|API_KEY|ACCESS_TOKEN|SECRET_KEY)/i.test(trimmed)) {
-    return false;
-  }
-  if (!/[=:]/.test(trimmed)) return false;
-  if (/change_me|example|placeholder|your_|process\.env|import\.meta\.env/i.test(trimmed)) return false;
-  const value = trimmed.split(/[=:]/).slice(1).join("=").trim().replace(/^["']|["']$/g, "");
-  return value.length >= 8;
+function migrationSequenceInfo(migrationFiles, appliedVersions) {
+  const applied = appliedVersions.map(String);
+  const missingFiles = migrationFiles.filter((file) => !applied.includes(String(file.version)));
+  const extraDb = applied.filter((version) => !migrationFiles.some((file) => String(file.version) === version));
+  const outOfSequence = missingFiles.map((file) => ({
+    ...file,
+    laterApplied: applied.filter((version) => Number(version) > Number(file.version))
+  })).filter((item) => item.laterApplied.length > 0);
+  return { missingFiles, extraDb, outOfSequence };
+}
+
+function buildLineWithoutOwnerQuery() {
+  return "SELECT id, numero_telefonico, estado FROM itam.lineas_moviles WHERE estado = 'ACTIVA' AND sim_id IS NULL AND dispositivo_id IS NULL AND colaborador_id IS NULL";
+}
+
+function classifyTraceabilityCount(count) {
+  return Number(count) > 0 ? "OK" : "INFO";
 }
 
 function looksText(buffer) {
   if (buffer.includes(0)) return false;
   const sample = buffer.subarray(0, Math.min(buffer.length, 4096)).toString("utf8");
   return !/[\u0000-\u0008\u000E-\u001F]/.test(sample);
+}
+
+async function listTextFiles(directory) {
+  if (!(await pathExists(directory))) return [];
+  const entries = await fs.readdir(directory, { withFileTypes: true });
+  const files = [];
+  for (const entry of entries) {
+    const target = path.join(directory, entry.name);
+    if (entry.isDirectory()) files.push(...await listTextFiles(target));
+    else if (entry.isFile()) files.push(target);
+  }
+  return files;
+}
+
+async function findBackendSecretUsage(secretName) {
+  const sourceFiles = await listTextFiles(path.join(backendDir, "src"));
+  const usage = [];
+  const pattern = new RegExp(`(?:process\\.env|env)\\s*(?:\\.|\\?\\.|\\[\\s*["'])${secretName}(?:["']\\s*\\])?`, "i");
+  for (const file of sourceFiles) {
+    try {
+      const text = await fs.readFile(file, "utf8");
+      text.split(/\r?\n/).forEach((line, index) => {
+        if (pattern.test(line)) usage.push({ file: normalizeSlashes(path.relative(rootDir, file)), line: index + 1 });
+      });
+    } catch {
+      // Unreadable source files are not treated as usage evidence.
+    }
+  }
+  return usage;
 }
 
 async function auditSecurity(env) {
@@ -371,7 +580,7 @@ async function auditSecurity(env) {
 
     const secretHits = [];
     for (const file of files) {
-      if (/package-lock\.json$|\.xlsx$|\.png$|\.jpg$|\.jpeg$|\.pdf$|\.ico$|\.pem$/i.test(file)) continue;
+      if (shouldSkipSecretScan(file)) continue;
       const absolute = path.join(rootDir, file);
       try {
         const stat = await fs.stat(absolute);
@@ -380,8 +589,11 @@ async function auditSecurity(env) {
         if (!looksText(buffer)) continue;
         const lines = buffer.toString("utf8").split(/\r?\n/);
         lines.forEach((line, index) => {
-          if (isMeaningfulSecretLine(line) || /-----BEGIN (RSA |OPENSSH |EC |DSA )?PRIVATE KEY-----/.test(line)) {
-            secretHits.push(`${file}:${index + 1}: ${redact(line.trim())}`);
+          const variable = extractMeaningfulSecretName(line);
+          if (variable) {
+            secretHits.push(`${file}:${index + 1}\nvariable=${variable}`);
+          } else if (/-----BEGIN (RSA |OPENSSH |EC |DSA )?PRIVATE KEY-----/.test(line)) {
+            secretHits.push(`${file}:${index + 1}\nvariable=PRIVATE_KEY`);
           }
         });
       } catch {
@@ -415,7 +627,10 @@ async function auditSecurity(env) {
       severity: "CRITICAL",
       area,
       description: "El diff contiene posibles secretos.",
-      evidence: addedSecretLines.map(redact).slice(0, 30).join("\n"),
+      evidence: addedSecretLines
+        .map((line) => `variable=${extractMeaningfulSecretName(line.slice(1))}`)
+        .slice(0, 30)
+        .join("\n"),
       recommendation: "Retirar secretos del diff antes de commitear y rotar cualquier valor expuesto.",
       command: "git diff --cached --no-ext-diff && git diff --no-ext-diff"
     });
@@ -459,14 +674,33 @@ async function auditSecurity(env) {
   }
 
   for (const secretName of ["JWT_SECRET", "SESSION_SECRET"]) {
-    if (!env[secretName] && !process.env[secretName]) {
+    const usage = await findBackendSecretUsage(secretName);
+    const configuredValue = env[secretName] ?? process.env[secretName];
+    if (!usage.length) {
+      addInfo(
+        `${secretName}_NOT_REQUIRED`,
+        area,
+        `${secretName} no es requerido por la implementacion actual.`,
+        "No se encontraron referencias reales en backend/src.",
+        "No exigir esta variable mientras la implementacion no la utilice."
+      );
+    } else if (!configuredValue) {
       addFinding({
         code: `${secretName}_MISSING`,
         severity: "HIGH",
         area,
         description: `Falta ${secretName}.`,
-        evidence: `${secretName}=ausente`,
+        evidence: `${secretName}=ausente; referencias=${usage.slice(0, 5).map((item) => `${item.file}:${item.line}`).join(", ")}`,
         recommendation: `Definir ${secretName} con un valor robusto y no versionado.`
+      });
+    } else if (!isRobustSecretValue(configuredValue)) {
+      addFinding({
+        code: `${secretName}_WEAK`,
+        severity: "MEDIUM",
+        area,
+        description: `${secretName} esta definido, pero no parece tener longitud/entropia suficiente.`,
+        evidence: `${secretName}=presente; referencias=${usage.length}`,
+        recommendation: `Usar un valor aleatorio de al menos 16 caracteres con variedad de caracteres para ${secretName}.`
       });
     } else {
       addOk(area, `${secretName} esta definido`, `${secretName}=presente`);
@@ -504,10 +738,38 @@ async function auditSecurity(env) {
   await auditNpmSecurity("frontend", frontendDir, area);
 }
 
+function parseNpmAuditOutput(raw) {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function npmVulnerabilityCounts(parsed) {
+  const vulns = parsed?.metadata?.vulnerabilities ?? {};
+  return Object.fromEntries(["critical", "high", "moderate", "low"].map((severity) => [
+    severity,
+    Number(vulns[severity] ?? 0)
+  ]));
+}
+
+function subtractVulnerabilityCounts(full, runtime) {
+  return Object.fromEntries(Object.keys(full).map((severity) => [
+    severity,
+    Math.max(0, Number(full[severity] ?? 0) - Number(runtime[severity] ?? 0))
+  ]));
+}
+
+function vulnerabilityEvidence(counts) {
+  return Object.entries(counts).map(([key, value]) => `${key}=${value}`).join("; ");
+}
+
 async function auditNpmSecurity(label, cwd, area) {
+  const upperLabel = label.toUpperCase();
   if (!(await pathExists(path.join(cwd, "package.json")))) {
     addInfo(
-      `NPM_${label.toUpperCase()}_NO_PACKAGE`,
+      `NPM_${upperLabel}_NO_PACKAGE`,
       area,
       `No existe package.json en ${label}.`,
       normalizeSlashes(path.relative(rootDir, cwd)),
@@ -516,53 +778,103 @@ async function auditNpmSecurity(label, cwd, area) {
     return;
   }
 
-  const audit = await runCommand("npm audit --json", {
+  const runtime = await runCommand("npm audit --omit=dev --json", {
     cwd,
-    label: `npm audit ${label}`,
+    label: `npm audit ${label} runtime`,
     timeout: 120000,
     captureLimit: 10000
   });
-  const raw = audit.stdout || audit.stderr;
-  try {
-    const parsed = JSON.parse(raw);
-    const vulns = parsed.metadata?.vulnerabilities ?? {};
-    const critical = Number(vulns.critical ?? 0);
-    const high = Number(vulns.high ?? 0);
-    const moderate = Number(vulns.moderate ?? 0);
-    const low = Number(vulns.low ?? 0);
+  const development = await runCommand("npm audit --json", {
+    cwd,
+    label: `npm audit ${label} desarrollo`,
+    timeout: 120000,
+    captureLimit: 10000
+  });
+  const runtimeParsed = parseNpmAuditOutput(runtime.stdout || runtime.stderr);
+  const developmentParsed = parseNpmAuditOutput(development.stdout || development.stderr);
+  const runtimeCounts = npmVulnerabilityCounts(runtimeParsed);
+  const developmentCounts = npmVulnerabilityCounts(developmentParsed);
+  const developmentOnly = subtractVulnerabilityCounts(developmentCounts, runtimeCounts);
+  const artifact = {
+    runtime: runtimeParsed ?? { parseError: true, raw: redact(runtime.stdout || runtime.stderr || `exitCode=${runtime.exitCode}`) },
+    development: developmentParsed ?? { parseError: true, raw: redact(development.stdout || development.stderr || `exitCode=${development.exitCode}`) }
+  };
+  await writeAuditArtifact(`npm-audit-${label}.json`, JSON.stringify(artifact, null, 2));
+  const auditRecord = {
+    label,
+    runtime: runtimeCounts,
+    development: developmentCounts,
+    developmentOnly,
+    runtimeParsed: Boolean(runtimeParsed),
+    developmentParsed: Boolean(developmentParsed)
+  };
+  const audits = notes.get("npmAudits") ?? [];
+  notes.set("npmAudits", [...audits.filter((item) => item.label !== label), auditRecord]);
+
+  if (!runtimeParsed || !developmentParsed) {
+    addFinding({
+      code: `NPM_AUDIT_${upperLabel}_FAILED`,
+      severity: "MEDIUM",
+      area,
+      description: `No se pudo interpretar completamente npm audit en ${label}.`,
+      evidence: `runtime=${runtimeParsed ? "OK" : "sin JSON"}; desarrollo=${developmentParsed ? "OK" : "sin JSON"}`,
+      recommendation: "Revisar los JSON completos generados en reports/logs y la conectividad al registry.",
+      command: "npm audit --omit=dev --json; npm audit --json"
+    });
+  }
+
+  if (runtimeParsed) {
+    const { critical, high, moderate, low } = runtimeCounts;
     if (critical > 0 || high > 0) {
       addFinding({
-        code: `NPM_AUDIT_${label.toUpperCase()}_HIGH`,
+        code: `NPM_AUDIT_${upperLabel}_RUNTIME_HIGH`,
         severity: critical > 0 ? "CRITICAL" : "HIGH",
         area,
-        description: `npm audit encontro vulnerabilidades relevantes en ${label}.`,
-        evidence: `critical=${critical}; high=${high}; moderate=${moderate}; low=${low}`,
-        recommendation: "Revisar npm audit, actualizar dependencias o documentar excepciones justificadas.",
-        command: "npm audit --json"
+        description: `npm audit encontro vulnerabilidades de runtime en ${label}.`,
+        evidence: vulnerabilityEvidence(runtimeCounts),
+        recommendation: "Revisar dependencias que llegan a produccion y actualizar sin ejecutar npm audit fix desde el auditor.",
+        command: "npm audit --omit=dev --json"
       });
     } else if (moderate > 0 || low > 0) {
       addFinding({
-        code: `NPM_AUDIT_${label.toUpperCase()}_WARN`,
+        code: `NPM_AUDIT_${upperLabel}_RUNTIME_WARN`,
         severity: moderate > 0 ? "MEDIUM" : "LOW",
         area,
-        description: `npm audit encontro vulnerabilidades menores en ${label}.`,
-        evidence: `critical=${critical}; high=${high}; moderate=${moderate}; low=${low}`,
-        recommendation: "Planificar actualizaciones de dependencias.",
-        command: "npm audit --json"
+        description: `npm audit encontro vulnerabilidades no bloqueantes de runtime en ${label}.`,
+        evidence: vulnerabilityEvidence(runtimeCounts),
+        recommendation: "Planificar actualizaciones de dependencias runtime.",
+        command: "npm audit --omit=dev --json"
       });
     } else {
-      addOk(area, `npm audit ${label} sin vulnerabilidades reportadas`, JSON.stringify(vulns), "npm audit --json");
+      addOk(area, `npm audit runtime ${label} sin vulnerabilidades reportadas`, vulnerabilityEvidence(runtimeCounts), "npm audit --omit=dev --json");
     }
-  } catch {
-    addFinding({
-      code: `NPM_AUDIT_${label.toUpperCase()}_FAILED`,
-      severity: "MEDIUM",
-      area,
-      description: `No se pudo interpretar npm audit en ${label}.`,
-      evidence: raw || `exitCode=${audit.exitCode}`,
-      recommendation: "Ejecutar npm audit manualmente y revisar conectividad al registry.",
-      command: "npm audit --json"
-    });
+  }
+
+  if (developmentParsed && Object.values(developmentOnly).some((value) => value > 0)) {
+    const devSeverity = developmentOnly.critical > 0 || developmentOnly.high > 0
+      ? "MEDIUM"
+      : developmentOnly.moderate > 0 ? "LOW" : "INFO";
+    if (devSeverity === "INFO") {
+      addInfo(
+        `NPM_AUDIT_${upperLabel}_DEVELOPMENT_WARN`,
+        area,
+        `npm audit encontro vulnerabilidades de baja severidad exclusivamente en dependencias de desarrollo de ${label}.`,
+        vulnerabilityEvidence(developmentOnly),
+        "Planificar su actualizacion sin tratarla como vulnerabilidad runtime."
+      );
+    } else {
+      addFinding({
+        code: `NPM_AUDIT_${upperLabel}_DEVELOPMENT_WARN`,
+        severity: devSeverity,
+        area,
+        description: `npm audit encontro vulnerabilidades en tooling de desarrollo de ${label}; no se presentan como runtime.`,
+        evidence: vulnerabilityEvidence(developmentOnly),
+        recommendation: "Actualizar tooling de desarrollo y confirmar que no se incluya en el artefacto de produccion.",
+        command: "npm audit --json"
+      });
+    }
+  } else if (developmentParsed) {
+    addOk(area, `npm audit desarrollo ${label} sin vulnerabilidades adicionales a runtime`, vulnerabilityEvidence(developmentOnly), "npm audit --json");
   }
 
   const outdated = await runCommand("npm outdated --json", {
@@ -739,17 +1051,23 @@ async function auditDatabase(env) {
       "SELECT version, nombre, aplicado_en FROM itam.schema_migrations ORDER BY version"
     );
     const applied = migrationRows.rows.map((row) => row.version);
-    const missingFiles = migrationFiles.filter((file) => !applied.includes(file.version));
-    const extraDb = applied.filter((version) => !migrationFiles.some((file) => file.version === version));
+    const { missingFiles, extraDb, outOfSequence } = migrationSequenceInfo(migrationFiles, applied);
     const last = migrationRows.rows.at(-1);
-    notes.set("migrations", { appliedCount: applied.length, last, missingFiles, extraDb });
+    const laterApplied = [...new Set(outOfSequence.flatMap((item) => item.laterApplied))];
+    notes.set("migrations", { appliedCount: applied.length, last, missingFiles, extraDb, outOfSequence, laterApplied });
     if (missingFiles.length) {
       addFinding({
         code: "DB_MIGRATIONS_PENDING",
         severity: "HIGH",
         area,
-        description: "Hay migraciones del repositorio no registradas en la base de datos.",
-        evidence: missingFiles.map((file) => file.file).join("\n"),
+        description: outOfSequence.length
+          ? "Migracion fuera de secuencia detectada. Hay migraciones inferiores pendientes y migraciones superiores aplicadas."
+          : "Hay migraciones del repositorio no registradas en la base de datos.",
+        evidence: [
+          `pendientes=${missingFiles.map((file) => file.file).join(", ")}`,
+          `ultima_aplicada=${last ? `${last.version} ${last.nombre}` : "ninguna"}`,
+          `versiones_posteriores_aplicadas=${laterApplied.join(", ") || "ninguna"}`
+        ].join("\n"),
         recommendation: "Revisar y aplicar migraciones pendientes mediante el flujo oficial, no desde el auditor.",
         query: "SELECT version FROM itam.schema_migrations"
       });
@@ -1077,18 +1395,18 @@ async function auditTraceability(ctx) {
   notes.set("criticalEvents", criticalEvents.map((event) => ({ event, count: found.get(event) ?? 0 })));
   for (const event of criticalEvents) {
     const count = found.get(event) ?? 0;
-    if (count > 0) {
+    if (classifyTraceabilityCount(count) === "OK") {
       addOk(area, `Evento critico presente: ${event}`, `cantidad=${count}`);
     } else {
-      addFinding({
-        code: `TRACE_EVENT_${event}_MISSING`,
-        severity: "MEDIUM",
+      addInfo(
+        `TRACE_EVENT_${event}_MISSING`,
         area,
-        description: `No hay eventos registrados de tipo ${event}.`,
-        evidence: "cantidad=0",
-        recommendation: "Confirmar si la funcionalidad aun no se usa o si falta registrar el evento.",
-        query: "SELECT tipo_evento, COUNT(*) FROM itam.historial_eventos GROUP BY tipo_evento"
-      });
+        `No existen eventos registrados de tipo ${event}; no implica error por si solo.`,
+        "cantidad=0",
+        "Investigar solo si existe evidencia de que el proceso ocurrio y no se registro su historial.",
+        undefined,
+        "SELECT tipo_evento, COUNT(*) FROM itam.historial_eventos GROUP BY tipo_evento"
+      );
     }
   }
 
@@ -1144,10 +1462,10 @@ async function auditOperationalConsistency(ctx) {
     },
     {
       code: "OPS_LOST_DEVICE_ACTIVE_CUSTODY",
-      severity: "MEDIUM",
+      severity: "INFO",
       area,
-      description: "Un equipo EXTRAVIADO mantiene custodia activa.",
-      recommendation: "Retirar custodia activa o documentar excepcion operacional.",
+      description: "Un equipo EXTRAVIADO conserva un responsable conocido; puede representar custodia activa o ultimo responsable historico.",
+      recommendation: "Confirmar la semantica de colaborador_id/departamento_id antes de clasificarlo como inconsistencia; no modificarlo automaticamente.",
       tables: ["dispositivos", "estados"],
       columns: [["dispositivos", "estado_id"], ["dispositivos", "colaborador_id"], ["dispositivos", "departamento_id"], ["estados", "codigo"]],
       sql: "SELECT d.id, d.codigo_inventario, e.codigo, d.colaborador_id, d.departamento_id FROM itam.dispositivos d JOIN itam.estados e ON e.id = d.estado_id WHERE e.codigo = 'EXTRAVIADO' AND (d.colaborador_id IS NOT NULL OR d.departamento_id IS NOT NULL)"
@@ -1186,11 +1504,11 @@ async function auditOperationalConsistency(ctx) {
       code: "OPS_LINE_WITHOUT_OWNER",
       severity: "MEDIUM",
       area,
-      description: "Una linea movil sin SIM no esta asociada a dispositivo ni colaborador.",
-      recommendation: "Asociar la linea a un dispositivo o colaborador, salvo flujo documentado de reposicion.",
+      description: "Una linea movil ACTIVA no esta asociada a SIM, dispositivo ni colaborador.",
+      recommendation: "Asociar la linea activa a su relacion operacional correspondiente; no evaluar DADA_BAJA ni PENDIENTE_REPOSICION como faltas de propietario.",
       tables: ["lineas_moviles"],
       columns: [["lineas_moviles", "sim_id"], ["lineas_moviles", "dispositivo_id"], ["lineas_moviles", "colaborador_id"], ["lineas_moviles", "estado"]],
-      sql: "SELECT id, numero_telefonico, estado FROM itam.lineas_moviles WHERE sim_id IS NULL AND dispositivo_id IS NULL AND colaborador_id IS NULL AND estado <> 'PENDIENTE_REPOSICION'"
+      sql: buildLineWithoutOwnerQuery()
     },
     {
       code: "OPS_PENDING_REPLACEMENT_WITH_SIM",
@@ -1218,29 +1536,53 @@ async function auditOperationalConsistency(ctx) {
 
 async function auditAvailability(env) {
   const area = "Disponibilidad";
-  await checkPort("127.0.0.1", 3100, area);
-  await httpCheck("http://127.0.0.1:3100/api/v1/health", "backend health 3100", area, "HIGH");
-  await httpCheck("http://127.0.0.1:3100/api/v1/health/database", "backend database health 3100", area, "HIGH");
-
-  const configuredPort = Number(env.PORT ?? process.env.PORT ?? 3000);
-  if (configuredPort !== 3100) {
-    addInfo(
-      "BACKEND_PORT_NOT_3100",
+  const backendPort = resolveBackendPort(env);
+  if (backendPort === null) {
+    addFinding({
+      code: "BACKEND_PORT_INVALID",
+      severity: "HIGH",
       area,
-      "El PORT configurado para backend no es 3100.",
-      `PORT=${configuredPort}`,
-      "Confirmar si ITAM v3.0 debe estandarizar backend en puerto 3100."
-    );
+      description: "El PORT configurado para backend no es un puerto valido.",
+      evidence: `PORT=${env.PORT ?? process.env.PORT ?? "ausente"}; se usara 3000 para la comprobacion`,
+      recommendation: "Configurar PORT como entero entre 1 y 65535.",
+      command: "backend/.env PORT"
+    });
   }
+  const effectiveBackendPort = backendPort ?? 3000;
+  const backendBase = `127.0.0.1:${effectiveBackendPort}`;
+  addOk(area, "Backend configurado", backendBase, `PORT=${effectiveBackendPort}`);
+  await checkPort("127.0.0.1", effectiveBackendPort, area);
+  await httpCheck(`http://127.0.0.1:${effectiveBackendPort}/api/v1/health`, "backend health", area, "HIGH");
+  await httpCheck(`http://127.0.0.1:${effectiveBackendPort}/api/v1/health/database`, "backend database health", area, "HIGH");
 
-  const frontend = await httpCheck("http://127.0.0.1:4200", "frontend local 4200", area, "INFO");
+  const frontendPackage = await readJson(path.join(frontendDir, "package.json")).catch(() => ({}));
+  const requestedFrontendUrl = String(env.AUDIT_FRONTEND_URL ?? process.env.AUDIT_FRONTEND_URL ?? "").trim();
+  if (requestedFrontendUrl) {
+    try {
+      new URL(requestedFrontendUrl);
+    } catch {
+      addFinding({
+        code: "AUDIT_FRONTEND_URL_INVALID",
+        severity: "MEDIUM",
+        area,
+        description: "AUDIT_FRONTEND_URL no es una URL valida.",
+        evidence: "Se omitio el valor para no mostrar configuracion ambigua.",
+        recommendation: "Usar una URL completa, por ejemplo https://127.0.0.1:4200."
+      });
+    }
+  }
+  const frontendConfig = detectFrontendConfig(frontendPackage, { ...env, ...process.env }, detectLanAddress());
+  const frontend = await httpCheck(frontendConfig.url, `frontend ${frontendConfig.protocol.toUpperCase()} ${frontendConfig.port}`, area, "INFO", {
+    allowSelfSigned: frontendConfig.protocol === "https"
+  });
+  addOk(area, "Frontend configurado", frontendConfig.url, `${frontendConfig.scriptName}: ${frontendConfig.script || "URL explicita"}`);
   if (!frontend.ok) {
     addInfo(
-      "FRONTEND_4200_OPTIONAL",
+      "FRONTEND_OPTIONAL",
       area,
-      "Frontend local 4200 no esta levantado o no responde.",
-      "Chequeo informativo porque el requisito indica validar si esta levantado.",
-      "Levantar npm start en frontend si se desea validar disponibilidad web."
+      "Frontend no esta levantado o no responde; esto es informativo salvo que se solicite auditoria visual.",
+      frontendConfig.url,
+      "Levantar el frontend si se desea validar disponibilidad web o generar capturas."
     );
   }
 
@@ -1272,6 +1614,162 @@ async function auditAvailability(env) {
   });
 
   await auditDiskSpace(area);
+  return { frontendConfig, frontend };
+}
+
+async function findPlaywrightModule() {
+  const packagePaths = [
+    path.join(frontendDir, "node_modules", "playwright", "package.json"),
+    path.join(frontendDir, "node_modules", "@playwright", "test", "package.json"),
+    path.join(rootDir, "node_modules", "playwright", "package.json")
+  ];
+  for (const packagePath of packagePaths) {
+    if (!(await pathExists(packagePath))) continue;
+    try {
+      const packageJson = await readJson(packagePath);
+      const entry = path.resolve(path.dirname(packagePath), packageJson.main ?? "index.js");
+      return await import(pathToFileURL(entry).href);
+    } catch {
+      // Probar el siguiente paquete disponible sin instalar nada.
+    }
+  }
+  return null;
+}
+
+function visualPageSlug(pathname) {
+  return pathname.replace(/^\//, "").replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "") || "dashboard";
+}
+
+async function waitForFrontendStability(page) {
+  await page.waitForLoadState("domcontentloaded", { timeout: 15000 }).catch(() => {});
+  await page.locator(".spin").first().waitFor({ state: "detached", timeout: 10000 }).catch(() => {});
+  await page.waitForTimeout(250);
+}
+
+async function captureVisualPage(browserContext, baseUrl, target) {
+  const page = await browserContext.newPage();
+  const evidence = {
+    name: target.name,
+    path: target.path,
+    file: `audit-screenshots/${auditRunStamp}/${target.file}`,
+    pageErrors: [],
+    consoleErrors: [],
+    requestsFailed: [],
+    http5xx: [],
+    status: "OK"
+  };
+  page.on("pageerror", (error) => evidence.pageErrors.push(String(error?.message ?? error)));
+  page.on("console", (message) => {
+    if (message.type() === "error") evidence.consoleErrors.push(message.text());
+  });
+  page.on("requestfailed", (request) => evidence.requestsFailed.push(`${request.method()} ${request.url()} ${request.failure()?.errorText ?? "failed"}`));
+  page.on("response", (response) => {
+    if (response.status() >= 500) evidence.http5xx.push(`${response.status()} ${response.url()}`);
+  });
+  try {
+    await page.goto(`${baseUrl}${target.path}`, { waitUntil: "domcontentloaded", timeout: 20000 });
+    await waitForFrontendStability(page);
+    await page.screenshot({ path: path.join(auditScreenshotDir, target.file), fullPage: true });
+  } catch (error) {
+    evidence.pageErrors.push(`navigation: ${error.message}`);
+  } finally {
+    await page.close().catch(() => {});
+  }
+  const criticalErrors = evidence.pageErrors.length + evidence.requestsFailed.length + evidence.http5xx.length;
+  if (criticalErrors) {
+    evidence.status = "MEDIUM";
+    addFinding({
+      code: `VISUAL_${target.file.replace(/\.png$/, "").toUpperCase().replace(/[^A-Z0-9]+/g, "_")}`,
+      severity: "MEDIUM",
+      area: "Evidencia visual",
+      description: `La pagina ${target.name} genero errores durante la auditoria visual.`,
+      evidence: JSON.stringify({
+        pageErrors: evidence.pageErrors,
+        requestsFailed: evidence.requestsFailed,
+        http5xx: evidence.http5xx
+      }),
+      recommendation: "Revisar errores JavaScript, requests fallidas y respuestas HTTP 500+ de la pagina.",
+      command: `Playwright ${target.path}`
+    });
+  } else {
+    addOk("Evidencia visual", `${target.name} capturada sin errores`, evidence.file, `Playwright ${target.path}`);
+  }
+  return evidence;
+}
+
+async function auditVisual(frontendConfig, frontendCheck, env) {
+  const enabled = String(env.AUDIT_SCREENSHOTS ?? process.env.AUDIT_SCREENSHOTS ?? "").toLowerCase() === "true";
+  const visual = { enabled, frontendUrl: frontendConfig.url, authenticated: false, pages: [] };
+  notes.set("visual", visual);
+  if (!enabled) {
+    addInfo("VISUAL_DISABLED", "Evidencia visual", "Auditoria visual omitida porque AUDIT_SCREENSHOTS no esta configurado como true.", "Definir AUDIT_SCREENSHOTS=true para habilitar capturas.");
+    return;
+  }
+  if (!frontendCheck.ok) {
+    addInfo("VISUAL_FRONTEND_UNAVAILABLE", "Evidencia visual", "Auditoria visual omitida porque el frontend no esta disponible.", frontendConfig.url, "Levantar el frontend y repetir con AUDIT_SCREENSHOTS=true.");
+    return;
+  }
+  const playwright = await findPlaywrightModule();
+  if (!playwright) {
+    addInfo("VISUAL_PLAYWRIGHT_MISSING", "Evidencia visual", "Auditoria visual omitida: Playwright no esta disponible.", "No se instalo ninguna dependencia automaticamente.", "Instalar Playwright fuera del auditor si se requiere esta evidencia.");
+    return;
+  }
+  const credentials = {
+    user: String(env.AUDIT_LOGIN_USER ?? process.env.AUDIT_LOGIN_USER ?? "").trim(),
+    password: String(env.AUDIT_LOGIN_PASSWORD ?? process.env.AUDIT_LOGIN_PASSWORD ?? ""),
+    pin: String(env.AUDIT_LOGIN_PIN ?? process.env.AUDIT_LOGIN_PIN ?? "")
+  };
+  const hasCredentials = Boolean(credentials.user && (credentials.password || credentials.pin));
+  const browserType = playwright.chromium ?? playwright.default?.chromium;
+  if (!browserType) {
+    addInfo("VISUAL_PLAYWRIGHT_INVALID", "Evidencia visual", "Playwright esta disponible pero no expone chromium.", "No se realizaron capturas.");
+    return;
+  }
+  await fs.mkdir(auditScreenshotDir, { recursive: true });
+  const browser = await browserType.launch({ headless: true });
+  const context = await browser.newContext({ ignoreHTTPSErrors: true, viewport: { width: 1920, height: 1080 } });
+  try {
+    const loginPage = await context.newPage();
+    await loginPage.goto(`${frontendConfig.url}/login`, { waitUntil: "domcontentloaded", timeout: 20000 });
+    await waitForFrontendStability(loginPage);
+    if (!hasCredentials) {
+      await loginPage.screenshot({ path: path.join(auditScreenshotDir, "00-login.png"), fullPage: true });
+      visual.pages.push({ name: "Login", path: "/login", file: `audit-screenshots/${auditRunStamp}/00-login.png`, pageErrors: [], consoleErrors: [], requestsFailed: [], http5xx: [], status: "OK" });
+      addInfo("VISUAL_LOGIN_NOT_AUTHENTICATED", "Evidencia visual", "No se realizaron capturas autenticadas porque no se configuraron credenciales de auditoria.", "Solo se capturo la pantalla de login.");
+      await loginPage.close();
+      return;
+    }
+    await loginPage.getByLabel("Correo").fill(credentials.user);
+    if (credentials.pin) {
+      await loginPage.getByLabel("PIN de 6 dígitos").fill(credentials.pin);
+    } else {
+      await loginPage.getByRole("button", { name: "Contraseña" }).click();
+      await loginPage.getByLabel("Contraseña").fill(credentials.password);
+    }
+    await loginPage.getByRole("button", { name: "Ingresar" }).click();
+    await loginPage.waitForURL((url) => !url.pathname.endsWith("/login"), { timeout: 15000 }).catch(() => {});
+    visual.authenticated = !loginPage.url().endsWith("/login");
+    if (!visual.authenticated) {
+      await loginPage.screenshot({ path: path.join(auditScreenshotDir, "00-login.png"), fullPage: true });
+      addInfo("VISUAL_LOGIN_FAILED", "Evidencia visual", "No fue posible completar el login de auditoria; se capturo la pantalla resultante.", "Verificar credenciales AUDIT_LOGIN_* sin imprimirlas.");
+      await loginPage.close();
+      return;
+    }
+    await loginPage.close();
+    const targets = [
+      { name: "Dashboard", path: "/dashboard", file: "01-dashboard.png" },
+      { name: "Inventario", path: "/dispositivos", file: "02-inventario.png" },
+      { name: "Alertas stock", path: "/alertas-stock", file: "03-alertas-stock.png" },
+      { name: "Colaboradores", path: "/colaboradores", file: "04-colaboradores.png" },
+      { name: "Departamentos", path: "/departamentos", file: "05-departamentos.png" },
+      { name: "Tarjetas SIM", path: "/sim", file: "06-tarjetas-sim.png" },
+      { name: "Offboarding", path: "/offboarding", file: "07-offboarding.png" }
+    ];
+    for (const target of targets) visual.pages.push(await captureVisualPage(context, frontendConfig.url, target));
+  } finally {
+    await context.close().catch(() => {});
+    await browser.close().catch(() => {});
+  }
 }
 
 async function auditDiskSpace(area) {
@@ -1398,6 +1896,23 @@ async function runNpmScriptCheck(label, cwd, packageJson, scriptName, command, s
     timeout: 180000,
     captureLimit: 12000
   });
+  if (scriptName === "build" || scriptName === "test") {
+    const fileName = scriptName === "build" ? `${label}-build.log` : `${label}-tests.log`;
+    await writeAuditArtifact(
+      fileName,
+      [
+        `command=${command}`,
+        `cwd=${cwd}`,
+        `exitCode=${result.exitCode ?? ""}`,
+        "",
+        "--- stdout ---",
+        redact(result.stdout ?? ""),
+        "",
+        "--- stderr ---",
+        redact(result.stderr ?? "")
+      ].join("\n")
+    );
+  }
   if (result.ok) {
     addOk(area, `${label} ${command} exitoso`, compact(result.stdout || result.stderr, 1000), command);
   } else {
@@ -1406,7 +1921,7 @@ async function runNpmScriptCheck(label, cwd, packageJson, scriptName, command, s
       severity: severityWhenFails,
       area,
       description: `${label} ${command} fallo.`,
-      evidence: result.stdout || result.stderr,
+      evidence: failureEvidence([result.record.stdout, result.record.stderr].filter(Boolean).join("\n")),
       recommendation: "Corregir errores de build/typecheck/test antes de promover cambios.",
       command
     });
@@ -1490,6 +2005,66 @@ function renderNotes() {
   return parts.join("\n");
 }
 
+function renderAreaBlock(area) {
+  const areaFindings = findings.filter((item) => item.area === area);
+  const areaChecks = okChecks.filter((item) => item.area === area);
+  return [
+    "### Hallazgos",
+    renderFindingsTable(areaFindings),
+    "### Checks OK",
+    renderOkTable(areaChecks)
+  ].join("\n\n");
+}
+
+function renderVisualEvidence() {
+  const visual = notes.get("visual");
+  if (!visual?.enabled) return "Auditoria visual no habilitada. Definir `AUDIT_SCREENSHOTS=true` para capturar el frontend.";
+  if (!visual.pages?.length) return "No se generaron capturas.";
+  return visual.pages.map((page) => {
+    const errors = page.pageErrors.length + page.consoleErrors.length + page.requestsFailed.length + page.http5xx.length;
+    return [
+      `### ${escapeMd(page.name)}`,
+      `Estado: ${page.status}`,
+      "",
+      `Captura: ![${escapeMd(page.name)}](${page.file})`,
+      "",
+      `Errores de consola: ${page.consoleErrors.length + page.pageErrors.length}`,
+      `Requests fallidas criticas: ${page.requestsFailed.length + page.http5xx.length}`,
+      errors ? `Detalle: ${escapeMd(JSON.stringify({ pageErrors: page.pageErrors, consoleErrors: page.consoleErrors, requestsFailed: page.requestsFailed, http5xx: page.http5xx }))}` : ""
+    ].join("\n");
+  }).join("\n\n");
+}
+
+function renderMigrationSection() {
+  const migration = notes.get("migrations");
+  if (!migration) return "No se pudo obtener evidencia de migraciones.";
+  const pending = migration.missingFiles?.map((file) => file.file).join(", ") || "ninguna";
+  const later = migration.laterApplied?.join(", ") || "ninguna";
+  return [
+    `Aplicadas: ${migration.appliedCount}`,
+    `Ultima aplicada: ${migration.last ? `${migration.last.version} ${migration.last.nombre}` : "no detectada"}`,
+    `Pendientes segun repositorio: ${pending}`,
+    `Versiones posteriores aplicadas: ${later}`,
+    migration.outOfSequence?.length ? "Diagnostico: Migracion fuera de secuencia detectada." : "Diagnostico: sin evidencia de migracion fuera de secuencia."
+  ].join("\n");
+}
+
+function renderDependencySection() {
+  const audits = notes.get("npmAudits") ?? [];
+  if (!audits.length) return "No se generaron resultados npm audit.";
+  return [
+    "| Proyecto | Runtime (omit=dev) | Desarrollo adicional |",
+    "| --- | --- | --- |",
+    ...audits.map((audit) => `| ${audit.label} | ${escapeMd(vulnerabilityEvidence(audit.runtime))} | ${escapeMd(vulnerabilityEvidence(audit.developmentOnly))} |`)
+  ].join("\n");
+}
+
+function renderLogsSection() {
+  const logs = notes.get("logs") ?? [];
+  if (!logs.length) return "No se generaron logs de comandos.";
+  return logs.map((file) => `- [${file}](logs/${auditRunStamp}/${file})`).join("\n");
+}
+
 function renderReport() {
   const hasCriticalOrHigh = counts.CRITICAL > 0 || counts.HIGH > 0;
   const status = hasCriticalOrHigh
@@ -1498,36 +2073,68 @@ function renderReport() {
       ? "APTO CON ADVERTENCIAS: revisar hallazgos antes de promover."
       : "APTO: sin hallazgos bloqueantes.";
 
-  const byArea = [...new Set([...findings.map((item) => item.area), ...okChecks.map((item) => item.area)])]
+  const knownAreas = ["Base de datos", "Seguridad", "Consistencia operacional", "Disponibilidad", "Codigo y pruebas", "Trazabilidad"];
+  const otherAreas = [...new Set([...findings.map((item) => item.area), ...okChecks.map((item) => item.area)])]
+    .filter((area) => !knownAreas.includes(area) && area !== "Evidencia visual")
     .sort((a, b) => a.localeCompare(b));
-
-  const sections = [];
-  for (const area of byArea) {
-    sections.push(`## ${area}`);
-    sections.push("### Hallazgos");
-    sections.push(renderFindingsTable(findings.filter((item) => item.area === area)));
-    sections.push("### Checks OK");
-    sections.push(renderOkTable(okChecks.filter((item) => item.area === area)));
-  }
-
-  return `# Auditoria automatica integral ITAM v3.0
+  return `# Auditoria automatizada integral ITAM
 
 Generado: ${new Date().toISOString()}
 Proyecto: ${normalizeSlashes(rootDir)}
 
-## Resumen ejecutivo
+## 1. Resumen ejecutivo
 
 Estado general: **${status}**
 
 ${renderSeverityTable()}
 
-## Detalle por area
+## 2. Hallazgos bloqueantes reales
 
-${sections.join("\n\n")}
+${renderFindingsTable(findings.filter((item) => item.severity === "CRITICAL" || item.severity === "HIGH"))}
 
-## Evidencia adicional
+## 3. Advertencias
 
-${renderNotes() || "Sin notas adicionales."}
+${renderFindingsTable(findings.filter((item) => ["MEDIUM", "LOW", "INFO"].includes(item.severity)))}
+
+## 4. Base de datos
+
+${renderAreaBlock("Base de datos")}
+
+## 5. Seguridad
+
+${renderAreaBlock("Seguridad")}
+
+## 6. Consistencia operacional
+
+${renderAreaBlock("Consistencia operacional")}
+
+## 7. Disponibilidad
+
+${renderAreaBlock("Disponibilidad")}
+
+## 8. Codigo y pruebas
+
+${renderAreaBlock("Codigo y pruebas")}
+
+## 9. Trazabilidad
+
+${renderAreaBlock("Trazabilidad")}
+
+## 10. Evidencia visual
+
+${renderVisualEvidence()}
+
+## 11. Migraciones
+
+${renderMigrationSection()}
+
+## 12. Dependencias
+
+${renderDependencySection()}
+
+## 13. Logs generados
+
+${renderLogsSection()}
 
 ## Consultas ejecutadas
 
@@ -1539,12 +2146,12 @@ ${renderCommandTable()}
 
 ## Recomendaciones finales
 
-- Corregir primero CRITICAL y HIGH; el auditor saldra con codigo 1 mientras existan.
+- Corregir primero CRITICAL y HIGH confirmados; el auditor saldra con codigo 1 mientras existan.
 - Revisar MEDIUM antes de despliegues o respaldos operacionales.
 - Mantener secretos fuera de Git y rotar cualquier secreto que haya aparecido en diff o archivos versionados.
 - No ejecutar migraciones sin respaldo y sin revisar el resultado de esta auditoria.
 
-## Checklist antes de commit
+## 14. Checklist antes de commit
 
 - [ ] git status solo contiene cambios esperados.
 - [ ] git diff --check pasa sin errores.
@@ -1553,11 +2160,11 @@ ${renderCommandTable()}
 - [ ] frontend build/typecheck/test revisados segun scripts disponibles.
 - [ ] El informe de auditoria fue leido y los hallazgos bloqueantes fueron resueltos o documentados.
 
-## Checklist antes de produccion
+## 15. Checklist antes de produccion
 
 - [ ] NODE_ENV=production.
 - [ ] CORS_ORIGIN usa origen explicito.
-- [ ] JWT_SECRET y SESSION_SECRET existen y son robustos.
+- [ ] JWT_SECRET y SESSION_SECRET existen y son robustos cuando backend/src los utiliza.
 - [ ] PostgreSQL responde y schema itam esta completo.
 - [ ] Migraciones aplicadas coinciden con database/migrations.
 - [ ] Health checks del backend y base de datos responden.
@@ -1567,15 +2174,20 @@ ${renderCommandTable()}
 }
 
 async function main() {
+  auditRunStamp = nowStamp();
+  auditLogDir = path.join(reportsDir, "logs", auditRunStamp);
+  auditScreenshotDir = path.join(reportsDir, "audit-screenshots", auditRunStamp);
   await fs.mkdir(reportsDir, { recursive: true });
   const env = await loadBackendEnv();
 
   await auditSecurity(env);
   await auditDatabase(env);
-  await auditAvailability(env);
+  const availability = await auditAvailability(env);
+  await auditVisual(availability.frontendConfig, availability.frontend, { ...env, ...process.env });
   await auditCodeAndTests();
+  notes.set("logs", await fs.readdir(auditLogDir).catch(() => []));
 
-  const reportPath = path.join(reportsDir, `itam-environment-audit-${nowStamp()}.md`);
+  const reportPath = path.join(reportsDir, `itam-environment-audit-${auditRunStamp}.md`);
   await fs.writeFile(reportPath, renderReport(), "utf8");
 
   console.log(`OK: ${counts.OK}`);
@@ -1589,7 +2201,13 @@ async function main() {
   process.exitCode = counts.CRITICAL > 0 || counts.HIGH > 0 ? 1 : 0;
 }
 
-main().catch(async (error) => {
+async function runMain() {
+  try {
+    await main();
+  } catch (error) {
+    auditRunStamp ||= nowStamp();
+    auditLogDir ||= path.join(reportsDir, "logs", auditRunStamp);
+    auditScreenshotDir ||= path.join(reportsDir, "audit-screenshots", auditRunStamp);
   await fs.mkdir(reportsDir, { recursive: true }).catch(() => {});
   addFinding({
     code: "AUDIT_FATAL",
@@ -1599,7 +2217,7 @@ main().catch(async (error) => {
     evidence: error.stack ?? error.message,
     recommendation: "Revisar excepcion y corregir el script o entorno antes de confiar en el resultado."
   });
-  const reportPath = path.join(reportsDir, `itam-environment-audit-${nowStamp()}.md`);
+  const reportPath = path.join(reportsDir, `itam-environment-audit-${auditRunStamp}.md`);
   await fs.writeFile(reportPath, renderReport(), "utf8").catch(() => {});
   console.error(error);
   console.log(`OK: ${counts.OK}`);
@@ -1610,4 +2228,24 @@ main().catch(async (error) => {
   console.log(`CRITICAL: ${counts.CRITICAL}`);
   console.log(`Informe: ${reportPath}`);
   process.exitCode = 1;
-});
+  }
+}
+
+export {
+  buildLineWithoutOwnerQuery,
+  classifyTraceabilityCount,
+  detectFrontendConfig,
+  extractMeaningfulSecretName,
+  failureEvidence,
+  findPlaywrightModule,
+  isMeaningfulSecretLine,
+  isRobustSecretValue,
+  migrationSequenceInfo,
+  parsePort,
+  redact,
+  resolveBackendPort,
+  summarizeFailureOutput
+};
+
+const isMain = process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url;
+if (isMain) void runMain();

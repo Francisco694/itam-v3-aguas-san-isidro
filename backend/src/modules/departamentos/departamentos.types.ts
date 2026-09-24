@@ -40,6 +40,11 @@ export interface InventarioDepartamento {
     custodiaDirecta: number;
     conColaboradores: number;
     totalRelacionado: number;
+    valorEconomico: {
+      directoDepartamento: number;
+      equiposPersonal: number;
+      totalRelacionado: number;
+    };
   };
   custodiaDirecta: import("../dispositivos/dispositivos.types").DispositivoResumen[];
   activosColaboradores: import("../dispositivos/dispositivos.types").DispositivoResumen[];

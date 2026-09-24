@@ -11,7 +11,7 @@ import { ServicioTecnicoService } from '../../core/services/servicio-tecnico.ser
 import { SimService } from '../../core/services/sim.service';
 import { StockAlertsService } from '../../core/services/stock-alerts.service';
 import type { OffboardingProcessSummary } from '../../core/models/offboarding.models';
-import type { Dispositivo } from '../../core/models/itam.models';
+import type { Departamento, Dispositivo, InventarioDepartamento } from '../../core/models/itam.models';
 import { Dashboard } from './dashboard';
 
 const operationalSummary = {
@@ -85,10 +85,15 @@ describe('Dashboard QA-10 y QA-15', () => {
   let offboardingProcesses: OffboardingProcessSummary[];
   let devices: Dispositivo[];
   let stockAlerts: any[];
+  let departments: Departamento[];
+  let inventoryCalls: number;
+  let departmentInventoryDetail: InventarioDepartamento;
 
   beforeEach(async () => {
     offboardingProcesses = [];
     stockAlerts = [];
+    inventoryCalls = 0;
+    departments = [];
     const device = (id: string, state: string, value: number): Dispositivo => ({
       id,
       codigoInventario: Number(id),
@@ -106,6 +111,20 @@ describe('Dashboard QA-10 y QA-15', () => {
       device('5', 'EN_REVISION', 50_000),
       device('6', 'SERVICIO_TECNICO', 80_000),
     ];
+    departmentInventoryDetail = {
+      departamento: {
+        id: '10', nombre: 'Operaciones', activo: true, observaciones: null,
+        dependencia_id: null, dependencia_nombre: null, creadoEn: '', actualizadoEn: '',
+      },
+      resumen: {
+        custodiaDirecta: 1,
+        conColaboradores: 1,
+        totalRelacionado: 2,
+        valorEconomico: { directoDepartamento: 100_000, equiposPersonal: 200_000, totalRelacionado: 300_000 },
+      },
+      custodiaDirecta: [devices[0]],
+      activosColaboradores: [devices[1]],
+    };
     await TestBed.configureTestingModule({
       imports: [Dashboard],
       providers: [
@@ -119,7 +138,16 @@ describe('Dashboard QA-10 y QA-15', () => {
         },
         { provide: SimService, useValue: { listar: () => of([]) } },
         { provide: ColaboradoresService, useValue: { listar: () => of([]) } },
-        { provide: DepartamentosService, useValue: { listar: () => of([]) } },
+        {
+          provide: DepartamentosService,
+          useValue: {
+            listar: () => of(departments),
+            inventario: () => {
+              inventoryCalls += 1;
+              return of(departmentInventoryDetail);
+            },
+          },
+        },
         {
           provide: HealthService,
           useValue: {
@@ -173,6 +201,12 @@ describe('Dashboard QA-10 y QA-15', () => {
     expect(cards).toHaveLength(3);
     expect(cards[0].textContent).toContain('Inventario activo real');
     expect(cards[0].textContent).toContain('3 equipos activos reales');
+    const activeOverview = cards[0].querySelectorAll('.active-inventory-overview__metric');
+    expect(activeOverview).toHaveLength(2);
+    expect(activeOverview[0].textContent).toContain('Equipos activos reales');
+    expect(activeOverview[0].textContent).toContain('3');
+    expect(activeOverview[1].textContent).toContain('Valor económico total');
+    expect(activeOverview[1].textContent).toContain('$380.000');
     expect(cards[0].textContent).toContain('3 activos reales');
     expect(cards[0].textContent).toContain('$380.000');
     expect(cards[0].textContent).not.toContain('EXTRAVIADO');
@@ -196,6 +230,16 @@ describe('Dashboard QA-10 y QA-15', () => {
     expect(text).toContain('Revisar custodia');
     expect(text).toContain('Asignados sin responsable identificado');
     expect(fixture.nativeElement.querySelector('.financial-card')).toBeNull();
+  });
+
+  it('oculta la representación técnica sin alterar los health checks', () => {
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.integration')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.scope-note')).toBeNull();
+    expect(fixture.nativeElement.textContent).not.toContain('Plataforma conectada');
+    const dashboardGrid = fixture.nativeElement.querySelector('.dashboard-grid');
+    const departmentSection = fixture.nativeElement.querySelector('.department-inventory-section');
+    expect(departmentSection.previousElementSibling).toBe(dashboardGrid);
   });
 
   it('muestra cero real cuando no existen procesos de Offboarding abiertos', () => {
@@ -244,5 +288,54 @@ describe('Dashboard QA-10 y QA-15', () => {
     expect(link.textContent).toContain('Notebook');
     expect(link.textContent).toContain('Quedan 3 Notebooks disponibles');
     expect(link.getAttribute('href')).toContain('/dispositivos?tipoDispositivoId=7&estado=DISPONIBLE');
+  });
+
+  it('resume el inventario por departamento y carga el detalle solo al expandirlo', () => {
+    const department = {
+      id: '10', nombre: 'Operaciones', activo: true, observaciones: null,
+      dependencia_id: null, dependencia_nombre: null, creadoEn: '', actualizadoEn: '',
+    } satisfies Departamento;
+    departments = [
+      department,
+      { ...department, id: '11', nombre: 'Administración' },
+    ];
+    devices = [
+      { ...devices[0], departamento: { id: '10', nombre: 'Operaciones' } },
+      {
+        ...devices[1],
+        colaborador: {
+          id: '20', rut: '11.111.111-1', nombre: 'Ana Pérez', cargo: null, localidad: null,
+          departamento: { id: '10', nombre: 'Operaciones' },
+        },
+      },
+      ...devices.slice(2),
+    ];
+    departmentInventoryDetail = {
+      ...departmentInventoryDetail,
+      custodiaDirecta: [devices[0]],
+      activosColaboradores: [devices[1]],
+    };
+
+    fixture.detectChanges();
+    const section = fixture.nativeElement.querySelector('.department-inventory-section') as HTMLElement;
+    expect(section.querySelectorAll('.department-inventory-row')).toHaveLength(1);
+    expect(section.textContent).toContain('Departamentos con activos1');
+    expect(section.textContent).toContain('Equipos relacionados2');
+    expect(section.textContent).toContain('$300.000');
+    expect(section.textContent).not.toContain('Custodia directa');
+
+    const toggle = section.querySelector('.department-inventory-row__toggle') as HTMLButtonElement;
+    toggle.click();
+    fixture.detectChanges();
+    expect(inventoryCalls).toBe(1);
+    expect(section.textContent).toContain('Custodia directa');
+    expect(section.textContent).toContain('Equipo del personal');
+    expect(section.textContent).toContain('Ver equipo');
+
+    (section.querySelector('.department-inventory-row__toggle') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    (section.querySelector('.department-inventory-row__toggle') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(inventoryCalls).toBe(1);
   });
 });

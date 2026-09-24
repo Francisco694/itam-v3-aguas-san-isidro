@@ -6,6 +6,7 @@ import { DepartamentosService } from '../../core/services/departamentos.service'
 import { PageHeader } from '../../shared/components/page-header/page-header';
 import { StatusBadge } from '../../shared/components/status-badge/status-badge';
 import { ViewState } from '../../shared/components/view-state/view-state';
+import { formatClp } from '../../shared/utils/currency';
 import { errorMessage } from '../../shared/utils/error-message';
 
 @Component({
@@ -59,6 +60,23 @@ import { errorMessage } from '../../shared/utils/error-message';
         </article>
         <article class="card">
           <span>Total relacionado</span><strong>{{ info.resumen.totalRelacionado }}</strong>
+        </article>
+      </section>
+      <section class="department-metrics department-metrics--economic" aria-label="Valor económico de los equipos relacionados">
+        <article class="card">
+          <span>Valor directo del departamento</span>
+          <strong>{{ clp(info.resumen.valorEconomico.directoDepartamento) }}</strong>
+          <small>Equipos bajo responsabilidad directa</small>
+        </article>
+        <article class="card">
+          <span>Valor en equipos del personal</span>
+          <strong>{{ clp(info.resumen.valorEconomico.equiposPersonal) }}</strong>
+          <small>Equipos asignados a personas</small>
+        </article>
+        <article class="card">
+          <span>Valor económico total relacionado</span>
+          <strong>{{ clp(info.resumen.valorEconomico.totalRelacionado) }}</strong>
+          <small>Directos más equipos del personal</small>
         </article>
       </section>
       <section class="custody-role-guide" aria-label="Roles de la cadena de custodia">
@@ -214,6 +232,23 @@ import { errorMessage } from '../../shared/utils/error-message';
         font-size: 1.8rem;
         margin-top: 0.3rem;
       }
+      .department-metrics--economic {
+        margin-top: -0.35rem;
+      }
+      .department-metrics--economic article {
+        border-bottom-color: var(--blue);
+      }
+      .department-metrics--economic strong {
+        color: var(--navy);
+        font-size: 1.45rem;
+        letter-spacing: -0.02em;
+      }
+      .department-metrics--economic small {
+        color: var(--slate-500);
+        display: block;
+        font-size: 0.67rem;
+        margin-top: 0.35rem;
+      }
       .custody-role-guide {
         display: grid;
         gap: 0.8rem;
@@ -342,6 +377,7 @@ import { errorMessage } from '../../shared/utils/error-message';
 export class DepartamentoDetail implements OnInit {
   private readonly service = inject(DepartamentosService);
   private readonly route = inject(ActivatedRoute);
+  protected readonly clp = formatClp;
   protected readonly data = signal<InventarioDepartamento | null>(null);
   protected readonly loading = signal(true);
   protected readonly error = signal('');

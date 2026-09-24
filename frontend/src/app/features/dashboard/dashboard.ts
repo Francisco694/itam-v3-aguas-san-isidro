@@ -5,7 +5,6 @@ import {
   LucideBuilding,
   LucideCardSim,
   LucideCircleAlert,
-  LucideCircleCheck,
   LucideChartNoAxesCombined,
   LucideChevronDown,
   LucideChevronUp,
@@ -39,7 +38,11 @@ import { PageHeader } from '../../shared/components/page-header/page-header';
 import { ViewState } from '../../shared/components/view-state/view-state';
 import { formatClp } from '../../shared/utils/currency';
 import { errorMessage } from '../../shared/utils/error-message';
-import type { Dispositivo } from '../../core/models/itam.models';
+import type {
+  Departamento,
+  Dispositivo,
+  InventarioDepartamento,
+} from '../../core/models/itam.models';
 import type { StockAlertConfiguration } from '../../core/models/itam.models';
 
 const CURRENT_OPERATIONAL_STATE_CODES = new Set([
@@ -122,6 +125,28 @@ interface OperationalMetric {
   icon: LucideIconInput;
 }
 
+interface DepartmentInventorySummary {
+  departamento: Departamento;
+  custodiaDirecta: number;
+  conColaboradores: number;
+  totalRelacionado: number;
+  valorDirecto: number;
+  valorPersonal: number;
+  valorTotal: number;
+}
+
+interface DepartmentInventoryDetailState {
+  loading: boolean;
+  error: string;
+  data: InventarioDepartamento | null;
+}
+
+interface DepartmentInventoryDeviceRow {
+  device: Dispositivo;
+  custodyLabel: string;
+  custodyType: 'DIRECTA' | 'COLABORADOR';
+}
+
 @Component({
   selector: 'app-dashboard',
   imports: [
@@ -129,7 +154,6 @@ interface OperationalMetric {
     PageHeader,
     ViewState,
     LucideDynamicIcon,
-    LucideCircleCheck,
     LucideCircleAlert,
   ],
   template: `
@@ -215,6 +239,39 @@ interface OperationalMetric {
           }
         </div>
       </section>
+      <section class="operational-resources-section" aria-labelledby="operational-resources-title">
+        <article class="card operational-card">
+          <div class="card-heading">
+            <div>
+              <span>Panorama operativo</span>
+              <h2 id="operational-resources-title">Recursos relacionados</h2>
+            </div>
+          </div>
+          <div class="mini-stat-grid" aria-label="Resumen de recursos relacionados">
+            <div class="mini-stat">
+              <span class="mini-icon"><svg [lucideIcon]="simIcon"></svg></span>
+              <div>
+                <strong>{{ totalSims() }}</strong>
+                <span>Tarjetas SIM</span>
+              </div>
+            </div>
+            <div class="mini-stat">
+              <span class="mini-icon"><svg [lucideIcon]="usersIcon"></svg></span>
+              <div>
+                <strong>{{ activePeople() }}</strong>
+                <span>Colaboradores activos</span>
+              </div>
+            </div>
+            <div class="mini-stat">
+              <span class="mini-icon"><svg [lucideIcon]="buildingIcon"></svg></span>
+              <div>
+                <strong>{{ activeDepartments() }}</strong>
+                <span>Departamentos activos</span>
+              </div>
+            </div>
+          </div>
+        </article>
+      </section>
       <aside class="historical-summary" aria-label="Histórico registrado">
         <div><span>Histórico registrado</span><strong>{{ historicalDevices() }}</strong></div>
         <p>Total de registros en ITAM, incluyendo bajas y extravíos.</p>
@@ -270,6 +327,18 @@ interface OperationalMetric {
           <p class="historical-subtitle">
             Incluye solo equipos actualmente vigentes en la empresa.
           </p>
+          <div class="active-inventory-overview" aria-label="Resumen del inventario activo real">
+            <div class="active-inventory-overview__metric">
+              <span>Equipos activos reales</span>
+              <strong>{{ totalDevices() }}</strong>
+              <small>Equipos actualmente vigentes</small>
+            </div>
+            <div class="active-inventory-overview__metric active-inventory-overview__metric--value">
+              <span>Valor económico total</span>
+              <strong>{{ formatClp(activeInventoryValue()) }}</strong>
+              <small>Suma del inventario activo real</small>
+            </div>
+          </div>
           @if (!activeTypeSummary().length) {
             <app-view-state
               kind="empty"
@@ -462,56 +531,154 @@ interface OperationalMetric {
             />
           }
         </article>
-        <article class="card operational-card">
-          <div class="card-heading">
-            <div>
-              <span>Panorama operativo</span>
-              <h2>Recursos relacionados</h2>
-            </div>
-          </div>
-          <div class="mini-stat">
-            <span class="mini-icon"><svg [lucideIcon]="simIcon"></svg></span>
-            <div>
-              <strong>{{ totalSims() }}</strong
-              ><span>Tarjetas SIM</span>
-            </div>
-          </div>
-          <div class="mini-stat">
-            <span class="mini-icon"><svg [lucideIcon]="usersIcon"></svg></span>
-            <div>
-              <strong>{{ activePeople() }}</strong
-              ><span>Colaboradores activos</span>
-            </div>
-          </div>
-          <div class="mini-stat">
-            <span class="mini-icon"><svg [lucideIcon]="buildingIcon"></svg></span>
-            <div>
-              <strong>{{ activeDepartments() }}</strong
-              ><span>Departamentos activos</span>
-            </div>
-          </div>
-        </article>
       </section>
-      <section class="card integration">
-        <div>
-          <span class="integration__icon"><svg lucideCircleCheck></svg></span>
+      <section class="department-inventory-section" aria-labelledby="department-inventory-title">
+        <div class="section-heading department-inventory-section__heading">
           <div>
-            <strong>Plataforma conectada</strong>
-            <p>API ITAM y PostgreSQL responden correctamente.</p>
+            <span>INVENTARIO ORGANIZACIONAL</span>
+            <h2 id="department-inventory-title">Inventario por departamento</h2>
+          </div>
+          <p>Activos vigentes relacionados con cada unidad.</p>
+        </div>
+
+        <div class="department-inventory-summary" aria-label="Resumen del inventario por departamento">
+          <div class="department-inventory-summary__item">
+            <span>Departamentos con activos</span>
+            <strong>{{ departmentsWithAssets() }}</strong>
+          </div>
+          <div class="department-inventory-summary__item">
+            <span>Equipos relacionados</span>
+            <strong>{{ relatedDepartmentDevices() }}</strong>
+          </div>
+          <div class="department-inventory-summary__item">
+            <span>Valor económico relacionado</span>
+            <strong>{{ formatClp(relatedDepartmentValue()) }}</strong>
           </div>
         </div>
-        <div class="service-pills">
-          <span>API {{ apiStatus() }}</span
-          ><span>PostgreSQL {{ databaseStatus() }}</span>
+
+        <div class="department-inventory-toolbar">
+          <label class="department-inventory-search" for="department-inventory-search">
+            <span>Buscar departamento</span>
+            <input
+              id="department-inventory-search"
+              type="search"
+              [value]="departmentInventoryQuery()"
+              placeholder="Nombre del departamento"
+              (input)="setDepartmentInventoryQuery($event)"
+            />
+          </label>
+          <span class="department-inventory-toolbar__note">Datos reales · Sin duplicidades</span>
         </div>
+
+        @if (!departmentInventoryRows().length) {
+          <app-view-state
+            kind="empty"
+            [title]="departmentInventoryQuery() ? 'Sin resultados' : 'Sin departamentos con activos'"
+            [message]="departmentInventoryQuery() ? 'No hay departamentos con dispositivos activos que coincidan con la búsqueda.' : 'No hay departamentos con dispositivos activos para mostrar.'"
+          />
+        } @else {
+          <div class="department-inventory-list">
+            @for (row of departmentInventoryRows(); track row.departamento.id) {
+              <article class="department-inventory-row" [class.department-inventory-row--open]="expandedDepartmentId() === row.departamento.id">
+                <div class="department-inventory-row__summary">
+                  <div class="department-inventory-row__name">
+                    <a [routerLink]="['/departamentos', row.departamento.id]">{{ row.departamento.nombre }}</a>
+                    <span>{{ row.totalRelacionado }} {{ row.totalRelacionado === 1 ? 'equipo relacionado' : 'equipos relacionados' }}</span>
+                  </div>
+                  <div class="department-inventory-row__metric">
+                    <span>Directos</span>
+                    <strong>{{ row.custodiaDirecta }}</strong>
+                  </div>
+                  <div class="department-inventory-row__metric">
+                    <span>Personal</span>
+                    <strong>{{ row.conColaboradores }}</strong>
+                  </div>
+                  <div class="department-inventory-row__value">
+                    <span>Valor total</span>
+                    <strong>{{ formatClp(row.valorTotal) }}</strong>
+                  </div>
+                  <button
+                    class="btn btn--secondary btn--small department-inventory-row__toggle"
+                    type="button"
+                    [attr.aria-expanded]="expandedDepartmentId() === row.departamento.id"
+                    [attr.aria-controls]="'department-inventory-detail-' + row.departamento.id"
+                    (click)="toggleDepartmentInventory(row)"
+                  >
+                    <svg [lucideIcon]="expandedDepartmentId() === row.departamento.id ? chevronUpIcon : chevronDownIcon"></svg>
+                    {{ expandedDepartmentId() === row.departamento.id ? 'Ocultar' : 'Ver inventario' }}
+                  </button>
+                </div>
+
+                @if (expandedDepartmentId() === row.departamento.id) {
+                  <div class="department-inventory-row__detail" [id]="'department-inventory-detail-' + row.departamento.id">
+                    @if (departmentInventoryDetail(row).loading) {
+                      <app-view-state kind="loading" title="Cargando inventario" message="Consultando los equipos relacionados con este departamento…" />
+                    } @else if (departmentInventoryDetail(row).error) {
+                      <app-view-state
+                        kind="error"
+                        title="No se pudo cargar el inventario"
+                        [message]="departmentInventoryDetail(row).error"
+                        (retry)="retryDepartmentInventory(row)"
+                      />
+                    } @else if (departmentInventoryDetail(row).data; as detail) {
+                      <div class="department-inventory-detail__header">
+                        <div>
+                          <span>DETALLE DE CUSTODIA</span>
+                          <p>Directos: {{ detail.resumen.custodiaDirecta }} · Personal: {{ detail.resumen.conColaboradores }}</p>
+                        </div>
+                        <a class="btn btn--ghost btn--small" [routerLink]="['/departamentos', row.departamento.id]">Ver departamento</a>
+                      </div>
+                      @if (!departmentInventoryDevices(detail).length) {
+                        <app-view-state kind="empty" title="Sin equipos vigentes" message="Este departamento no tiene equipos activos relacionados." />
+                      } @else {
+                        <div class="table-wrap department-inventory-table-wrap">
+                          <table class="department-inventory-table">
+                            <thead>
+                              <tr>
+                                <th>Código</th>
+                                <th>Equipo</th>
+                                <th>Tipo</th>
+                                <th>Custodia actual</th>
+                                <th>Estado</th>
+                                <th>Verificación</th>
+                                <th>Valor</th>
+                                <th>Acción</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              @for (item of departmentInventoryDevices(detail); track item.device.id) {
+                                <tr>
+                                  <td class="cell-primary">{{ item.device.codigoInventario }}</td>
+                                  <td>{{ departmentDeviceLabel(item.device) }}</td>
+                                  <td>{{ item.device.tipo.nombre }}</td>
+                                  <td>
+                                    <span>{{ item.custodyLabel }}</span>
+                                    <small>{{ item.custodyType === 'DIRECTA' ? 'Custodia directa' : 'Equipo del personal' }}</small>
+                                  </td>
+                                  <td>{{ item.device.estado.nombre }}</td>
+                                  <td>
+                                    <span [class.department-inventory-verification--positive]="departmentVerificationLabel(item.device) === 'Verificado'">
+                                      {{ departmentVerificationLabel(item.device) }}
+                                    </span>
+                                  </td>
+                                  <td>{{ formatClp(item.device.valorComercial) }}</td>
+                                  <td>
+                                    <a class="btn btn--ghost btn--small" routerLink="/dispositivos" [queryParams]="{ q: item.device.codigoInventario }">Ver equipo</a>
+                                  </td>
+                                </tr>
+                              }
+                            </tbody>
+                          </table>
+                        </div>
+                      }
+                    }
+                  </div>
+                }
+              </article>
+            }
+          </div>
+        }
       </section>
-      <p class="scope-note">
-        <svg lucideCircleAlert></svg
-        ><span
-          >Los últimos movimientos globales requieren un endpoint agregado para evitar consultar el
-          historial de cada activo individualmente.</span
-        >
-      </p>
     }
   `,
   styleUrl: './dashboard.scss',
@@ -539,6 +706,7 @@ export class Dashboard implements OnInit {
     new Intl.NumberFormat('es-CL', { maximumFractionDigits: 1 }).format(value) + '%';
   protected readonly activeTypeSummary = signal<TypeSummary[]>([]);
   protected readonly totalDevices = signal(0);
+  protected readonly activeInventoryValue = signal(0);
   protected readonly historicalDevices = signal(0);
   protected readonly verifiedDevices = signal(0);
   protected readonly verifiedPercentage = signal(0);
@@ -555,6 +723,26 @@ export class Dashboard implements OnInit {
   protected readonly repairCosts = signal('$0');
   protected readonly operationalMetrics = signal<OperationalMetric[]>([]);
   protected readonly activeStockAlerts = signal<StockAlertConfiguration[]>([]);
+  private readonly departmentInventorySummary = signal<DepartmentInventorySummary[]>([]);
+  private readonly departmentInventoryDetails = signal<Record<string, DepartmentInventoryDetailState>>({});
+  protected readonly departmentInventoryQuery = signal('');
+  protected readonly expandedDepartmentId = signal<string | null>(null);
+  protected readonly departmentInventoryRows = computed(() => {
+    const query = this.departmentInventoryQuery().trim().toLocaleLowerCase('es');
+    if (!query) return this.departmentInventorySummary();
+    return this.departmentInventorySummary().filter((row) =>
+      row.departamento.nombre.toLocaleLowerCase('es').includes(query),
+    );
+  });
+  protected readonly departmentsWithAssets = computed(
+    () => this.departmentInventorySummary().filter((row) => row.totalRelacionado > 0).length,
+  );
+  protected readonly relatedDepartmentDevices = computed(
+    () => this.departmentInventorySummary().reduce((total, row) => total + row.totalRelacionado, 0),
+  );
+  protected readonly relatedDepartmentValue = computed(
+    () => this.departmentInventorySummary().reduce((total, row) => total + row.valorTotal, 0),
+  );
   protected readonly simIcon = LucideCardSim;
   protected readonly usersIcon = LucideUsers;
   protected readonly buildingIcon = LucideBuilding;
@@ -583,6 +771,7 @@ export class Dashboard implements OnInit {
       stockAlerts: this.stockAlertsService.listar(),
     }).subscribe({
       next: (r) => {
+        this.departmentInventorySummary.set(this.buildDepartmentInventorySummary(r.departments, r.devices));
         const inventoryScope = dashboardInventoryScope(r.devices);
         const inventoryActual = r.summary.inventarioActual ?? {
           cantidad: inventoryScope.operational.length,
@@ -772,7 +961,9 @@ export class Dashboard implements OnInit {
         const verifiedRender = verifiedSummary.map((item) => ({
           label: item.tipo,
           count: item.cantidad,
-          percentage: item.porcentajeCantidad,
+          percentage: inventoryActual.cantidad
+            ? Math.round((item.cantidad * 1000) / inventoryActual.cantidad) / 10
+            : 0,
           value: item.valorTotal,
           valuePercentage: item.porcentajeValor,
           icon: iconForDeviceType(item.tipo),
@@ -784,6 +975,7 @@ export class Dashboard implements OnInit {
         );
         console.log('[RENDER HISTORICO]', this.historicoPorTipoRender());
         this.totalDevices.set(inventoryActual.cantidad);
+        this.activeInventoryValue.set(inventoryActual.valorTotal);
         this.historicalDevices.set(historicalTotal);
         this.verifiedDevices.set(verified.cantidad);
         this.verifiedPercentage.set(verified.porcentajeSobreInventarioActual);
@@ -805,5 +997,156 @@ export class Dashboard implements OnInit {
 
   protected toggleHistoricalInvestment() {
     this.historicalInvestmentOpen.update((open) => !open);
+  }
+
+  protected setDepartmentInventoryQuery(event: Event) {
+    this.departmentInventoryQuery.set((event.target as HTMLInputElement | null)?.value ?? '');
+  }
+
+  protected departmentInventoryDetail(row: DepartmentInventorySummary): DepartmentInventoryDetailState {
+    return this.departmentInventoryDetails()[row.departamento.id] ?? {
+      loading: false,
+      error: '',
+      data: null,
+    };
+  }
+
+  protected toggleDepartmentInventory(row: DepartmentInventorySummary) {
+    const departmentId = row.departamento.id;
+    if (this.expandedDepartmentId() === departmentId) {
+      this.expandedDepartmentId.set(null);
+      return;
+    }
+
+    this.expandedDepartmentId.set(departmentId);
+    const cached = this.departmentInventoryDetails()[departmentId];
+    if (!cached?.data && !cached?.loading) this.loadDepartmentInventory(departmentId);
+  }
+
+  protected retryDepartmentInventory(row: DepartmentInventorySummary) {
+    this.loadDepartmentInventory(row.departamento.id);
+  }
+
+  protected departmentInventoryDevices(detail: InventarioDepartamento): DepartmentInventoryDeviceRow[] {
+    const directIds = new Set<string>();
+    const direct = detail.custodiaDirecta.reduce<DepartmentInventoryDeviceRow[]>((rows, device) => {
+      if (directIds.has(device.id)) return rows;
+      directIds.add(device.id);
+      rows.push({
+        device,
+        custodyLabel: detail.departamento.nombre,
+        custodyType: 'DIRECTA',
+      });
+      return rows;
+    }, []);
+    const personal = detail.activosColaboradores.reduce<DepartmentInventoryDeviceRow[]>((rows, device) => {
+      if (directIds.has(device.id) || rows.some((item) => item.device.id === device.id)) return rows;
+      rows.push({
+        device,
+        custodyLabel: device.colaborador?.nombre ?? 'Colaborador sin nombre',
+        custodyType: 'COLABORADOR',
+      });
+      return rows;
+    }, []);
+    return [...direct, ...personal];
+  }
+
+  protected departmentDeviceLabel(device: Dispositivo): string {
+    return [device.marca, device.modelo].filter(Boolean).join(' ') || device.tipo.nombre;
+  }
+
+  protected departmentVerificationLabel(device: Dispositivo): string {
+    if (device.origenRegistro === 'MANUAL' || device.verificacionFisica?.resultado === 'VERIFICADO') {
+      return 'Verificado';
+    }
+    if (device.verificacionFisica?.resultado === 'REVISAR') return 'Revisar';
+    return 'Pendiente';
+  }
+
+  private loadDepartmentInventory(departmentId: string) {
+    this.departmentInventoryDetails.update((details) => ({
+      ...details,
+      [departmentId]: { loading: true, error: '', data: details[departmentId]?.data ?? null },
+    }));
+    this.departamentos.inventario(departmentId).subscribe({
+      next: (data) => {
+        this.departmentInventoryDetails.update((details) => ({
+          ...details,
+          [departmentId]: { loading: false, error: '', data },
+        }));
+      },
+      error: (error) => {
+        this.departmentInventoryDetails.update((details) => ({
+          ...details,
+          [departmentId]: { loading: false, error: errorMessage(error), data: null },
+        }));
+      },
+    });
+  }
+
+  private buildDepartmentInventorySummary(
+    departments: readonly Departamento[],
+    devices: readonly Dispositivo[],
+  ): DepartmentInventorySummary[] {
+    const rows = new Map<string, {
+      direct: Set<string>;
+      personal: Set<string>;
+      directValue: number;
+      personalValue: number;
+    }>();
+    const directDeviceIds = new Set(
+      devices
+        .filter((device) => CURRENT_OPERATIONAL_STATE_CODES.has(device.estado?.codigo ?? '') && device.departamento)
+        .map((device) => device.id),
+    );
+
+    for (const device of devices) {
+      if (!CURRENT_OPERATIONAL_STATE_CODES.has(device.estado?.codigo ?? '')) continue;
+      const directDepartment = device.departamento;
+      const collaboratorDepartment = device.colaborador?.departamento;
+      const department = directDepartment ?? (
+        directDeviceIds.has(device.id) ? null : collaboratorDepartment
+      );
+      if (!department) continue;
+      const row = rows.get(department.id) ?? {
+        direct: new Set<string>(),
+        personal: new Set<string>(),
+        directValue: 0,
+        personalValue: 0,
+      };
+      if (directDepartment) {
+        if (!row.direct.has(device.id)) {
+          row.direct.add(device.id);
+          row.directValue += device.valorComercial ?? 0;
+        }
+      } else if (!row.personal.has(device.id)) {
+        row.personal.add(device.id);
+        row.personalValue += device.valorComercial ?? 0;
+      }
+      rows.set(department.id, row);
+    }
+
+    return departments
+      .map((departamento) => {
+        const values = rows.get(departamento.id);
+        const custodiaDirecta = values?.direct.size ?? 0;
+        const conColaboradores = values?.personal.size ?? 0;
+        const valorDirecto = values?.directValue ?? 0;
+        const valorPersonal = values?.personalValue ?? 0;
+        return {
+          departamento,
+          custodiaDirecta,
+          conColaboradores,
+          totalRelacionado: custodiaDirecta + conColaboradores,
+          valorDirecto,
+          valorPersonal,
+          valorTotal: valorDirecto + valorPersonal,
+        };
+      })
+      .filter((row) => row.totalRelacionado > 0)
+      .sort((a, b) =>
+        b.totalRelacionado - a.totalRelacionado ||
+        a.departamento.nombre.localeCompare(b.departamento.nombre, 'es', { sensitivity: 'base' }),
+      );
   }
 }

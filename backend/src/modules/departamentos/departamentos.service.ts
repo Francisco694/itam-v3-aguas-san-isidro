@@ -21,7 +21,68 @@ import type {
   DepartamentoRow,
   InventarioDepartamento
 } from "./departamentos.types";
+import type { DispositivoResumen } from "../dispositivos/dispositivos.types";
 import { obtenerDispositivos } from "../dispositivos/dispositivos.service";
+
+const ACTIVE_DEPARTMENT_DEVICE_STATE_CODES = new Set([
+  "ASIGNADO",
+  "DISPONIBLE",
+  "EN_BODEGA",
+  "PRESTAMO_TEMPORAL",
+  "RETENIDO_REVISION",
+  "SERVICIO_TECNICO",
+  "EN_SERVICIO_TECNICO"
+]);
+
+const uniqueActiveDevices = (
+  devices: readonly DispositivoResumen[],
+  excludedIds = new Set<string>()
+): DispositivoResumen[] => {
+  const seen = new Set(excludedIds);
+  return devices.filter((device) => {
+    if (!ACTIVE_DEPARTMENT_DEVICE_STATE_CODES.has(device.estado.codigo)) {
+      return false;
+    }
+    if (seen.has(device.id)) return false;
+    seen.add(device.id);
+    return true;
+  });
+};
+
+export const calcularResumenInventarioDepartamento = (
+  custodiaDirecta: readonly DispositivoResumen[],
+  activosColaboradores: readonly DispositivoResumen[]
+): Pick<InventarioDepartamento, "resumen" | "custodiaDirecta" | "activosColaboradores"> => {
+  const directosActivos = uniqueActiveDevices(custodiaDirecta);
+  const directoIds = new Set(directosActivos.map((device) => device.id));
+  const colaboradoresActivos = uniqueActiveDevices(
+    activosColaboradores,
+    directoIds
+  );
+  const valorDirectoDepartamento = directosActivos.reduce(
+    (total, device) => total + device.valorComercial,
+    0
+  );
+  const valorEquiposPersonal = colaboradoresActivos.reduce(
+    (total, device) => total + device.valorComercial,
+    0
+  );
+
+  return {
+    resumen: {
+      custodiaDirecta: directosActivos.length,
+      conColaboradores: colaboradoresActivos.length,
+      totalRelacionado: directosActivos.length + colaboradoresActivos.length,
+      valorEconomico: {
+        directoDepartamento: valorDirectoDepartamento,
+        equiposPersonal: valorEquiposPersonal,
+        totalRelacionado: valorDirectoDepartamento + valorEquiposPersonal
+      }
+    },
+    custodiaDirecta: directosActivos,
+    activosColaboradores: colaboradoresActivos
+  };
+};
 
 const mapDepartamento = (
   row: DepartamentoRow
@@ -101,14 +162,10 @@ export const obtenerInventarioDepartamento = async (
 
   return {
     departamento,
-    resumen: {
-      custodiaDirecta: custodiaDirecta.length,
-      conColaboradores: activosColaboradores.length,
-      totalRelacionado:
-        custodiaDirecta.length + activosColaboradores.length
-    },
-    custodiaDirecta,
-    activosColaboradores
+    ...calcularResumenInventarioDepartamento(
+      custodiaDirecta,
+      activosColaboradores
+    )
   };
 };
 

@@ -1,40 +1,100 @@
-# Checklist de producción — ITAM v3.0
+# Checklist de producción — ITAM
 
-## Antes del despliegue
+**Actualizado:** 23 de septiembre de 2026
+**Tipo:** operativo
+**Regla:** completar cada casilla con evidencia antes de declarar un despliegue listo.
 
-- [ ] Realizar un backup completo y verificable de PostgreSQL, sin contraseñas embebidas en scripts.
-- [ ] Confirmar la versión registrada en `itam.schema_migrations` y que la siguiente migración sea la esperada.
-- [ ] Configurar `NODE_ENV=production`, conexión PostgreSQL, `PORT` y `CORS_ORIGIN` mediante secretos del entorno.
-- [ ] Confirmar que `.env` no está versionado y que `.env.example` solo contiene ejemplos.
-- [ ] Definir el origen HTTPS real del frontend en `CORS_ORIGIN`; producción no usa el fallback local.
-- [ ] Confirmar que el frontend resolverá `/api/v1` mediante el proxy/reverse proxy de la infraestructura final.
+## Preparación y respaldo
 
-## Construcción y migración
+- [ ] `git status` limpio y cambios documentales revisados.
+- [ ] `git diff` revisado por otra persona.
+- [ ] Commit final creado con mensaje descriptivo.
+- [ ] Push remoto realizado y commit verificado en el remoto.
+- [ ] Backup PostgreSQL completo, fechado y con restauración de prueba.
+- [ ] Versión, commit y fecha registrados en la bitácora.
 
-1. Ejecutar `npm ci`, `npm run typecheck`, `npm test` y `npm run build` en `backend/`.
-2. Ejecutar `npm ci`, `npm test -- --watch=false` y `npm run build` en `frontend/`.
-3. Desplegar una versión de backend compatible con las columnas legacy y nuevas.
-4. Ejecutar las migraciones pendientes en orden dentro de una ventana controlada.
-   Para este bloque, confirmar que `006_configurable_inventory_code_families.sql` se aplica después de `005`, que `007_dynamic_asset_registration.sql` se aplica después de `006` y que no existen familias/nombres/prefijos que colisionen con `1` a `6`.
-5. Verificar `itam.schema_migrations`, las FK y que ningún dispositivo tenga `tipo_dispositivo_id` nulo o inválido.
-6. Desplegar los artefactos compilados. `npm run dev`, `ng serve` y `npm start` son solo para desarrollo.
+## Base de datos
 
-## Verificación posterior
+- [ ] Backup realizado antes de ejecutar migraciones.
+- [ ] Migraciones pendientes ejecutadas en orden desde `database/migrations`.
+- [ ] `schema_migrations` coincide con la versión esperada.
+- [ ] Constraints de códigos, custodia, estados, montos y documentos verificadas.
+- [ ] Familias de códigos y siguientes ordinales revisados.
+- [ ] Índices únicos y parciales verificados.
+- [ ] Usuarios, roles y permisos de la cuenta de aplicación validados.
+- [ ] `GET /api/v1/health/database` responde correctamente.
 
-- [ ] `GET /api/v1/health` responde 200.
-- [ ] `GET /api/v1/health/database` responde 200.
-- [ ] Smoke tests de tipos, familias, dispositivos, SIM, departamentos y estados responden correctamente.
-- [ ] Crear un Smartphone controlado, comprobar código/etiqueta y retirarlo mediante el procedimiento autorizado.
-- [ ] Confirmar familias `1` Smartphone, `2` SIM, `3` Notebook, `4` Monitor, `5` PC y `6` Periféricos; no crear automáticamente `7` a `9`.
-- [ ] Confirmar que un tipo legacy sin familia muestra un error controlado y no reserva códigos.
-- [ ] Confirmar que prefijos usados, códigos emitidos y relaciones históricas de familia no pueden modificarse.
-- [ ] Revisar Dashboard, Inventario, Nuevo Equipo, ficha, SIM, Colaboradores, Departamentos, Estados y Offboarding; revisar Tipos de dispositivo y Familias de código mediante sus rutas administrativas directas.
-- [ ] Confirmar que Nuevo Equipo no muestra familia ni prefijo, agrupa los tipos periféricos y valida sus campos dinámicos.
-- [ ] Confirmar CORS desde el dominio real y ausencia de secretos en bundles y logs.
+## Backend
 
-## Contingencia
+- [ ] `.env` de producción cargado fuera del repositorio.
+- [ ] `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER` y `DB_PASSWORD` comprobados.
+- [ ] Secretos de sesión y credenciales protegidos.
+- [ ] `CORS_ORIGIN` definido con origen explícito.
+- [ ] `BACKEND_HOST` y `PORT` revisados.
+- [ ] `DOCUMENT_STORAGE_PATH` existe y tiene permisos mínimos.
+- [ ] `npm run build` ejecutado en `backend`.
+- [x] `npm run typecheck` ejecutado en `backend` durante la actualización documental.
+- [x] `npm test` ejecutado en `backend`: 106 pruebas aprobadas durante la actualización documental.
+- [ ] `GET /api/v1/health` responde correctamente.
 
-- Detener el despliegue si el backfill deja dispositivos sin tipo o si falla una FK.
-- Conservar la columna textual legacy durante esta versión; no ejecutar `DROP`, `TRUNCATE` ni borrados masivos.
-- Si la migración falla, su transacción revierte completa. Corregir la causa antes de reintentar.
-- Si la validación posterior falla, retirar los artefactos nuevos, restaurar la versión anterior compatible y recuperar el backup solo mediante el procedimiento aprobado por infraestructura.
+## Frontend
+
+- [ ] `environment.production.ts` apunta al API correcto.
+- [ ] Proxy o reverse proxy publica `/api/v1` correctamente.
+- [ ] `npm run build` ejecutado y presupuestos revisados.
+- [ ] Login y cierre de sesión probados.
+- [ ] Rutas protegidas y cambio obligatorio de credenciales probados.
+- [ ] Responsive probado en escritorio y móvil.
+- [ ] Dashboard validado con datos reales.
+
+## Funcional
+
+- [ ] Crear y editar activo.
+- [ ] Validar IMEI y número de serie duplicados.
+- [ ] Asignar a colaborador.
+- [ ] Asignar a departamento.
+- [ ] Devolver y revisar activo.
+- [ ] Registrar verificación física.
+- [ ] Crear SIM y asociarla a dispositivo.
+- [ ] Registrar, corregir y consultar línea móvil.
+- [ ] Generar acta de entrega y PDF.
+- [ ] Enviar equipo a servicio técnico.
+- [ ] Registrar diagnóstico y cotización.
+- [ ] Adjuntar y descargar cotización.
+- [ ] Aprobar, rechazar o dar de baja desde servicio técnico.
+- [ ] Cerrar servicio técnico y revisar retorno.
+- [ ] Abrir, seguir y cerrar offboarding.
+- [ ] Consultar historial y trazabilidad.
+
+## Etiquetado y documentos
+
+- [ ] Brother QL-800 disponible y configurada.
+- [ ] Rollo de 62 mm instalado.
+- [ ] Etiqueta final dentro de 60 × 38 mm.
+- [ ] QR legible con cámara y escáner.
+- [ ] Código ITAM correcto en etiqueta.
+- [ ] Prueba de impresión real archivada.
+- [ ] PDF de acta, comprobante, reporte y orden de trabajo revisado.
+
+## Seguridad
+
+- [ ] Contraseñas hasheadas y política mínima verificada.
+- [ ] PIN hasheado y bloqueo por intentos verificado.
+- [ ] Expiración absoluta e inactividad de sesión probadas.
+- [ ] Roles y operaciones de superusuario verificados.
+- [ ] Errores no exponen SQL, secretos, rutas ni stack trace.
+- [ ] CORS y cookies revisados con HTTPS de producción.
+
+## Post despliegue y rollback
+
+- [ ] Smoke test de health, login e inventario.
+- [ ] Logs sin errores inesperados.
+- [ ] PostgreSQL revisado después del despliegue.
+- [ ] Usuarios, dashboard y reportes validados.
+- [ ] Impresión y QR validados en ambiente real.
+- [ ] Backup y procedimiento de rollback documentados.
+- [ ] Incidencias y decisiones agregadas a la bitácora.
+
+## Estado conocido al actualizar este documento
+
+El backend pasó typecheck y 106 pruebas automatizadas. El build del frontend generó los bundles, pero fue rechazado por el presupuesto configurado para `dashboard.scss` (19,91 kB frente a 10 kB de máximo de error); esto debe resolverse o aprobarse explícitamente antes de producción.

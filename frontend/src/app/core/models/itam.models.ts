@@ -160,7 +160,21 @@ export interface UltimoResponsableTrazabilidad extends ResponsableTrazabilidad {
 export interface MovimientoResponsable extends UltimoResponsableTrazabilidad {tipoEvento:string;estadoResultante:Pick<EstadoResumen,'codigo'|'nombre'>|null;observacion:string|null;}
 export interface TrazabilidadDispositivo {dispositivo:Dispositivo;responsableActual:ResponsableTrazabilidad|null;ultimoResponsableConocido:UltimoResponsableTrazabilidad|null;historialResponsables:MovimientoResponsable[];eventos:HistorialEvento[];alertas:string[];}
 
-export interface InventarioDepartamento { departamento: Departamento; resumen: { custodiaDirecta: number; conColaboradores: number; totalRelacionado: number }; custodiaDirecta: Dispositivo[]; activosColaboradores: Dispositivo[]; }
+export interface InventarioDepartamento {
+  departamento: Departamento;
+  resumen: {
+    custodiaDirecta: number;
+    conColaboradores: number;
+    totalRelacionado: number;
+    valorEconomico: {
+      directoDepartamento: number;
+      equiposPersonal: number;
+      totalRelacionado: number;
+    };
+  };
+  custodiaDirecta: Dispositivo[];
+  activosColaboradores: Dispositivo[];
+}
 
 export interface ActivoColaborador {id:string;codigoInventario:number;tipo:string;marca:string|null;modelo:string|null;numeroSerie:string|null;imei:string|null;valorComercial:number;estado:{codigo:string;nombre:string};}
 export interface HistorialActivoColaborador extends ActivoColaborador {fechaAsignacion:string;fechaDevolucion:string|null;tipoCierre:string|null;resultado:string;}

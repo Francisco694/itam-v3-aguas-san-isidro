@@ -54,6 +54,242 @@
 .metric--dark .metric__meta {
   color: #7dd3fc;
 }
+
+/* Inventario gerencial por departamento. */
+.department-inventory-section {
+  margin-top: 1.2rem;
+}
+.department-inventory-section__heading {
+  margin-bottom: 0.7rem;
+}
+.department-inventory-summary {
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 0.8rem;
+}
+.department-inventory-summary__item {
+  background: #fff;
+  border: 1px solid var(--gray-200);
+  border-radius: 0.75rem;
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.035);
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-height: 4.5rem;
+  padding: 0.75rem 0.9rem;
+}
+.department-inventory-summary__item span,
+.department-inventory-row__metric span,
+.department-inventory-row__value span {
+  color: var(--slate-500);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+.department-inventory-summary__item strong {
+  color: var(--navy);
+  font-size: 1.25rem;
+  line-height: 1.1;
+}
+.department-inventory-toolbar {
+  align-items: end;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  margin-bottom: 0.65rem;
+}
+.department-inventory-search {
+  display: grid;
+  gap: 0.3rem;
+  max-width: 22rem;
+  width: 100%;
+}
+.department-inventory-search span,
+.department-inventory-toolbar__note {
+  color: var(--slate-500);
+  font-size: 0.67rem;
+}
+.department-inventory-search span {
+  font-weight: 800;
+}
+.department-inventory-search input {
+  background: #fff;
+  border: 1px solid var(--gray-300);
+  border-radius: 0.55rem;
+  color: var(--slate-900);
+  font: inherit;
+  min-height: 2.25rem;
+  padding: 0.45rem 0.65rem;
+}
+.department-inventory-toolbar__note {
+  padding-bottom: 0.45rem;
+  text-align: right;
+}
+.department-inventory-list {
+  display: grid;
+  gap: 0.55rem;
+}
+.department-inventory-row {
+  background: #fff;
+  border: 1px solid var(--gray-200);
+  border-radius: 0.75rem;
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.035);
+  overflow: hidden;
+}
+.department-inventory-row--open {
+  border-color: #b9d9e4;
+}
+.department-inventory-row__summary {
+  align-items: center;
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: minmax(12rem, 1.7fr) minmax(4.5rem, 0.55fr) minmax(4.5rem, 0.55fr) minmax(8rem, 0.9fr) auto;
+  min-height: 4.35rem;
+  padding: 0.7rem 0.85rem;
+}
+.department-inventory-row__name {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+.department-inventory-row__name a {
+  color: var(--navy);
+  font-size: 0.86rem;
+  font-weight: 850;
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+.department-inventory-row__name a:hover {
+  color: var(--blue);
+  text-decoration: underline;
+}
+.department-inventory-row__name span {
+  color: var(--slate-500);
+  font-size: 0.67rem;
+}
+.department-inventory-row__metric,
+.department-inventory-row__value {
+  display: grid;
+  gap: 0.18rem;
+}
+.department-inventory-row__metric strong {
+  color: var(--navy);
+  font-size: 1rem;
+}
+.department-inventory-row__value strong {
+  color: var(--blue);
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+.department-inventory-row__toggle {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.35rem;
+  justify-content: center;
+  white-space: nowrap;
+}
+.department-inventory-row__toggle svg {
+  height: 0.85rem;
+  width: 0.85rem;
+}
+.department-inventory-row__detail {
+  background: #f8fbfc;
+  border-top: 1px solid #e5eef1;
+  padding: 0.85rem;
+}
+.department-inventory-detail__header {
+  align-items: center;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  margin-bottom: 0.7rem;
+}
+.department-inventory-detail__header span {
+  color: var(--blue);
+  display: block;
+  font-size: 0.61rem;
+  font-weight: 850;
+  letter-spacing: 0.1em;
+}
+.department-inventory-detail__header p {
+  color: var(--slate-500);
+  font-size: 0.68rem;
+  margin: 0.2rem 0 0;
+}
+.department-inventory-table-wrap {
+  border: 1px solid var(--gray-200);
+  border-radius: 0.55rem;
+}
+.department-inventory-table {
+  border-collapse: collapse;
+  min-width: 62rem;
+  width: 100%;
+}
+.department-inventory-table th,
+.department-inventory-table td {
+  border-bottom: 1px solid var(--gray-200);
+  font-size: 0.68rem;
+  padding: 0.62rem 0.7rem;
+  text-align: left;
+  vertical-align: middle;
+}
+.department-inventory-table th {
+  background: #f3f8fb;
+  color: var(--slate-500);
+  font-size: 0.59rem;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.department-inventory-table tr:last-child td {
+  border-bottom: 0;
+}
+.department-inventory-table td:first-child,
+.department-inventory-table td:nth-last-child(2) {
+  white-space: nowrap;
+}
+.department-inventory-table td small {
+  color: var(--slate-500);
+  display: block;
+  font-size: 0.6rem;
+  margin-top: 0.15rem;
+}
+.department-inventory-verification--positive {
+  color: #087443;
+  font-weight: 800;
+}
+@media (max-width: 900px) {
+  .department-inventory-row__summary {
+    grid-template-columns: minmax(10rem, 1.5fr) repeat(2, minmax(3.5rem, 0.55fr)) minmax(7rem, 0.8fr);
+  }
+  .department-inventory-row__toggle {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+}
+@media (max-width: 700px) {
+  .department-inventory-summary {
+    grid-template-columns: 1fr;
+  }
+  .department-inventory-toolbar,
+  .department-inventory-detail__header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .department-inventory-toolbar__note {
+    padding-bottom: 0;
+    text-align: left;
+  }
+  .department-inventory-row__summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .department-inventory-row__name,
+  .department-inventory-row__toggle {
+    grid-column: 1 / -1;
+  }
+}
 .metric__detail {
   color: var(--slate-700);
   font-size: 0.72rem;
@@ -95,6 +331,43 @@
   color: var(--slate-500);
   font-size: 0.72rem;
   margin: -0.65rem 0 1.1rem;
+}
+.active-inventory-overview {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0 0 1.15rem;
+}
+.active-inventory-overview__metric {
+  background: #fff;
+  border: 1px solid #dcecf1;
+  border-left: 3px solid var(--blue);
+  border-radius: 0.7rem;
+  display: grid;
+  gap: 0.22rem;
+  min-height: 5.4rem;
+  padding: 0.8rem 0.9rem;
+}
+.active-inventory-overview__metric--value {
+  border-left-color: var(--cyan);
+}
+.active-inventory-overview__metric span {
+  color: var(--slate-700);
+  font-size: 0.67rem;
+  font-weight: 800;
+}
+.active-inventory-overview__metric strong {
+  color: var(--navy);
+  font-size: 1.55rem;
+  line-height: 1.05;
+}
+.active-inventory-overview__metric--value strong {
+  color: var(--blue);
+  font-size: 1.35rem;
+}
+.active-inventory-overview__metric small {
+  color: var(--slate-500);
+  font-size: 0.63rem;
 }
 .card-heading > strong {
   background: var(--cyan-soft);
@@ -428,15 +701,30 @@
   text-align: right;
   white-space: nowrap;
 }
+.operational-resources-section {
+  margin-top: 1rem;
+}
+.operational-card {
+  padding: 1.15rem 1.35rem;
+}
+.operational-card .card-heading {
+  margin-bottom: 0.85rem;
+}
+.mini-stat-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
 .mini-stat {
   align-items: center;
-  border-top: 1px solid var(--gray-200);
+  background: #fff;
+  border: 1px solid #dcecf1;
+  border-left: 3px solid var(--cyan);
+  border-radius: 0.7rem;
   display: flex;
   gap: 0.75rem;
-  padding: 0.85rem 0;
-}
-.mini-stat:first-of-type {
-  border-top: 0;
+  min-height: 4.55rem;
+  padding: 0.7rem 0.85rem;
 }
 .mini-icon {
   align-items: center;
@@ -457,69 +745,14 @@
   display: block;
 }
 .mini-stat strong {
-  font-size: 1.1rem;
+  color: var(--navy);
+  font-size: 1.55rem;
+  line-height: 1;
 }
 .mini-stat div span {
   color: var(--slate-500);
-  font-size: 0.7rem;
-}
-.integration {
-  align-items: center;
-  display: flex;
-  justify-content: space-between;
-  margin-top: 1rem;
-  padding: 1rem 1.2rem;
-}
-.integration > div:first-child {
-  align-items: center;
-  display: flex;
-  gap: 0.7rem;
-}
-.integration__icon {
-  align-items: center;
-  background: #dcfce7;
-  border-radius: 50%;
-  color: var(--success);
-  display: flex;
-  height: 2.4rem;
-  justify-content: center;
-  width: 2.4rem;
-}
-.integration__icon svg {
-  height: 1.1rem;
-  width: 1.1rem;
-}
-.integration strong {
-  font-size: 0.78rem;
-}
-.integration p {
-  color: var(--slate-500);
   font-size: 0.68rem;
-  margin: 0.2rem 0 0;
-}
-.service-pills {
-  display: flex;
-  gap: 0.5rem;
-}
-.service-pills span {
-  background: #f0fdf4;
-  border-radius: 999px;
-  color: #166534;
-  font-size: 0.65rem;
-  font-weight: 750;
-  padding: 0.35rem 0.65rem;
-}
-.scope-note {
-  align-items: center;
-  color: var(--slate-500);
-  display: flex;
-  font-size: 0.67rem;
-  gap: 0.45rem;
-  margin: 0.8rem 0.2rem 0;
-}
-.scope-note svg {
-  height: 0.85rem;
-  width: 0.85rem;
+  margin-top: 0.25rem;
 }
 @media (max-width: 950px) {
   .dashboard-grid {
@@ -534,14 +767,6 @@
 @media (max-width: 620px) {
   .type-row {
     grid-template-columns: 7.5rem minmax(4rem, 1fr) 2.2rem;
-  }
-  .integration {
-    align-items: flex-start;
-    gap: 1rem;
-    flex-direction: column;
-  }
-  .service-pills {
-    flex-wrap: wrap;
   }
   .verification-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -988,7 +1213,11 @@
 @media (max-width: 700px) {
   .metric-grid--primary,
   .metric-grid--operational,
-  .operational-grid {
+  .operational-grid,
+  .mini-stat-grid {
+    grid-template-columns: 1fr;
+  }
+  .active-inventory-overview {
     grid-template-columns: 1fr;
   }
   .metric--primary {

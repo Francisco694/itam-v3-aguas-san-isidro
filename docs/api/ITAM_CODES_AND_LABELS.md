@@ -1,55 +1,31 @@
-# Códigos y etiquetas ITAM
+# Códigos ITAM y etiquetas
 
-## Identidad y custodia
+**Actualizado:** 23 de septiembre de 2026
+**Tipo:** técnico y operativo
 
-`codigo_inventario` identifica físicamente al activo y es inmutable. La custodia es una relación operacional que puede cambiar entre `NONE`, `COLABORADOR` y `DEPARTAMENTO` sin cambiar la etiqueta.
+## Código de inventario
 
-La base de datos impide custodios directos simultáneos y los nuevos eventos de asignación/devolución guardan la custodia anterior y nueva en `historial_eventos.detalle`.
+El código ITAM se genera en backend a partir de `familias_codigo_inventario` y de la familia asociada al tipo de dispositivo o SIM. El frontend no envía prefijo ni ordinal. La reserva es transaccional y el código emitido es único e inmutable.
 
-## Generación
+La estrategia vigente es `REPEAT_PREFIX`: una familia con prefijo de un dígito puede producir códigos como `1001`–`1999`, luego `11001`–`11999`, según los ordinales reservados. La secuencia concreta depende de la familia instalada en la base de datos; la documentación no fija un catálogo que pueda quedar desactualizado.
 
-`itam.familias_codigo_inventario` centraliza familia, prefijo, estrategia, versión y último ordinal. El servicio bloquea la fila de familia con `SELECT ... FOR UPDATE`, busca colisiones globales legacy y actualiza el ordinal dentro de la misma transacción que inserta el activo.
+## Identificadores físicos
 
-Familias confirmadas:
+- Smartphone: la configuración del tipo puede exigir IMEI.
+- Otros equipos: pueden usar número de serie.
+- El backend valida duplicados de IMEI y serie; la interfaz puede consultar `/dispositivos/validar-identificador` antes de guardar.
+- La comparación normaliza espacios exteriores y mayúsculas para detectar duplicados equivalentes.
 
-- `1`: Smartphone;
-- `2`: SIM.
-- `3`: Notebook;
-- `4`: Monitor;
-- `5`: PC;
-- `6`: Periféricos.
+## Etiqueta física
 
-No se crean familias `7` a `9` ni un tipo periférico genérico. Los tipos concretos pueden compartir la familia Periféricos. No existe fallback para otros tipos: deben configurarse y confirmarse antes de habilitar su alta.
+La etiqueta representa al activo, no reemplaza el registro del inventario. Debe mostrar, según disponibilidad y tipo:
 
-La estrategia vigente es `REPEAT_PREFIX` y acepta prefijos simples de `1` a `9`. El algoritmo se selecciona por `estrategia_codigo`, nunca por el nombre de la familia. Si se agotan esos prefijos se debe incorporar una estrategia/versionado nuevo mediante otra migración; no se reutilizan prefijos.
+- código ITAM;
+- tipo operativo;
+- marca y modelo;
+- IMEI o número de serie;
+- responsable o ubicación cuando corresponda;
+- número telefónico para smartphones cuando exista;
+- QR asociado al activo.
 
-Los códigos emitidos son inmutables. PostgreSQL impide cambiar el prefijo usado, mover a otra familia un tipo con activos o cambiar el tipo de un dispositivo hacia una familia diferente.
-
-## Modelo de tipos
-
-`itam.tipos_dispositivo` es el catálogo corporativo de clases físicas. Cada dispositivo referencia `tipo_dispositivo_id`; el texto `dispositivos.tipo_dispositivo` permanece temporalmente como espejo legacy para una transición segura.
-
-La relación es:
-
-```text
-dispositivos.tipo_dispositivo_id
-  → tipos_dispositivo.familia_codigo_inventario_id
-  → familias_codigo_inventario.id
-```
-
-Un tipo puede existir sin familia para preservar datos legacy, pero no puede utilizarse en un alta hasta relacionarlo con una familia activa. `requiere_imei` configura la captura de IMEI sin depender del nombre del tipo. SIM continúa fuera de este catálogo y reserva códigos directamente desde su familia independiente.
-
-La familia y su prefijo son configuración técnica interna: no se solicitan durante el alta. `configuracion_formulario` define los campos aplicables a cada tipo y `dispositivos.atributos_especificos` conserva propiedades técnicas extensibles sin crear columnas o tablas por cada clase. La familia Periféricos agrupa en la interfaz tipos reales como Mouse, Teclado, Cable, Cargador, Docking Station, Webcam, Adaptador, Hub USB y Otro; el dispositivo siempre persiste el tipo concreto.
-
-## Etiqueta
-
-La vista Angular genera Code 128 real con el valor numérico del código ITAM. La etiqueta mide `50mm × 25mm` y contiene únicamente empresa, sistema, código y tipo de activo. La impresión actual utiliza el diálogo del navegador sobre A4 a escala 100%.
-
-La impresora productiva prevista es Zebra ZD421. Una fase posterior podrá generar ZPL en backend usando los mismos datos de etiqueta; no se implementa comunicación directa con la impresora en esta etapa.
-## Etiqueta QR de activos
-
-La identidad del activo continúa siendo su codigo_inventario; el QR no crea ni reemplaza códigos ITAM. La etiqueta principal mide 50 × 30 mm e incluye únicamente empresa, QR, código visible y tipo de dispositivo.
-
-El contenido del QR es la ruta estable /dispositivos/:codigoInventario resuelta contra assetDetailBaseUrl del environment Angular. Si la base está vacía se utiliza el origen actual de la aplicación. No se almacena un dominio productivo ficticio.
-
-La impresión usa window.print() y CSS de impresión, sin acoplamiento a un fabricante específico.
+Los detalles de hardware y medidas de impresión se encuentran en [ETIQUETAS.md](../prototipo/ETIQUETAS.md). La prueba de impresión real debe registrarse en el checklist de producción.
