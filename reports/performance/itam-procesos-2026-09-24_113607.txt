@@ -1,0 +1,105 @@
+﻿PROCESOS DETECTADOS AL INICIO
+Fecha: 2026-09-24 11:36:09
+ProjectRoot: E:\Aguas San Isidro V2\ITAM
+ClasificaciÃ³n por CommandLine y cadena de procesos padre. Secretos sanitizados.
+
+PID: 6464
+Tipo: POSTGRESQL
+RAM inicial: 5,72 MB
+CommandLine: [no disponible]
+
+PID: 6864
+Tipo: NODE_EXTERNO
+RAM inicial: 10,75 MB
+CommandLine: "C:\Users\Deisy\AppData\Local\OpenAI\Codex\runtimes\cua_node\7f75cff94511d5f8\bin\node.exe" C:\Users\Deisy\AppData\Local\OpenAI\Codex\runtimes\cua_node\7f75cff94511d5f8\bin\node_modules\@oai\cua-repl\bin\cua-repl.mjs
+
+PID: 6884
+Tipo: POSTGRESQL
+RAM inicial: 2,62 MB
+CommandLine: [no disponible]
+
+PID: 6960
+Tipo: POSTGRESQL
+RAM inicial: 1,73 MB
+CommandLine: [no disponible]
+
+PID: 6968
+Tipo: POSTGRESQL
+RAM inicial: 2,47 MB
+CommandLine: [no disponible]
+
+PID: 6976
+Tipo: POSTGRESQL
+RAM inicial: 2,30 MB
+CommandLine: [no disponible]
+
+PID: 6996
+Tipo: POSTGRESQL
+RAM inicial: 5,73 MB
+CommandLine: [no disponible]
+
+PID: 7008
+Tipo: POSTGRESQL
+RAM inicial: 2,88 MB
+CommandLine: [no disponible]
+
+PID: 7120
+Tipo: POSTGRESQL
+RAM inicial: 4,09 MB
+CommandLine: [no disponible]
+
+PID: 7128
+Tipo: POSTGRESQL
+RAM inicial: 3,00 MB
+CommandLine: [no disponible]
+
+PID: 7136
+Tipo: POSTGRESQL
+RAM inicial: 3,01 MB
+CommandLine: [no disponible]
+
+PID: 8436
+Tipo: BACKEND_ITAM
+RAM inicial: 23,05 MB
+CommandLine: "node"   "E:\Aguas San Isidro V2\ITAM\backend\node_modules\.bin\\..\tsx\dist\cli.mjs" watch src/server.ts
+
+PID: 12560
+Tipo: FRONTEND_DEV
+RAM inicial: 60,32 MB
+CommandLine: "node"   "E:\Aguas San Isidro V2\ITAM\frontend\node_modules\.bin\\..\@angular\cli\bin\ng.js" serve --configuration lan --host 0.0.0.0 --port 4200 --ssl --ssl-cert certs/itam-lan.pem --ssl-key certs/itam-lan-key.pem --proxy-config proxy.lan.json
+
+PID: 12744
+Tipo: NODE_EXTERNO
+RAM inicial: 16,45 MB
+CommandLine: "C:\Program Files\nodejs\node.exe" "C:\Program Files\nodejs/node_modules/npm/bin/npm-cli.js" run dev
+
+PID: 15008
+Tipo: NODE_EXTERNO
+RAM inicial: 9,77 MB
+CommandLine: "C:\Program Files\nodejs\node.exe" "C:\Program Files\nodejs/node_modules/npm/bin/npm-cli.js" run start:lan:https
+
+PID: 16272
+Tipo: BACKEND_ITAM
+RAM inicial: 25,16 MB
+CommandLine: "C:\Program Files\nodejs\node.exe" --require "E:\Aguas San Isidro V2\ITAM\backend\node_modules\tsx\dist\preflight.cjs" --import file:///E:/Aguas%20San%20Isidro%20V2/ITAM/backend/node_modules/tsx/dist/loader.mjs src/server.ts
+
+PID: 18628
+Tipo: NODE_EXTERNO
+RAM inicial: 37,43 MB
+CommandLine: "C:\Users\Deisy\AppData\Local\OpenAI\Codex\runtimes\cua_node\7f75cff94511d5f8\bin\node.exe"  ./server.mjs
+
+PID: 18960
+Tipo: NODE_EXTERNO
+RAM inicial: 11,20 MB
+CommandLine: "C:\Users\Deisy\AppData\Local\OpenAI\Codex\runtimes\cua_node\7f75cff94511d5f8\bin\node.exe"  ./server.mjs
+
+PID: 19724
+Tipo: NODE_EXTERNO
+RAM inicial: 10,25 MB
+CommandLine: "C:\Users\Deisy\AppData\Local\OpenAI\Codex\runtimes\cua_node\7f75cff94511d5f8\bin\node.exe" C:\Users\Deisy\AppData\Local\OpenAI\Codex\runtimes\cua_node\7f75cff94511d5f8\bin\node_modules\@oai\cua-repl\bin\cua-repl.mjs
+
+PID: 24540
+Tipo: NODE_EXTERNO
+RAM inicial: 37,79 MB
+CommandLine: "C:\Users\Deisy\AppData\Local\OpenAI\Codex\runtimes\cua_node\7f75cff94511d5f8\bin\node.exe" C:\Users\Deisy\AppData\Local\OpenAI\Codex\runtimes\cua_node\7f75cff94511d5f8\bin\node_modules\@oai\cua-repl\bin\cua-repl.mjs
+

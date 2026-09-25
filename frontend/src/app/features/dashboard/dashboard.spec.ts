@@ -11,7 +11,7 @@ import { ServicioTecnicoService } from '../../core/services/servicio-tecnico.ser
 import { SimService } from '../../core/services/sim.service';
 import { StockAlertsService } from '../../core/services/stock-alerts.service';
 import type { OffboardingProcessSummary } from '../../core/models/offboarding.models';
-import type { Departamento, Dispositivo, InventarioDepartamento } from '../../core/models/itam.models';
+import type { Departamento, Dispositivo } from '../../core/models/itam.models';
 import { Dashboard } from './dashboard';
 
 const operationalSummary = {
@@ -86,13 +86,10 @@ describe('Dashboard QA-10 y QA-15', () => {
   let devices: Dispositivo[];
   let stockAlerts: any[];
   let departments: Departamento[];
-  let inventoryCalls: number;
-  let departmentInventoryDetail: InventarioDepartamento;
 
   beforeEach(async () => {
     offboardingProcesses = [];
     stockAlerts = [];
-    inventoryCalls = 0;
     departments = [];
     const device = (id: string, state: string, value: number): Dispositivo => ({
       id,
@@ -111,20 +108,6 @@ describe('Dashboard QA-10 y QA-15', () => {
       device('5', 'EN_REVISION', 50_000),
       device('6', 'SERVICIO_TECNICO', 80_000),
     ];
-    departmentInventoryDetail = {
-      departamento: {
-        id: '10', nombre: 'Operaciones', activo: true, observaciones: null,
-        dependencia_id: null, dependencia_nombre: null, creadoEn: '', actualizadoEn: '',
-      },
-      resumen: {
-        custodiaDirecta: 1,
-        conColaboradores: 1,
-        totalRelacionado: 2,
-        valorEconomico: { directoDepartamento: 100_000, equiposPersonal: 200_000, totalRelacionado: 300_000 },
-      },
-      custodiaDirecta: [devices[0]],
-      activosColaboradores: [devices[1]],
-    };
     await TestBed.configureTestingModule({
       imports: [Dashboard],
       providers: [
@@ -142,10 +125,6 @@ describe('Dashboard QA-10 y QA-15', () => {
           provide: DepartamentosService,
           useValue: {
             listar: () => of(departments),
-            inventario: () => {
-              inventoryCalls += 1;
-              return of(departmentInventoryDetail);
-            },
           },
         },
         {
@@ -290,14 +269,15 @@ describe('Dashboard QA-10 y QA-15', () => {
     expect(link.getAttribute('href')).toContain('/dispositivos?tipoDispositivoId=7&estado=DISPONIBLE');
   });
 
-  it('resume el inventario por departamento y carga el detalle solo al expandirlo', () => {
+  it('muestra el resumen por departamento y enlaza al detalle sin desplegar inventario', () => {
     const department = {
       id: '10', nombre: 'Operaciones', activo: true, observaciones: null,
       dependencia_id: null, dependencia_nombre: null, creadoEn: '', actualizadoEn: '',
     } satisfies Departamento;
     departments = [
       department,
-      { ...department, id: '11', nombre: 'Administración' },
+      { ...department, id: '11', nombre: 'Administración y Finanzas' },
+      { ...department, id: '12', nombre: 'Comercial y Servicio al Cliente' },
     ];
     devices = [
       { ...devices[0], departamento: { id: '10', nombre: 'Operaciones' } },
@@ -308,34 +288,42 @@ describe('Dashboard QA-10 y QA-15', () => {
           departamento: { id: '10', nombre: 'Operaciones' },
         },
       },
-      ...devices.slice(2),
+      { ...devices[2], departamento: { id: '11', nombre: 'Administración y Finanzas' }, estado: { id: 'ASIGNADO', codigo: 'ASIGNADO', nombre: 'ASIGNADO' } },
+      { ...devices[3], colaborador: { id: '21', rut: '22.222.222-2', nombre: 'Luis Soto', cargo: null, localidad: null, departamento: { id: '12', nombre: 'Comercial y Servicio al Cliente' } }, estado: { id: 'ASIGNADO', codigo: 'ASIGNADO', nombre: 'ASIGNADO' } },
     ];
-    departmentInventoryDetail = {
-      ...departmentInventoryDetail,
-      custodiaDirecta: [devices[0]],
-      activosColaboradores: [devices[1]],
-    };
 
     fixture.detectChanges();
     const section = fixture.nativeElement.querySelector('.department-inventory-section') as HTMLElement;
-    expect(section.querySelectorAll('.department-inventory-row')).toHaveLength(1);
-    expect(section.textContent).toContain('Departamentos con activos1');
-    expect(section.textContent).toContain('Equipos relacionados2');
-    expect(section.textContent).toContain('$300.000');
-    expect(section.textContent).not.toContain('Custodia directa');
+    expect(section.querySelectorAll('.department-inventory-row')).toHaveLength(3);
+    expect(section.textContent).toContain('Equipos vigentes relacionados con cada departamento, ya sea directamente o a través de sus colaboradores.');
+    expect(section.textContent).toContain('Asignados al departamento');
+    expect(section.textContent).toContain('Asignados a colaboradores');
+    expect(section.textContent).toContain('Valor económico total');
+    expect(section.textContent).not.toContain('Ver inventario');
+    expect(section.querySelectorAll('.department-inventory-row__detail')).toHaveLength(0);
 
-    const toggle = section.querySelector('.department-inventory-row__toggle') as HTMLButtonElement;
-    toggle.click();
-    fixture.detectChanges();
-    expect(inventoryCalls).toBe(1);
-    expect(section.textContent).toContain('Custodia directa');
-    expect(section.textContent).toContain('Equipo del personal');
-    expect(section.textContent).toContain('Ver equipo');
+    const summaries = [...section.querySelectorAll<HTMLElement>('.department-inventory-row')].map((row) => ({
+      name: row.querySelector('.department-inventory-row__name a')?.textContent?.trim(),
+      assignedToDepartment: row.querySelectorAll('.department-inventory-row__metric strong')[0]?.textContent?.trim(),
+      assignedToCollaborators: row.querySelectorAll('.department-inventory-row__metric strong')[1]?.textContent?.trim(),
+      total: row.querySelector('.department-inventory-row__name span')?.textContent?.trim(),
+    }));
+    expect(summaries).toEqual([
+      { name: 'Operaciones', assignedToDepartment: '1', assignedToCollaborators: '1', total: '2 equipos relacionados' },
+      { name: 'Administración y Finanzas', assignedToDepartment: '1', assignedToCollaborators: '0', total: '1 equipo relacionado' },
+      { name: 'Comercial y Servicio al Cliente', assignedToDepartment: '0', assignedToCollaborators: '1', total: '1 equipo relacionado' },
+    ]);
 
-    (section.querySelector('.department-inventory-row__toggle') as HTMLButtonElement).click();
-    fixture.detectChanges();
-    (section.querySelector('.department-inventory-row__toggle') as HTMLButtonElement).click();
-    fixture.detectChanges();
-    expect(inventoryCalls).toBe(1);
+    const departmentLinks = [...section.querySelectorAll<HTMLAnchorElement>('.department-inventory-row__link')];
+    expect(departmentLinks.map((link) => link.textContent?.trim())).toEqual([
+      'Ver departamento →',
+      'Ver departamento →',
+      'Ver departamento →',
+    ]);
+    expect(departmentLinks.map((link) => link.getAttribute('href'))).toEqual([
+      '/departamentos/10',
+      '/departamentos/11',
+      '/departamentos/12',
+    ]);
   });
 });

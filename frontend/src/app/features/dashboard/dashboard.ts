@@ -41,7 +41,6 @@ import { errorMessage } from '../../shared/utils/error-message';
 import type {
   Departamento,
   Dispositivo,
-  InventarioDepartamento,
 } from '../../core/models/itam.models';
 import type { StockAlertConfiguration } from '../../core/models/itam.models';
 
@@ -133,18 +132,6 @@ interface DepartmentInventorySummary {
   valorDirecto: number;
   valorPersonal: number;
   valorTotal: number;
-}
-
-interface DepartmentInventoryDetailState {
-  loading: boolean;
-  error: string;
-  data: InventarioDepartamento | null;
-}
-
-interface DepartmentInventoryDeviceRow {
-  device: Dispositivo;
-  custodyLabel: string;
-  custodyType: 'DIRECTA' | 'COLABORADOR';
 }
 
 @Component({
@@ -538,7 +525,7 @@ interface DepartmentInventoryDeviceRow {
             <span>INVENTARIO ORGANIZACIONAL</span>
             <h2 id="department-inventory-title">Inventario por departamento</h2>
           </div>
-          <p>Activos vigentes relacionados con cada unidad.</p>
+          <p>Equipos vigentes relacionados con cada departamento, ya sea directamente o a través de sus colaboradores.</p>
         </div>
 
         <div class="department-inventory-summary" aria-label="Resumen del inventario por departamento">
@@ -579,101 +566,31 @@ interface DepartmentInventoryDeviceRow {
         } @else {
           <div class="department-inventory-list">
             @for (row of departmentInventoryRows(); track row.departamento.id) {
-              <article class="department-inventory-row" [class.department-inventory-row--open]="expandedDepartmentId() === row.departamento.id">
+              <article class="department-inventory-row">
                 <div class="department-inventory-row__summary">
                   <div class="department-inventory-row__name">
                     <a [routerLink]="['/departamentos', row.departamento.id]">{{ row.departamento.nombre }}</a>
                     <span>{{ row.totalRelacionado }} {{ row.totalRelacionado === 1 ? 'equipo relacionado' : 'equipos relacionados' }}</span>
                   </div>
                   <div class="department-inventory-row__metric">
-                    <span>Directos</span>
+                    <span>Asignados al departamento</span>
                     <strong>{{ row.custodiaDirecta }}</strong>
                   </div>
                   <div class="department-inventory-row__metric">
-                    <span>Personal</span>
+                    <span>Asignados a colaboradores</span>
                     <strong>{{ row.conColaboradores }}</strong>
                   </div>
                   <div class="department-inventory-row__value">
-                    <span>Valor total</span>
+                    <span>Valor económico total</span>
                     <strong>{{ formatClp(row.valorTotal) }}</strong>
                   </div>
-                  <button
-                    class="btn btn--secondary btn--small department-inventory-row__toggle"
-                    type="button"
-                    [attr.aria-expanded]="expandedDepartmentId() === row.departamento.id"
-                    [attr.aria-controls]="'department-inventory-detail-' + row.departamento.id"
-                    (click)="toggleDepartmentInventory(row)"
+                  <a
+                    class="btn btn--secondary btn--small department-inventory-row__link"
+                    [routerLink]="['/departamentos', row.departamento.id]"
                   >
-                    <svg [lucideIcon]="expandedDepartmentId() === row.departamento.id ? chevronUpIcon : chevronDownIcon"></svg>
-                    {{ expandedDepartmentId() === row.departamento.id ? 'Ocultar' : 'Ver inventario' }}
-                  </button>
+                    Ver departamento →
+                  </a>
                 </div>
-
-                @if (expandedDepartmentId() === row.departamento.id) {
-                  <div class="department-inventory-row__detail" [id]="'department-inventory-detail-' + row.departamento.id">
-                    @if (departmentInventoryDetail(row).loading) {
-                      <app-view-state kind="loading" title="Cargando inventario" message="Consultando los equipos relacionados con este departamento…" />
-                    } @else if (departmentInventoryDetail(row).error) {
-                      <app-view-state
-                        kind="error"
-                        title="No se pudo cargar el inventario"
-                        [message]="departmentInventoryDetail(row).error"
-                        (retry)="retryDepartmentInventory(row)"
-                      />
-                    } @else if (departmentInventoryDetail(row).data; as detail) {
-                      <div class="department-inventory-detail__header">
-                        <div>
-                          <span>DETALLE DE CUSTODIA</span>
-                          <p>Directos: {{ detail.resumen.custodiaDirecta }} · Personal: {{ detail.resumen.conColaboradores }}</p>
-                        </div>
-                        <a class="btn btn--ghost btn--small" [routerLink]="['/departamentos', row.departamento.id]">Ver departamento</a>
-                      </div>
-                      @if (!departmentInventoryDevices(detail).length) {
-                        <app-view-state kind="empty" title="Sin equipos vigentes" message="Este departamento no tiene equipos activos relacionados." />
-                      } @else {
-                        <div class="table-wrap department-inventory-table-wrap">
-                          <table class="department-inventory-table">
-                            <thead>
-                              <tr>
-                                <th>Código</th>
-                                <th>Equipo</th>
-                                <th>Tipo</th>
-                                <th>Custodia actual</th>
-                                <th>Estado</th>
-                                <th>Verificación</th>
-                                <th>Valor</th>
-                                <th>Acción</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              @for (item of departmentInventoryDevices(detail); track item.device.id) {
-                                <tr>
-                                  <td class="cell-primary">{{ item.device.codigoInventario }}</td>
-                                  <td>{{ departmentDeviceLabel(item.device) }}</td>
-                                  <td>{{ item.device.tipo.nombre }}</td>
-                                  <td>
-                                    <span>{{ item.custodyLabel }}</span>
-                                    <small>{{ item.custodyType === 'DIRECTA' ? 'Custodia directa' : 'Equipo del personal' }}</small>
-                                  </td>
-                                  <td>{{ item.device.estado.nombre }}</td>
-                                  <td>
-                                    <span [class.department-inventory-verification--positive]="departmentVerificationLabel(item.device) === 'Verificado'">
-                                      {{ departmentVerificationLabel(item.device) }}
-                                    </span>
-                                  </td>
-                                  <td>{{ formatClp(item.device.valorComercial) }}</td>
-                                  <td>
-                                    <a class="btn btn--ghost btn--small" routerLink="/dispositivos" [queryParams]="{ q: item.device.codigoInventario }">Ver equipo</a>
-                                  </td>
-                                </tr>
-                              }
-                            </tbody>
-                          </table>
-                        </div>
-                      }
-                    }
-                  </div>
-                }
               </article>
             }
           </div>
@@ -724,9 +641,7 @@ export class Dashboard implements OnInit {
   protected readonly operationalMetrics = signal<OperationalMetric[]>([]);
   protected readonly activeStockAlerts = signal<StockAlertConfiguration[]>([]);
   private readonly departmentInventorySummary = signal<DepartmentInventorySummary[]>([]);
-  private readonly departmentInventoryDetails = signal<Record<string, DepartmentInventoryDetailState>>({});
   protected readonly departmentInventoryQuery = signal('');
-  protected readonly expandedDepartmentId = signal<string | null>(null);
   protected readonly departmentInventoryRows = computed(() => {
     const query = this.departmentInventoryQuery().trim().toLocaleLowerCase('es');
     if (!query) return this.departmentInventorySummary();
@@ -1001,87 +916,6 @@ export class Dashboard implements OnInit {
 
   protected setDepartmentInventoryQuery(event: Event) {
     this.departmentInventoryQuery.set((event.target as HTMLInputElement | null)?.value ?? '');
-  }
-
-  protected departmentInventoryDetail(row: DepartmentInventorySummary): DepartmentInventoryDetailState {
-    return this.departmentInventoryDetails()[row.departamento.id] ?? {
-      loading: false,
-      error: '',
-      data: null,
-    };
-  }
-
-  protected toggleDepartmentInventory(row: DepartmentInventorySummary) {
-    const departmentId = row.departamento.id;
-    if (this.expandedDepartmentId() === departmentId) {
-      this.expandedDepartmentId.set(null);
-      return;
-    }
-
-    this.expandedDepartmentId.set(departmentId);
-    const cached = this.departmentInventoryDetails()[departmentId];
-    if (!cached?.data && !cached?.loading) this.loadDepartmentInventory(departmentId);
-  }
-
-  protected retryDepartmentInventory(row: DepartmentInventorySummary) {
-    this.loadDepartmentInventory(row.departamento.id);
-  }
-
-  protected departmentInventoryDevices(detail: InventarioDepartamento): DepartmentInventoryDeviceRow[] {
-    const directIds = new Set<string>();
-    const direct = detail.custodiaDirecta.reduce<DepartmentInventoryDeviceRow[]>((rows, device) => {
-      if (directIds.has(device.id)) return rows;
-      directIds.add(device.id);
-      rows.push({
-        device,
-        custodyLabel: detail.departamento.nombre,
-        custodyType: 'DIRECTA',
-      });
-      return rows;
-    }, []);
-    const personal = detail.activosColaboradores.reduce<DepartmentInventoryDeviceRow[]>((rows, device) => {
-      if (directIds.has(device.id) || rows.some((item) => item.device.id === device.id)) return rows;
-      rows.push({
-        device,
-        custodyLabel: device.colaborador?.nombre ?? 'Colaborador sin nombre',
-        custodyType: 'COLABORADOR',
-      });
-      return rows;
-    }, []);
-    return [...direct, ...personal];
-  }
-
-  protected departmentDeviceLabel(device: Dispositivo): string {
-    return [device.marca, device.modelo].filter(Boolean).join(' ') || device.tipo.nombre;
-  }
-
-  protected departmentVerificationLabel(device: Dispositivo): string {
-    if (device.origenRegistro === 'MANUAL' || device.verificacionFisica?.resultado === 'VERIFICADO') {
-      return 'Verificado';
-    }
-    if (device.verificacionFisica?.resultado === 'REVISAR') return 'Revisar';
-    return 'Pendiente';
-  }
-
-  private loadDepartmentInventory(departmentId: string) {
-    this.departmentInventoryDetails.update((details) => ({
-      ...details,
-      [departmentId]: { loading: true, error: '', data: details[departmentId]?.data ?? null },
-    }));
-    this.departamentos.inventario(departmentId).subscribe({
-      next: (data) => {
-        this.departmentInventoryDetails.update((details) => ({
-          ...details,
-          [departmentId]: { loading: false, error: '', data },
-        }));
-      },
-      error: (error) => {
-        this.departmentInventoryDetails.update((details) => ({
-          ...details,
-          [departmentId]: { loading: false, error: errorMessage(error), data: null },
-        }));
-      },
-    });
   }
 
   private buildDepartmentInventorySummary(
