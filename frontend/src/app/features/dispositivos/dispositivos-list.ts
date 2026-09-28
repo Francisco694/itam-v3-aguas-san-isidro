@@ -13,7 +13,7 @@ import { SimService } from '../../core/services/sim.service';
 import { ToastService } from '../../core/services/toast.service';
 import { TiposDispositivoService } from '../../core/services/tipos-dispositivo.service';
 import { PageHeader } from '../../shared/components/page-header/page-header';
-import { assetLabelPhone, assetLabelResponsible } from '../../shared/components/asset-label/asset-label';
+import { PHYSICAL_LABEL_CONTACT_PHONE, assetLabelResponsible } from '../../shared/components/asset-label/asset-label';
 import { QrScanner } from '../../shared/components/qr-scanner/qr-scanner';
 import { StatusBadge } from '../../shared/components/status-badge/status-badge';
 import { ViewState } from '../../shared/components/view-state/view-state';
@@ -85,20 +85,17 @@ const escapeHtml = (value: unknown): string => String(value ?? '')
 const printableLabel = (device: Dispositivo, qrDataUrl: string, mode: 'A4' | 'THERMAL'): string => `
   <article class="${mode === 'A4' ? 'label' : 'thermal-label'}">
     <header>AGUAS SAN ISIDRO</header>
+    <div class="label-responsible">Responsable: ${escapeHtml(assetLabelResponsible(device))}</div>
     <div class="${mode === 'A4' ? 'label-body' : 'thermal-label__body'}">
       <img class="${mode === 'A4' ? 'label-qr' : 'thermal-label__qr'}" src="${qrDataUrl}" alt="Código QR">
       <div class="${mode === 'A4' ? 'label-data' : 'thermal-label__info'}">
         <small>INVENTARIO TI</small>
         <strong class="${mode === 'THERMAL' ? 'thermal-label__code' : ''}">ITAM ${escapeHtml(device.codigoInventario)}</strong>
         <span>${escapeHtml(device.tipo.nombre)}</span>
-        ${device.marca || device.modelo
-          ? `<b>${escapeHtml(`${device.marca ?? ''} ${device.modelo ?? ''}`.trim())}</b>`
-          : ''}
-        <small>${escapeHtml(batchLabelIdentifier(device))}</small>
-        <small>Resp: ${escapeHtml(assetLabelResponsible(device))}</small>
-        ${assetLabelPhone(device) ? `<small class="thermal-label__phone">Fono: ${escapeHtml(assetLabelPhone(device))}</small>` : ''}
+        <b class="label-model">${escapeHtml(`${device.marca ?? ''} ${device.modelo ?? ''}`.trim() || 'Modelo no registrado')}</b>
       </div>
     </div>
+    <div class="label-loss"><strong>EN CASO DE PÉRDIDA</strong><span>Llamar o WhatsApp: ${PHYSICAL_LABEL_CONTACT_PHONE}</span></div>
   </article>`;
 
 const printableDocument = (
@@ -118,28 +115,34 @@ const printableDocument = (
     body { font-family: Arial, sans-serif; }
     ${mode === 'THERMAL' ? 'html, body, .sheet { height: 38mm; width: 60mm; }' : ''}
     .sheet { display: ${mode === 'A4' ? 'grid' : 'block'}; gap: 4mm 3mm; grid-template-columns: repeat(3, 60mm); margin: 0; max-width: 100%; min-height: 0; min-width: 0; padding: 0; }
-    .label, .thermal-label { border: 1px solid #000; box-sizing: border-box; height: 38mm; max-height: 38mm; max-width: 60mm; min-height: 0; min-width: 0; overflow: hidden; padding: 2mm; width: 60mm; }
-    .label { break-inside: avoid; display: flex; flex-direction: column; page-break-inside: avoid; }
-    .label header, .thermal-label header { border-bottom: 1px solid #000; font-size: 7pt; font-weight: 800; line-height: 1; margin-bottom: 1mm; overflow: hidden; padding-bottom: .8mm; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
-    .label-body, .thermal-label__body { align-items: center; display: flex; gap: 2mm; min-height: 0; min-width: 0; overflow: hidden; }
+    .label, .thermal-label { border: 1px solid #000; box-sizing: border-box; display: flex; flex-direction: column; height: 38mm; max-height: 38mm; max-width: 60mm; min-height: 0; min-width: 0; overflow: hidden; padding: 1.5mm 2mm; width: 60mm; }
+    .label { break-inside: avoid; page-break-inside: avoid; }
+    .label header, .thermal-label header { font-size: 7pt; font-weight: 800; line-height: 1; margin-bottom: .6mm; overflow: hidden; padding-bottom: .5mm; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
+    .label-responsible { border-bottom: 1px solid #000; font-size: 5.6pt; font-weight: 700; line-height: 1.1; margin-bottom: .8mm; overflow: hidden; padding-bottom: .7mm; text-overflow: ellipsis; white-space: nowrap; }
+    .label-body, .thermal-label__body { align-items: center; display: flex; flex: 1 1 auto; gap: 2mm; min-height: 0; min-width: 0; overflow: hidden; }
     .label-qr { flex: 0 0 21mm; height: 21mm; max-height: 21mm; max-width: 21mm; width: 21mm; }
     .label-data, .thermal-label__info { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden; }
-    .label-data small, .label-data span, .label-data b { font-size: 6.2pt; line-height: 1.1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .label-data small, .label-data span, .label-data b { font-size: 6.2pt; line-height: 1.1; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .label-data strong { font-family: Consolas, monospace; font-size: 10pt; line-height: 1.1; margin: .45mm 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .thermal-label { background: #fff; border: 0; break-after: page; color: #000; display: grid; grid-template-columns: 20mm minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); column-gap: 1.5mm; margin: 0; padding: 1.5mm 2mm; page-break-after: always; }
-    .thermal-label header { border-color: #000; color: #000; grid-column: 1 / -1; font-size: 6pt; margin-bottom: .6mm; padding-bottom: .5mm; }
-    .thermal-label__body { align-items: center; grid-column: 1 / -1; justify-content: center; gap: 1.5mm; height: 100%; }
+    .label-model { display: -webkit-box; max-height: 2.2em; overflow: hidden; overflow-wrap: anywhere; white-space: normal !important; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+    .thermal-label { background: #fff; border: 0; break-after: page; color: #000; margin: 0; page-break-after: always; }
+    .thermal-label header { color: #000; font-size: 6pt; }
+    .thermal-label .label-responsible { font-size: 5.2pt; }
+    .thermal-label__body { gap: 1.5mm; height: auto; justify-content: center; }
     .thermal-label__qr { flex: 0 0 20mm; height: 20mm; max-height: 20mm; max-width: 20mm; object-fit: contain; width: 20mm; }
     .thermal-label__info { color: #000; font-size: 5.2pt; line-height: 1; }
     .thermal-label__info > * { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .thermal-label__info small, .thermal-label__info span { font-size: 5.2pt; line-height: 1; }
     .thermal-label__code { font-size: 8.5pt; font-weight: 800; line-height: 1; margin: .25mm 0; }
-    .thermal-label__phone { display: block; }
+    .thermal-label .label-model { display: -webkit-box; line-height: 1.08; max-height: 2.16em; white-space: normal; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+    .label-loss { border-top: 1px solid #000; display: flex; flex-direction: column; gap: .2mm; margin-top: .7mm; padding-top: .55mm; }
+    .label-loss strong { font-size: 5.2pt; letter-spacing: .04em; line-height: 1; }
+    .label-loss span { font-size: 5.2pt; line-height: 1; white-space: nowrap; }
     .thermal-label:last-child { break-after: auto; page-break-after: auto; }
     @media print {
       @page { size: ${mode === 'A4' ? 'A4 portrait' : '60mm 38mm'}; margin: ${mode === 'A4' ? '10mm' : '0'}; }
       html, body { margin: 0 !important; padding: 0 !important; }
-      ${mode === 'THERMAL' ? 'html, body { background: #fff !important; color: #000 !important; height: 38mm !important; margin: 0 !important; padding: 0 !important; width: 60mm !important; } .sheet { margin: 0 !important; padding: 0 !important; } .thermal-label { background: #fff !important; border: 0 !important; color: #000 !important; height: 38mm !important; margin: 0 !important; max-height: 38mm !important; max-width: 60mm !important; padding: 1.5mm 2mm !important; width: 60mm !important; } .thermal-label header { border-color: #000 !important; color: #000 !important; } .thermal-label__info, .thermal-label__info * { color: #000 !important; }' : ''}
+      ${mode === 'THERMAL' ? 'html, body { background: #fff !important; color: #000 !important; height: 38mm !important; margin: 0 !important; padding: 0 !important; width: 60mm !important; } .sheet { margin: 0 !important; padding: 0 !important; } .thermal-label { background: #fff !important; border: 0 !important; color: #000 !important; height: 38mm !important; margin: 0 !important; max-height: 38mm !important; max-width: 60mm !important; padding: 1.5mm 2mm !important; width: 60mm !important; } .thermal-label .label-responsible, .thermal-label .label-loss { border-color: #000 !important; } .thermal-label__info, .thermal-label__info * { color: #000 !important; }' : ''}
     }
   </style>
 </head>
@@ -285,7 +288,6 @@ export class DispositivosList implements OnInit {
   protected readonly error = signal('');
   protected readonly physicalIdentifier = inventoryPhysicalIdentifier;
   protected readonly assignedWithoutResponsible = isAssignedWithoutResponsible;
-  protected readonly labelIdentifier = batchLabelIdentifier;
   protected readonly verification = verificationLabel;
   protected readonly rut = formatRut;
   protected quickQuery = '';

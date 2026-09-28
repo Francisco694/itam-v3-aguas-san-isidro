@@ -326,4 +326,25 @@ describe('Dashboard QA-10 y QA-15', () => {
       '/departamentos/12',
     ]);
   });
+
+  it('mantiene cerrado el detalle sin distribucion y lo despliega con conciliacion', () => {
+    fixture.detectChanges();
+    const section = fixture.nativeElement.querySelector('.department-inventory-section') as HTMLElement;
+    const toggle = section.querySelector('.department-inventory-summary__item--expandable') as HTMLButtonElement;
+
+    expect(toggle.textContent).toContain('3 equipos');
+    expect(section.querySelector('.unallocated-inventory-detail')).toBeNull();
+
+    toggle.click();
+    fixture.detectChanges();
+
+    const detail = section.querySelector('.unallocated-inventory-detail') as HTMLElement;
+    expect(detail).not.toBeNull();
+    expect(detail.textContent).toContain('2 equipos');
+    expect(detail.textContent).toContain('$280.000');
+    expect(detail.textContent).toContain('1 equipo');
+    expect(detail.textContent).toContain('$100.000');
+    expect(detail.textContent).toContain('Conciliado');
+    expect(detail.textContent).not.toContain('Existen diferencias pendientes');
+  });
 });

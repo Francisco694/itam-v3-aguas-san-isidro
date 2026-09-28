@@ -41,6 +41,8 @@ import { errorMessage } from '../../shared/utils/error-message';
 import type {
   Departamento,
   Dispositivo,
+  ResumenConciliacionCategoria,
+  ResumenConciliacionInventario,
 } from '../../core/models/itam.models';
 import type { StockAlertConfiguration } from '../../core/models/itam.models';
 
@@ -133,6 +135,19 @@ interface DepartmentInventorySummary {
   valorPersonal: number;
   valorTotal: number;
 }
+
+const emptyInventoryConciliation = (): ResumenConciliacionInventario => ({
+  equiposRelacionados: 0,
+  valorRelacionado: 0,
+  sinDistribucion: {
+    equipos: 0,
+    valor: 0,
+    condicionOperativa: { equipos: 0, valor: 0, categorias: [] },
+    retenidosRevision: { equipos: 0, valor: 0 },
+    requierenRegularizacion: { equipos: 0, valor: 0, categorias: [] },
+  },
+  conciliacion: { equiposCuadran: true, valoresCuadran: true },
+});
 
 @Component({
   selector: 'app-dashboard',
@@ -539,11 +554,117 @@ interface DepartmentInventorySummary {
           </div>
           <div class="department-inventory-summary__item">
             <span>Valor económico relacionado</span>
-            <strong>{{ formatClp(relatedDepartmentValue()) }}</strong>
+              <strong>{{ formatClp(relatedDepartmentValue()) }}</strong>
+            </div>
+            <button
+              class="department-inventory-summary__item department-inventory-summary__item--expandable"
+              type="button"
+              [attr.aria-expanded]="unallocatedInventoryOpen()"
+              aria-controls="unallocated-inventory-detail"
+              (click)="toggleUnallocatedInventory()"
+            >
+              <span>Sin distribución organizacional</span>
+              <strong>{{ unallocatedInventory().equipos }} equipos</strong>
+              <small>{{ formatClp(unallocatedInventory().valor) }}</small>
+              <span class="department-inventory-summary__action">
+                {{ unallocatedInventoryOpen() ? 'Ocultar detalle' : 'Ver detalle' }}
+                <svg
+                  [lucideIcon]="unallocatedInventoryOpen() ? chevronUpIcon : chevronDownIcon"
+                  aria-hidden="true"
+                ></svg>
+              </span>
+            </button>
           </div>
-        </div>
 
-        <div class="department-inventory-toolbar">
+          @if (unallocatedInventoryOpen()) {
+            <section
+              id="unallocated-inventory-detail"
+              class="unallocated-inventory-detail"
+              aria-label="Detalle de inventario sin distribución organizacional"
+            >
+              @if (unallocatedInventory().condicionOperativa.equipos > 0) {
+                <article class="unallocated-inventory-group unallocated-inventory-group--neutral">
+                  <div class="unallocated-inventory-group__heading">
+                    <div>
+                      <span>CONDICIÓN OPERATIVA</span>
+                      <h3>{{ unallocatedInventory().condicionOperativa.equipos }} equipos &middot; {{ formatClp(unallocatedInventory().condicionOperativa.valor) }}</h3>
+                    </div>
+                  </div>
+                  <div class="unallocated-inventory-categories">
+                    @for (category of unallocatedInventory().condicionOperativa.categorias; track category.codigo) {
+                      <div class="unallocated-inventory-category">
+                        <strong>{{ category.nombre }}</strong>
+                        <span>{{ category.equipos }} {{ category.equipos === 1 ? 'equipo' : 'equipos' }}</span>
+                        <b>{{ formatClp(category.valor) }}</b>
+                      </div>
+                    }
+                  </div>
+                </article>
+              }
+
+              @if (unallocatedInventory().retenidosRevision.equipos > 0) {
+                <article class="unallocated-inventory-group unallocated-inventory-group--warning">
+                  <div class="unallocated-inventory-group__heading">
+                    <div>
+                      <span>RETENIDOS EN REVISIÓN</span>
+                      <h3>{{ unallocatedInventory().retenidosRevision.equipos }} equipos &middot; {{ formatClp(unallocatedInventory().retenidosRevision.valor) }}</h3>
+                    </div>
+                  </div>
+                  <div class="unallocated-inventory-categories">
+                    <div class="unallocated-inventory-category">
+                      <strong>Retenido en revisión</strong>
+                      <span>{{ unallocatedInventory().retenidosRevision.equipos }} {{ unallocatedInventory().retenidosRevision.equipos === 1 ? 'equipo' : 'equipos' }}</span>
+                      <b>{{ formatClp(unallocatedInventory().retenidosRevision.valor) }}</b>
+                    </div>
+                  </div>
+                </article>
+              }
+
+              @if (unallocatedInventory().requierenRegularizacion.equipos > 0) {
+                <article class="unallocated-inventory-group unallocated-inventory-group--attention">
+                  <div class="unallocated-inventory-group__heading">
+                    <div>
+                      <span>REQUIEREN REGULARIZACIÓN</span>
+                      <h3>{{ unallocatedInventory().requierenRegularizacion.equipos }} equipos &middot; {{ formatClp(unallocatedInventory().requierenRegularizacion.valor) }}</h3>
+                    </div>
+                  </div>
+                  <div class="unallocated-inventory-categories">
+                    @for (category of unallocatedInventory().requierenRegularizacion.categorias; track category.codigo) {
+                      <div class="unallocated-inventory-category">
+                        <strong>{{ category.nombre }}</strong>
+                        <span>{{ category.equipos }} {{ category.equipos === 1 ? 'equipo' : 'equipos' }}</span>
+                        <b>{{ formatClp(category.valor) }}</b>
+                      </div>
+                    }
+                  </div>
+                </article>
+              }
+
+              <section class="inventory-reconciliation" aria-label="Conciliación del inventario">
+                <div class="inventory-reconciliation__heading">
+                  <div>
+                    <span>CONCILIACIÓN DEL INVENTARIO</span>
+                    <h3>Inventario activo real</h3>
+                  </div>
+                  @if (inventoryReconciliation().equiposCuadran && inventoryReconciliation().valoresCuadran) {
+                    <strong class="inventory-reconciliation__status inventory-reconciliation__status--ok">Conciliado</strong>
+                  } @else {
+                    <strong class="inventory-reconciliation__status inventory-reconciliation__status--warning">Pendiente</strong>
+                  }
+                </div>
+                <div class="inventory-reconciliation__grid">
+                  <div><span>Relacionados a departamentos</span><strong>{{ relatedDepartmentDevices() }} equipos</strong><b>{{ formatClp(relatedDepartmentValue()) }}</b></div>
+                  <div><span>Sin distribución organizacional</span><strong>{{ unallocatedInventory().equipos }} equipos</strong><b>{{ formatClp(unallocatedInventory().valor) }}</b></div>
+                  <div><span>Inventario activo real</span><strong>{{ totalDevices() }} equipos</strong><b>{{ formatClp(activeInventoryValue()) }}</b></div>
+                </div>
+                @if (!inventoryReconciliation().equiposCuadran || !inventoryReconciliation().valoresCuadran) {
+                  <p class="inventory-reconciliation__warning">Existen diferencias pendientes de conciliación.</p>
+                }
+              </section>
+            </section>
+          }
+
+          <div class="department-inventory-toolbar">
           <label class="department-inventory-search" for="department-inventory-search">
             <span>Buscar departamento</span>
             <input
@@ -641,6 +762,8 @@ export class Dashboard implements OnInit {
   protected readonly operationalMetrics = signal<OperationalMetric[]>([]);
   protected readonly activeStockAlerts = signal<StockAlertConfiguration[]>([]);
   private readonly departmentInventorySummary = signal<DepartmentInventorySummary[]>([]);
+  private readonly departmentInventoryConciliation = signal<ResumenConciliacionInventario>(emptyInventoryConciliation());
+  protected readonly unallocatedInventoryOpen = signal(false);
   protected readonly departmentInventoryQuery = signal('');
   protected readonly departmentInventoryRows = computed(() => {
     const query = this.departmentInventoryQuery().trim().toLocaleLowerCase('es');
@@ -653,11 +776,23 @@ export class Dashboard implements OnInit {
     () => this.departmentInventorySummary().filter((row) => row.totalRelacionado > 0).length,
   );
   protected readonly relatedDepartmentDevices = computed(
-    () => this.departmentInventorySummary().reduce((total, row) => total + row.totalRelacionado, 0),
+    () => this.departmentInventoryConciliation().equiposRelacionados,
   );
   protected readonly relatedDepartmentValue = computed(
-    () => this.departmentInventorySummary().reduce((total, row) => total + row.valorTotal, 0),
+    () => this.departmentInventoryConciliation().valorRelacionado,
   );
+  protected readonly unallocatedInventory = computed(
+    () => this.departmentInventoryConciliation().sinDistribucion,
+  );
+  protected readonly inventoryReconciliation = computed(() => {
+    const relatedDevices = this.relatedDepartmentDevices();
+    const relatedValue = this.relatedDepartmentValue();
+    const unallocated = this.unallocatedInventory();
+    return {
+      equiposCuadran: relatedDevices + unallocated.equipos === this.totalDevices(),
+      valoresCuadran: relatedValue + unallocated.valor === this.activeInventoryValue(),
+    };
+  });
   protected readonly simIcon = LucideCardSim;
   protected readonly usersIcon = LucideUsers;
   protected readonly buildingIcon = LucideBuilding;
@@ -692,6 +827,9 @@ export class Dashboard implements OnInit {
           cantidad: inventoryScope.operational.length,
           valorTotal: inventoryScope.operationalValue,
         };
+        this.departmentInventoryConciliation.set(
+          r.summary.conciliacionInventario ?? this.buildInventoryConciliation(r.devices, inventoryActual),
+        );
         const verifiedSummary = firstNonEmptyArray(
           r.summary.verificadosPorTipo,
           r.summary.inventarioActivoRealVerificadoPorTipo,
@@ -914,6 +1052,10 @@ export class Dashboard implements OnInit {
     this.historicalInvestmentOpen.update((open) => !open);
   }
 
+  protected toggleUnallocatedInventory() {
+    this.unallocatedInventoryOpen.update((open) => !open);
+  }
+
   protected setDepartmentInventoryQuery(event: Event) {
     this.departmentInventoryQuery.set((event.target as HTMLInputElement | null)?.value ?? '');
   }
@@ -982,5 +1124,72 @@ export class Dashboard implements OnInit {
         b.totalRelacionado - a.totalRelacionado ||
         a.departamento.nombre.localeCompare(b.departamento.nombre, 'es', { sensitivity: 'base' }),
       );
+  }
+
+  private buildInventoryConciliation(
+    devices: readonly Dispositivo[],
+    inventoryActual: { cantidad: number; valorTotal: number },
+  ): ResumenConciliacionInventario {
+    const categories = new Map<string, { equipos: number; valor: number }>();
+    const add = (codigo: string, device: Dispositivo) => {
+      const current = categories.get(codigo) ?? { equipos: 0, valor: 0 };
+      categories.set(codigo, {
+        equipos: current.equipos + 1,
+        valor: current.valor + (device.valorComercial ?? 0),
+      });
+    };
+    const operational = devices.filter((device) => CURRENT_OPERATIONAL_STATE_CODES.has(device.estado?.codigo ?? ''));
+    for (const device of operational) {
+      if (device.departamento || device.colaborador?.departamento) {
+        add('RELACIONADO', device);
+        continue;
+      }
+      const state = device.estado?.codigo ?? '';
+      if (state === 'DISPONIBLE' || state === 'EN_BODEGA') add('DISPONIBLE_BODEGA', device);
+      else if (state === 'SERVICIO_TECNICO' || state === 'EN_SERVICIO_TECNICO') add('SERVICIO_TECNICO', device);
+      else if (state === 'RETENIDO_REVISION') add('RETENIDO_REVISION', device);
+      else if (state === 'ASIGNADO' && device.colaborador) add('ASIGNADO_SIN_DEPARTAMENTO', device);
+      else if (state === 'ASIGNADO') add('CUSTODIA_INCOMPLETA', device);
+      else add('OTRO', device);
+    }
+    const valueOf = (codigo: string) => categories.get(codigo) ?? { equipos: 0, valor: 0 };
+    const toCategory = (codigo: string, nombre: string): ResumenConciliacionCategoria => ({
+      codigo,
+      nombre,
+      ...valueOf(codigo),
+    });
+    const operationalCategories = [
+      toCategory('DISPONIBLE_BODEGA', 'Disponible / En bodega'),
+      toCategory('SERVICIO_TECNICO', 'Servicio técnico'),
+      toCategory('OTRO', 'Otros estados vigentes'),
+    ].filter((category) => category.equipos > 0);
+    const regularizationCategories = [
+      toCategory('ASIGNADO_SIN_DEPARTAMENTO', 'Asignado sin departamento'),
+      toCategory('CUSTODIA_INCOMPLETA', 'Custodia incompleta'),
+    ].filter((category) => category.equipos > 0);
+    const sum = (items: readonly ResumenConciliacionCategoria[]) => items.reduce(
+      (total, item) => ({ equipos: total.equipos + item.equipos, valor: total.valor + item.valor }),
+      { equipos: 0, valor: 0 },
+    );
+    const condition = sum(operationalCategories);
+    const retained = valueOf('RETENIDO_REVISION');
+    const regularization = sum(regularizationCategories);
+    const sinDistribucion = {
+      equipos: condition.equipos + retained.equipos + regularization.equipos,
+      valor: condition.valor + retained.valor + regularization.valor,
+      condicionOperativa: { ...condition, categorias: operationalCategories },
+      retenidosRevision: retained,
+      requierenRegularizacion: { ...regularization, categorias: regularizationCategories },
+    };
+    const related = valueOf('RELACIONADO');
+    return {
+      equiposRelacionados: related.equipos,
+      valorRelacionado: related.valor,
+      sinDistribucion,
+      conciliacion: {
+        equiposCuadran: related.equipos + sinDistribucion.equipos === inventoryActual.cantidad,
+        valoresCuadran: related.valor + sinDistribucion.valor === inventoryActual.valorTotal,
+      },
+    };
   }
 }

@@ -263,6 +263,40 @@ export interface ResumenGerencialHistoricoPorTipo {
   valorHistorico: number;
 }
 
+export interface ResumenConciliacionCategoria {
+  codigo: string;
+  nombre: string;
+  equipos: number;
+  valor: number;
+}
+
+export interface ResumenConciliacionInventario {
+  equiposRelacionados: number;
+  valorRelacionado: number;
+  sinDistribucion: {
+    equipos: number;
+    valor: number;
+    condicionOperativa: {
+      equipos: number;
+      valor: number;
+      categorias: ResumenConciliacionCategoria[];
+    };
+    retenidosRevision: {
+      equipos: number;
+      valor: number;
+    };
+    requierenRegularizacion: {
+      equipos: number;
+      valor: number;
+      categorias: ResumenConciliacionCategoria[];
+    };
+  };
+  conciliacion: {
+    equiposCuadran: boolean;
+    valoresCuadran: boolean;
+  };
+}
+
 export interface ResumenGerencial {
   inventarioActual: { cantidad: number; valorTotal: number };
   dispositivosVerificados: {
@@ -283,6 +317,7 @@ export interface ResumenGerencial {
   bajas: { cantidad: number; valor: number };
   valorInventarioActivoReal: number;
   valorInventarioActivoPorTipo: ResumenGerencialPorTipo[];
+  conciliacionInventario: ResumenConciliacionInventario;
 }
 
 export interface AsignarColaboradorInput {

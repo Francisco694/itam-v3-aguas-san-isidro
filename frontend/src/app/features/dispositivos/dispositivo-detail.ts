@@ -39,6 +39,28 @@ export const receiversForDepartment = (
 export const isSmartphoneDevice = (device: Dispositivo): boolean =>
   device.tipo.nombre.trim().toLocaleLowerCase('es') === 'smartphone';
 
+export interface DeviceTechnicalIdentifier {
+  label: 'IMEI' | 'NÚMERO DE SERIE' | 'IDENTIFICADOR';
+  value: string;
+}
+
+const normalizeTechnicalIdentifier = (value: string | null | undefined): string => {
+  const normalized = value?.trim() || '';
+  return normalized === '-' ? '' : normalized;
+};
+
+export const deviceTechnicalIdentifier = (
+  device: { imei?: string | null; numeroSerie?: string | null },
+): DeviceTechnicalIdentifier => {
+  const imei = normalizeTechnicalIdentifier(device.imei);
+  if (imei) return { label: 'IMEI', value: imei };
+
+  const numeroSerie = normalizeTechnicalIdentifier(device.numeroSerie);
+  if (numeroSerie) return { label: 'NÚMERO DE SERIE', value: numeroSerie };
+
+  return { label: 'IDENTIFICADOR', value: 'Sin identificador registrado' };
+};
+
 export const isChileanPhoneInputValid = (value: string): boolean => {
   const clean = value.trim().replace(/\D/g, '');
   return !/[^\d.\-()\s+]/.test(value) && /^(?:\d{9}|56\d{9})$/.test(clean);
@@ -221,7 +243,7 @@ type DeviceAction = 'assign-person' | 'assign-department' | 'return' | 'state' |
         </section>
       }
       <section class="device-banner">
-        <div><span>EQUIPO TECNOLÓGICO</span><h2>{{ device.tipo.nombre }} · {{ device.marca || 'Sin marca' }} {{ device.modelo || '' }}</h2>@if (!isSmartphone(device)) { <p>{{ device.numeroSerie ? 'S/N: ' + device.numeroSerie : 'Sin número de serie registrado' }}</p> }</div>
+        <div><span>EQUIPO TECNOLÓGICO</span><h2>{{ device.tipo.nombre }} · {{ device.marca || 'Sin marca' }} {{ device.modelo || '' }}</h2><p>{{ deviceTechnicalIdentifier(device).label }}: {{ deviceTechnicalIdentifier(device).value }}</p></div>
         <div><app-status-badge [code]="device.estado.codigo" [label]="device.estado.nombre" /><a class="btn btn--secondary btn--small" [routerLink]="['editar']"><svg lucidePencil></svg>Editar ficha</a></div>
       </section>
       <section class="traceability-overview" aria-label="Resumen de trazabilidad">
@@ -238,15 +260,14 @@ type DeviceAction = 'assign-person' | 'assign-department' | 'return' | 'state' |
           <div class="column-title"><span>01</span><div><small>IDENTIFICACIÓN</small><h3>Detalles</h3></div></div>
           <div class="equipment-identity"><span>{{ device.tipo.nombre }}</span><strong>{{ device.marca || 'Sin marca' }}</strong><h4>{{ device.modelo || 'Modelo no registrado' }}</h4></div>
           <dl class="technical-list">
-            @if (!isSmartphone(device)) { <div><dt>S/N</dt><dd class="code">{{ device.numeroSerie || '—' }}</dd></div> }
             <div><dt>Ubicación</dt><dd>{{ device.localidad || '—' }} {{ device.ubicacionDetalle || '' }}</dd></div>
             <div><dt>Código</dt><dd class="code">{{ device.codigoInventario }}</dd></div>
             <div><dt>Tipo</dt><dd>{{ device.tipo.nombre }}</dd></div>
+            <div><dt>{{ deviceTechnicalIdentifier(device).label }}</dt><dd class="code">{{ deviceTechnicalIdentifier(device).value }}</dd></div>
             @if (isSmartphone(device)) {
-              <div><dt>IMEI</dt><dd class="code">{{ device.imei || '—' }}</dd></div>
               <div><dt>Número telefónico</dt><dd>{{ smartphonePhoneText(device) }}</dd></div>
               <div><dt>SIM</dt><dd class="code" [style.color]="!device.simAsociada ? 'var(--warning)' : null">{{ device.simAsociada ? device.simAsociada.codigoInventario : 'Pendiente de asociar' }}</dd></div>
-            } @else if (device.imei) { <div><dt>IMEI</dt><dd class="code">{{ device.imei }}</dd></div> }
+            }
             <div><dt>Valor del equipo</dt><dd>{{ clp(device.valorComercial) }}</dd></div>
             @for (field of device.tipo.configuracionFormulario.camposEspecificos; track field.clave) { @if (device.atributosEspecificos[field.clave] !== undefined) { <div><dt>{{ field.etiqueta }}</dt><dd>{{ device.atributosEspecificos[field.clave] }}</dd></div> } }
             <div><dt>Fecha de ingreso al inventario</dt><dd>{{ device.fechaIngresoInventario | date:'dd/MM/yyyy HH:mm:ss' }}</dd></div>
@@ -531,6 +552,7 @@ export class DispositivoDetail implements OnInit {
   protected readonly createdActa=signal<ActaEntrega|null>(null);
   protected readonly clp=formatClp;
   protected readonly isSmartphone=isSmartphoneDevice;
+  protected readonly deviceTechnicalIdentifier=deviceTechnicalIdentifier;
   protected readonly isPhoneValid=isChileanPhoneInputValid;
   protected readonly smartphonePhoneText=smartphonePhoneText;
   protected readonly smartphonePhonePending=smartphonePhonePending;

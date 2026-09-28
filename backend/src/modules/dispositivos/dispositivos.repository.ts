@@ -608,6 +608,59 @@ export const obtenerResumenGerencial = async (): Promise<ResumenGerencialRow> =>
   return result.rows[0]!;
 };
 
+export interface ResumenConciliacionInventarioRow {
+  categoria_codigo: string;
+  equipos: string | number;
+  valor: string | number;
+}
+
+export const obtenerResumenConciliacionInventario = async (): Promise<ResumenConciliacionInventarioRow[]> => {
+  const result = await pool.query<ResumenConciliacionInventarioRow>(`
+    WITH activos AS (
+      SELECT
+        d.id,
+        d.valor_comercial,
+        e.codigo AS estado_codigo,
+        d.colaborador_id,
+        d.departamento_id,
+        colaborador.departamento_id AS colaborador_departamento_id
+      FROM itam.dispositivos d
+      INNER JOIN itam.estados e ON e.id = d.estado_id
+      LEFT JOIN itam.colaboradores colaborador ON colaborador.id = d.colaborador_id
+      WHERE e.codigo IN (
+        'DISPONIBLE', 'ASIGNADO', 'PRESTAMO_TEMPORAL', 'SERVICIO_TECNICO',
+        'EN_SERVICIO_TECNICO', 'RETENIDO_REVISION', 'EN_BODEGA'
+      )
+    ), clasificados AS (
+      SELECT
+        *,
+        CASE
+          WHEN departamento_id IS NOT NULL OR colaborador_departamento_id IS NOT NULL
+            THEN 'RELACIONADO'
+          WHEN estado_codigo IN ('DISPONIBLE', 'EN_BODEGA')
+            THEN 'DISPONIBLE_BODEGA'
+          WHEN estado_codigo IN ('SERVICIO_TECNICO', 'EN_SERVICIO_TECNICO')
+            THEN 'SERVICIO_TECNICO'
+          WHEN estado_codigo = 'RETENIDO_REVISION'
+            THEN 'RETENIDO_REVISION'
+          WHEN estado_codigo = 'ASIGNADO' AND colaborador_id IS NOT NULL
+            THEN 'ASIGNADO_SIN_DEPARTAMENTO'
+          WHEN estado_codigo = 'ASIGNADO'
+            THEN 'CUSTODIA_INCOMPLETA'
+          ELSE 'OTRO'
+        END AS categoria_codigo
+      FROM activos
+    )
+    SELECT
+      categoria_codigo,
+      COUNT(*) AS equipos,
+      COALESCE(SUM(valor_comercial), 0) AS valor
+    FROM clasificados
+    GROUP BY categoria_codigo
+  `);
+  return result.rows;
+};
+
 export const obtenerResumenInventarioActivoPorTipo = async (): Promise<ResumenInventarioActivoPorTipoRow[]> => {
   const result = await pool.query<ResumenInventarioActivoPorTipoRow>(`
     SELECT

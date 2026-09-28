@@ -4,6 +4,7 @@ import { ApiError } from '../../core/models/api.models';
 import { assetLabelPhone } from '../../shared/components/asset-label/asset-label';
 import {
   deviceActionErrorMessage,
+  deviceTechnicalIdentifier,
   isChileanPhoneInputValid,
   isSimAvailableForJointDelivery,
   isSmartphoneDevice,
@@ -31,6 +32,27 @@ const historyEvent = (
 });
 
 describe('ficha de dispositivo QA-01/03/11', () => {
+  it('prioriza IMEI válido sobre el número de serie', () => {
+    expect(deviceTechnicalIdentifier({ imei: '123456789012345', numeroSerie: 'ABC123' }))
+      .toEqual({ label: 'IMEI', value: '123456789012345' });
+  });
+
+  it('usa el número de serie cuando el IMEI no está informado o es guion', () => {
+    expect(deviceTechnicalIdentifier({ imei: null, numeroSerie: 'R52ABC123' }))
+      .toEqual({ label: 'NÚMERO DE SERIE', value: 'R52ABC123' });
+    expect(deviceTechnicalIdentifier({ imei: '-', numeroSerie: 'R52ABC123' }))
+      .toEqual({ label: 'NÚMERO DE SERIE', value: 'R52ABC123' });
+    expect(deviceTechnicalIdentifier({ imei: '   ', numeroSerie: 'R52ABC123' }))
+      .toEqual({ label: 'NÚMERO DE SERIE', value: 'R52ABC123' });
+    expect(deviceTechnicalIdentifier({ imei: undefined, numeroSerie: 'R52ABC123' }))
+      .toEqual({ label: 'NÚMERO DE SERIE', value: 'R52ABC123' });
+  });
+
+  it('muestra un identificador neutro cuando IMEI y serie no son válidos', () => {
+    expect(deviceTechnicalIdentifier({ imei: '', numeroSerie: '' }))
+      .toEqual({ label: 'IDENTIFICADOR', value: 'Sin identificador registrado' });
+  });
+
   it('identifica Smartphone por el tipo real, sin depender de la serie', () => {
     expect(isSmartphoneDevice({ tipo: { nombre: 'Smartphone' } } as Dispositivo)).toBe(true);
     expect(isSmartphoneDevice({ tipo: { nombre: 'Notebook' } } as Dispositivo)).toBe(false);

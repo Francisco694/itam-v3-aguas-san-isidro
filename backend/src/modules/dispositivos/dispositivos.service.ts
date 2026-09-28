@@ -57,6 +57,7 @@ import {
   obtenerEstadoDispositivoPorCodigo,
   obtenerEstadoDispositivoPorId,
   obtenerResumenGerencial,
+  obtenerResumenConciliacionInventario,
   obtenerResumenHistoricoPorTipo,
   obtenerResumenInventarioActivoPorTipo,
   obtenerResumenInventarioActivoVerificadoPorTipo,
@@ -85,6 +86,7 @@ import type {
   RegistrarResultadoOffboardingInput,
   ResultadoDevolucion,
   ResumenGerencial,
+  ResumenConciliacionCategoria,
   SimAsociadaResumen,
   TrazabilidadDispositivo,
   TipoIdentificadorDispositivo,
@@ -93,11 +95,12 @@ import type {
 import { insertarVerificacionFisica } from "./physical-verifications.repository";
 
 export const obtenerIndicadoresGerenciales = async (): Promise<ResumenGerencial> => {
-  const [row, porTipo, verificadoPorTipo, historicoPorTipo] = await Promise.all([
+  const [row, porTipo, verificadoPorTipo, historicoPorTipo, conciliacionRows] = await Promise.all([
     obtenerResumenGerencial(),
     obtenerResumenInventarioActivoPorTipo(),
     obtenerResumenInventarioActivoVerificadoPorTipo(),
-    obtenerResumenHistoricoPorTipo()
+    obtenerResumenHistoricoPorTipo(),
+    obtenerResumenConciliacionInventario()
   ]);
   const metric = (cantidad: string | number, valor: string | number) => ({
     cantidad: Number(cantidad) || 0,
@@ -116,6 +119,49 @@ export const obtenerIndicadoresGerenciales = async (): Promise<ResumenGerencial>
   const inventarioActual = {
     cantidad: inventarioActivoCantidad,
     valorTotal: valorInventarioActivoReal
+  };
+  const categoryNames: Record<string, string> = {
+    DISPONIBLE_BODEGA: "Disponible / En bodega",
+    SERVICIO_TECNICO: "Servicio técnico",
+    RETENIDO_REVISION: "Retenido en revisión",
+    ASIGNADO_SIN_DEPARTAMENTO: "Asignado sin departamento",
+    CUSTODIA_INCOMPLETA: "Custodia incompleta",
+    OTRO: "Otros estados vigentes"
+  };
+  const category = (codigo: string): ResumenConciliacionCategoria => {
+    const row = conciliacionRows.find((item) => item.categoria_codigo === codigo);
+    return {
+      codigo,
+      nombre: categoryNames[codigo] ?? codigo,
+      equipos: Number(row?.equipos) || 0,
+      valor: Number(row?.valor) || 0
+    };
+  };
+  const relacionado = category("RELACIONADO");
+  const condicionOperativaCategorias = [
+    category("DISPONIBLE_BODEGA"),
+    category("SERVICIO_TECNICO"),
+    category("OTRO")
+  ].filter((item) => item.equipos > 0);
+  const regularizacionCategorias = [
+    category("ASIGNADO_SIN_DEPARTAMENTO"),
+    category("CUSTODIA_INCOMPLETA")
+  ].filter((item) => item.equipos > 0);
+  const retenidosRevision = category("RETENIDO_REVISION");
+  const condicionOperativa = condicionOperativaCategorias.reduce(
+    (total, item) => ({ equipos: total.equipos + item.equipos, valor: total.valor + item.valor }),
+    { equipos: 0, valor: 0 }
+  );
+  const requierenRegularizacion = regularizacionCategorias.reduce(
+    (total, item) => ({ equipos: total.equipos + item.equipos, valor: total.valor + item.valor }),
+    { equipos: 0, valor: 0 }
+  );
+  const sinDistribucion = {
+    equipos: condicionOperativa.equipos + retenidosRevision.equipos + requierenRegularizacion.equipos,
+    valor: condicionOperativa.valor + retenidosRevision.valor + requierenRegularizacion.valor,
+    condicionOperativa: { ...condicionOperativa, categorias: condicionOperativaCategorias },
+    retenidosRevision: { equipos: retenidosRevision.equipos, valor: retenidosRevision.valor },
+    requierenRegularizacion: { ...requierenRegularizacion, categorias: regularizacionCategorias }
   };
   const cantidadVerificada = verificadoPorTipo.reduce(
     (total, item) => total + Number(item.cantidad),
@@ -172,7 +218,16 @@ export const obtenerIndicadoresGerenciales = async (): Promise<ResumenGerencial>
     extraviados: metric(row.extraviados_cantidad, row.extraviados_valor),
     bajas: metric(row.bajas_cantidad, row.bajas_valor),
     valorInventarioActivoReal,
-    valorInventarioActivoPorTipo: inventarioActivoRealPorTipo
+    valorInventarioActivoPorTipo: inventarioActivoRealPorTipo,
+    conciliacionInventario: {
+      equiposRelacionados: relacionado.equipos,
+      valorRelacionado: relacionado.valor,
+      sinDistribucion,
+      conciliacion: {
+        equiposCuadran: relacionado.equipos + sinDistribucion.equipos === inventarioActual.cantidad,
+        valoresCuadran: relacionado.valor + sinDistribucion.valor === inventarioActual.valorTotal
+      }
+    }
   };
 };
 

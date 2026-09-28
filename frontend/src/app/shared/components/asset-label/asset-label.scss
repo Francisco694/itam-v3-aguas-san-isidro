@@ -5,32 +5,34 @@
   border: 1px solid var(--gray-200);
   box-sizing: border-box;
   color: var(--navy);
+  display: flex;
+  flex-direction: column;
   height: 38mm;
   max-height: 38mm;
   max-width: 60mm;
   overflow: hidden;
-  padding: 1mm;
+  padding: 1.2mm;
   width: 60mm;
 }
 
-.asset-label-printable--detail { height: 38mm; max-height: 38mm; max-width: 60mm; padding: 1mm; width: 60mm; }
-.asset-label__company { border-bottom: .3mm solid var(--cyan); font-size: 7pt; font-weight: 900; letter-spacing: .06em; line-height: 1; padding-bottom: 1mm; text-align: center; }
-.asset-label-printable--detail .asset-label__company { font-size: 8pt; padding-bottom: 1mm; }
-.asset-label__content { align-items: center; display: flex; gap: 1.8mm; height: 30mm; justify-content: center; }
-.asset-label-printable--detail .asset-label__content { gap: 2mm; height: 30mm; }
-.asset-label__qr { height: 21mm !important; max-height: 21mm; max-width: 21mm; width: 21mm !important; }
+.asset-label-printable--detail { height: 38mm; max-height: 38mm; max-width: 60mm; padding: 1.2mm; width: 60mm; }
+.asset-label__company { font-size: 7.2pt; font-weight: 900; letter-spacing: .06em; line-height: 1; overflow: hidden; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
+.asset-label-printable--detail .asset-label__company { font-size: 8pt; }
+.asset-label__responsible { font-size: 5.5pt; font-weight: 700; line-height: 1.1; margin-top: .8mm; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.asset-label__divider { border-bottom: .3mm solid var(--cyan); margin: .8mm 0 .7mm; }
+.asset-label__content { align-items: center; display: flex; flex: 1 1 auto; gap: 1.8mm; min-height: 0; }
+.asset-label-printable--detail .asset-label__content { gap: 2mm; }
+.asset-label__qr { flex: 0 0 21mm; height: 21mm !important; max-height: 21mm; max-width: 21mm; width: 21mm !important; }
 .asset-label-printable--detail .asset-label__qr { height: 21mm !important; max-height: 21mm; max-width: 21mm; width: 21mm !important; }
 .asset-label__identity { align-items: flex-start; display: flex; flex: 1; flex-direction: column; min-width: 0; }
-.asset-label__identity small { font-size: 5pt; font-weight: 800; letter-spacing: .08em; }
-.asset-label-printable--detail .asset-label__identity small { font-size: 6pt; }
-.asset-label__identity strong { font-family: var(--font-mono, "SFMono-Regular", Consolas, monospace); font-size: 9pt; letter-spacing: .04em; line-height: 1.2; margin: .8mm 0; }
-.asset-label-printable--detail .asset-label__identity strong { font-size: 14pt; margin: .6mm 0; }
-.asset-label__identity span { font-size: 6pt; font-weight: 900; max-width: 22mm; overflow-wrap: anywhere; }
-.asset-label-printable--detail .asset-label__identity span { max-width: 35mm; }
-.asset-label__description,
-.asset-label__identifier,
-.asset-label__responsible,
-.asset-label__phone { font-size: 5.5pt !important; font-weight: 700 !important; line-height: 1.12; }
-.asset-label__identifier { margin-top: .4mm; }
-.asset-label__responsible { margin-top: .35mm; }
+.asset-label__identity small { font-size: 5pt; font-weight: 800; letter-spacing: .08em; line-height: 1; }
+.asset-label-printable--detail .asset-label__identity small { font-size: 5.8pt; }
+.asset-label__identity strong { font-family: var(--font-mono, "SFMono-Regular", Consolas, monospace); font-size: 9pt; letter-spacing: .04em; line-height: 1.1; margin: .6mm 0; }
+.asset-label-printable--detail .asset-label__identity strong { font-size: 13pt; margin: .5mm 0; }
+.asset-label__identity > span:not(.asset-label__description) { font-size: 6pt; font-weight: 900; line-height: 1.1; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.asset-label-printable--detail .asset-label__identity > span:not(.asset-label__description) { font-size: 6.2pt; }
+.asset-label__description { display: -webkit-box; font-size: 5.6pt; font-weight: 700; line-height: 1.08; max-height: 2.16em; overflow: hidden; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.asset-label__loss { border-top: .25mm solid var(--gray-300); display: flex; flex-direction: column; gap: .2mm; margin-top: .7mm; padding-top: .55mm; }
+.asset-label__loss strong { font-size: 5.2pt; letter-spacing: .04em; line-height: 1; }
+.asset-label__loss span { font-size: 5.2pt; line-height: 1; white-space: nowrap; }
 .asset-label__print { margin-top: .8rem; width: 100%; }

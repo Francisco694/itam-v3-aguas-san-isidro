@@ -95,6 +95,19 @@ export interface IndicadorEconomico { cantidad:number;valor:number; }
 export interface ResumenInventarioActivoPorTipo { tipo: string; cantidad: number; valorTotal: number; porcentajeCantidad: number; }
 export interface ResumenInventarioActivoRealVerificadoPorTipo extends ResumenInventarioActivoPorTipo { porcentajeValor: number; }
 export interface ResumenHistoricoRegistradoPorTipo { tipo: string; cantidad: number; porcentajeCantidad: number; valorHistorico: number; }
+export interface ResumenConciliacionCategoria { codigo: string; nombre: string; equipos: number; valor: number; }
+export interface ResumenConciliacionInventario {
+  equiposRelacionados: number;
+  valorRelacionado: number;
+  sinDistribucion: {
+    equipos: number;
+    valor: number;
+    condicionOperativa: { equipos: number; valor: number; categorias: ResumenConciliacionCategoria[] };
+    retenidosRevision: { equipos: number; valor: number };
+    requierenRegularizacion: { equipos: number; valor: number; categorias: ResumenConciliacionCategoria[] };
+  };
+  conciliacion: { equiposCuadran: boolean; valoresCuadran: boolean };
+}
 export interface ResumenGerencial {
   inventarioActual: { cantidad: number; valorTotal: number };
   dispositivosVerificados: { cantidad: number; porcentajeSobreInventarioActual: number; valorTotal: number; pendientes: number };
@@ -110,6 +123,7 @@ export interface ResumenGerencial {
   bajas:IndicadorEconomico;
   valorInventarioActivoReal:number;
   valorInventarioActivoPorTipo:ResumenInventarioActivoPorTipo[];
+  conciliacionInventario?: ResumenConciliacionInventario;
 }
 export interface ReporteInventario {
   periodo:{desde:string;hasta:string};generadoEn:string;
