@@ -41,6 +41,15 @@ Esta carpeta documenta el sistema ITAM según el código vigente. Los documentos
 - [Bitácora detallada 24 de agosto–22 de septiembre](bitacoras/bitacora-2026-08-24-a-2026-09-22.md)
 - [Avance documental del 23 de septiembre](bitacoras/avance-2026-09-23.md)
 
+## Base de datos
+
+- [Arquitectura de base de datos](arquitectura/BASE_DE_DATOS.md)
+- [Índice de documentación de base de datos](database/README.md)
+- [Historial de migraciones](database/HISTORIAL_MIGRACIONES.md)
+- [Estado de migraciones](database/ESTADO_MIGRACIONES.md)
+- [Estado actual de la base](database/ESTADO_ACTUAL_BD.md)
+- [Cómo crear una migración](database/COMO_CREAR_MIGRACION.md)
+
 ## Diagramas
 
 - [Arquitectura general](diagramas/ARQUITECTURA_GENERAL.md)

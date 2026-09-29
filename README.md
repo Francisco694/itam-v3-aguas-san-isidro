@@ -14,6 +14,12 @@ Backend en desarrollo.
 - PostgreSQL
 - Angular 22 (frontend)
 
+## Base de datos
+
+PostgreSQL. El esquema evoluciona mediante migraciones SQL versionadas.
+
+Ver [arquitectura de base de datos](docs/arquitectura/BASE_DE_DATOS.md) y [documentación de database](docs/database/README.md).
+
 ## Autor
 
 Francisco694
