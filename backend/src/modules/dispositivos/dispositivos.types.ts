@@ -183,6 +183,7 @@ export interface DispositivoFilters {
   departamentoId?: number;
   departamentoColaboradorId?: number;
   localidad?: string;
+  origenRegistro?: "MANUAL" | "IMPORTADO";
   verificacion?: "PENDIENTE" | "VERIFICADO";
 }
 

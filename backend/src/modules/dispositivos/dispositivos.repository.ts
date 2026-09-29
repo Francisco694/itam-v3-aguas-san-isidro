@@ -348,6 +348,11 @@ export const listarDispositivos = async (
     where.push(`d.localidad ILIKE $${values.length}`);
   }
 
+  if (filters.origenRegistro !== undefined) {
+    values.push(filters.origenRegistro);
+    where.push(`(${origenRegistroSql}) = $${values.length}`);
+  }
+
   if (filters.verificacion !== undefined) {
     values.push(filters.verificacion);
     where.push(`(

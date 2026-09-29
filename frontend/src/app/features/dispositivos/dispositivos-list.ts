@@ -2,7 +2,7 @@ import { DatePipe } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { LucideCamera, LucideDownload, LucideEye, LucidePencil, LucidePrinter, LucidePlus, LucideScanBarcode, LucideSearch, LucideSlidersHorizontal, LucideTriangleAlert, LucideX } from '@lucide/angular';
+import { LucideCamera, LucideDownload, LucideEye, LucidePencil, LucidePrinter, LucidePlus, LucideScanBarcode, LucideSearch, LucideSlidersHorizontal, LucideTriangleAlert } from '@lucide/angular';
 import QRCode from 'qrcode';
 import { catchError, forkJoin, of } from 'rxjs';
 import { Departamento, Dispositivo, Estado, FiltroVerificacionDispositivo, ResultadoVerificacionFisica, TipoDispositivo } from '../../core/models/itam.models';
@@ -13,7 +13,7 @@ import { SimService } from '../../core/services/sim.service';
 import { ToastService } from '../../core/services/toast.service';
 import { TiposDispositivoService } from '../../core/services/tipos-dispositivo.service';
 import { PageHeader } from '../../shared/components/page-header/page-header';
-import { PHYSICAL_LABEL_CONTACT_PHONE, assetLabelResponsible } from '../../shared/components/asset-label/asset-label';
+import { PHYSICAL_LABEL_CALL_PHONE, PHYSICAL_LABEL_WHATSAPP, assetLabelResponsible } from '../../shared/components/asset-label/asset-label';
 import { QrScanner } from '../../shared/components/qr-scanner/qr-scanner';
 import { StatusBadge } from '../../shared/components/status-badge/status-badge';
 import { ViewState } from '../../shared/components/view-state/view-state';
@@ -21,6 +21,8 @@ import type { ItamQrTarget } from '../../shared/utils/itam-qr';
 import { buildItamQrValue } from '../../shared/utils/itam-qr';
 import { errorMessage } from '../../shared/utils/error-message';
 import { formatRut } from '../../shared/utils/rut';
+
+type InventoryView = 'REAL' | 'HISTORICO';
 
 export const quickSearchMode = (query: string): 'DEVICE_CODE' | 'FILTER' | 'EMPTY' => {
   const normalized = query.trim();
@@ -95,7 +97,7 @@ const printableLabel = (device: Dispositivo, qrDataUrl: string, mode: 'A4' | 'TH
         <b class="label-model">${escapeHtml(`${device.marca ?? ''} ${device.modelo ?? ''}`.trim() || 'Modelo no registrado')}</b>
       </div>
     </div>
-    <div class="label-loss"><strong>EN CASO DE PÉRDIDA</strong><span>Llamar o WhatsApp: ${PHYSICAL_LABEL_CONTACT_PHONE}</span></div>
+    <div class="label-loss"><strong>EN CASO DE PÉRDIDA</strong><span>Llamar: ${PHYSICAL_LABEL_CALL_PHONE}</span><span>WhatsApp: ${PHYSICAL_LABEL_WHATSAPP}</span></div>
   </article>`;
 
 const printableDocument = (
@@ -117,27 +119,27 @@ const printableDocument = (
     .sheet { display: ${mode === 'A4' ? 'grid' : 'block'}; gap: 4mm 3mm; grid-template-columns: repeat(3, 60mm); margin: 0; max-width: 100%; min-height: 0; min-width: 0; padding: 0; }
     .label, .thermal-label { border: 1px solid #000; box-sizing: border-box; display: flex; flex-direction: column; height: 38mm; max-height: 38mm; max-width: 60mm; min-height: 0; min-width: 0; overflow: hidden; padding: 1.5mm 2mm; width: 60mm; }
     .label { break-inside: avoid; page-break-inside: avoid; }
-    .label header, .thermal-label header { font-size: 7pt; font-weight: 800; line-height: 1; margin-bottom: .6mm; overflow: hidden; padding-bottom: .5mm; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
-    .label-responsible { border-bottom: 1px solid #000; font-size: 5.6pt; font-weight: 700; line-height: 1.1; margin-bottom: .8mm; overflow: hidden; padding-bottom: .7mm; text-overflow: ellipsis; white-space: nowrap; }
-    .label-body, .thermal-label__body { align-items: center; display: flex; flex: 1 1 auto; gap: 2mm; min-height: 0; min-width: 0; overflow: hidden; }
-    .label-qr { flex: 0 0 21mm; height: 21mm; max-height: 21mm; max-width: 21mm; width: 21mm; }
+    .label header, .thermal-label header { color: #000; font-size: 8.5pt; font-weight: 800; line-height: 1; margin-bottom: .6mm; overflow: hidden; padding-bottom: .5mm; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
+    .label-responsible { color: #000; display: -webkit-box; font-size: 6.7pt; font-weight: 700; line-height: 1.1; margin-bottom: .3mm; max-height: 2.2em; overflow: hidden; overflow-wrap: anywhere; padding-bottom: 0; text-align: center; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+    .label-body, .thermal-label__body { align-items: center; display: flex; flex: 0 0 20mm; gap: 1.6mm; min-height: 0; min-width: 0; overflow: hidden; }
+    .label-qr { flex: 0 0 20mm; height: 20mm; max-height: 20mm; max-width: 20mm; width: 20mm; }
     .label-data, .thermal-label__info { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden; }
-    .label-data small, .label-data span, .label-data b { font-size: 6.2pt; line-height: 1.1; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .label-data strong { font-family: Consolas, monospace; font-size: 10pt; line-height: 1.1; margin: .45mm 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .label-model { display: -webkit-box; max-height: 2.2em; overflow: hidden; overflow-wrap: anywhere; white-space: normal !important; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+    .label-data small, .label-data span, .label-data b { color: #000; font-size: 7.2pt; line-height: 1.1; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .label-data strong { color: #000; font-family: Consolas, monospace; font-size: 11pt; line-height: 1.1; margin: .45mm 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .label-model { display: -webkit-box; font-size: 6.2pt !important; max-height: 2.2em; overflow: hidden; overflow-wrap: anywhere; text-overflow: clip; white-space: normal !important; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
     .thermal-label { background: #fff; border: 0; break-after: page; color: #000; margin: 0; page-break-after: always; }
-    .thermal-label header { color: #000; font-size: 6pt; }
-    .thermal-label .label-responsible { font-size: 5.2pt; }
-    .thermal-label__body { gap: 1.5mm; height: auto; justify-content: center; }
+    .thermal-label header { color: #000; font-size: 7.5pt; }
+    .thermal-label .label-responsible { font-size: 6.4pt; }
+    .thermal-label__body { gap: 1.6mm; height: auto; justify-content: center; }
     .thermal-label__qr { flex: 0 0 20mm; height: 20mm; max-height: 20mm; max-width: 20mm; object-fit: contain; width: 20mm; }
-    .thermal-label__info { color: #000; font-size: 5.2pt; line-height: 1; }
+    .thermal-label__info { color: #000; font-size: 6.6pt; line-height: 1.05; }
     .thermal-label__info > * { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .thermal-label__info small, .thermal-label__info span { font-size: 5.2pt; line-height: 1; }
-    .thermal-label__code { font-size: 8.5pt; font-weight: 800; line-height: 1; margin: .25mm 0; }
-    .thermal-label .label-model { display: -webkit-box; line-height: 1.08; max-height: 2.16em; white-space: normal; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-    .label-loss { border-top: 1px solid #000; display: flex; flex-direction: column; gap: .2mm; margin-top: .7mm; padding-top: .55mm; }
-    .label-loss strong { font-size: 5.2pt; letter-spacing: .04em; line-height: 1; }
-    .label-loss span { font-size: 5.2pt; line-height: 1; white-space: nowrap; }
+    .thermal-label__info small, .thermal-label__info span { font-size: 6.6pt; line-height: 1.05; }
+    .thermal-label__code { font-size: 10pt; font-weight: 800; line-height: 1; margin: .25mm 0; }
+    .thermal-label .label-model { display: -webkit-box; font-size: 6.2pt !important; line-height: 1.08; max-height: 2.16em; white-space: normal; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+    .label-loss { align-items: center; color: #000; display: flex; flex-direction: column; gap: .1mm; margin-top: .2mm; padding-top: .1mm; text-align: center; width: 100%; }
+    .label-loss strong { font-size: 6.1pt; letter-spacing: .04em; line-height: 1; }
+    .label-loss span { font-size: 6.3pt; font-weight: 700; line-height: 1.02; white-space: nowrap; }
     .thermal-label:last-child { break-after: auto; page-break-after: auto; }
     @media print {
       @page { size: ${mode === 'A4' ? 'A4 portrait' : '60mm 38mm'}; margin: ${mode === 'A4' ? '10mm' : '0'}; }
@@ -153,13 +155,23 @@ const printableDocument = (
 
 @Component({
   selector: 'app-dispositivos-list',
-  imports: [DatePipe, FormsModule, RouterLink, PageHeader, QrScanner, StatusBadge, ViewState, LucideCamera, LucideDownload, LucideEye, LucidePencil, LucidePrinter, LucidePlus, LucideScanBarcode, LucideSearch, LucideSlidersHorizontal, LucideTriangleAlert, LucideX],
+  imports: [DatePipe, FormsModule, RouterLink, PageHeader, QrScanner, StatusBadge, ViewState, LucideCamera, LucideDownload, LucideEye, LucidePencil, LucidePrinter, LucidePlus, LucideScanBarcode, LucideSearch, LucideSlidersHorizontal, LucideTriangleAlert],
   template: `
     <app-page-header title="Inventario de Equipos" subtitle="Control físico, custodias y condición operativa de los activos.">
       <button class="btn btn--navy mobile-qr-action" type="button" (click)="scannerOpen.set(true)"><svg lucideCamera></svg> Escanear QR</button>
       <a class="btn btn--primary inventory-new-action" routerLink="nuevo"><svg lucidePlus></svg> Nuevo activo</a>
       <button class="btn btn--secondary inventory-export-action" type="button" [disabled]="!items().length" (click)="exportCsv()"><svg lucideDownload></svg> Exportar CSV</button>
     </app-page-header>
+    <section class="inventory-view-switch" aria-label="Vista del inventario">
+      <div class="inventory-view-switch__copy">
+        <strong>{{ viewMode === 'REAL' ? 'Inventario real' : 'Inventario histórico / legacy' }}</strong>
+        <span>{{ viewMode === 'REAL' ? 'Solo equipos verificados, separados del histórico legacy.' : 'Registros provenientes del inventario/base legacy.' }}</span>
+      </div>
+      <div class="inventory-view-switch__actions" role="group" aria-label="Cambiar inventario">
+        <button type="button" [class.active]="viewMode === 'REAL'" [attr.aria-pressed]="viewMode === 'REAL'" (click)="selectView('REAL')">Inventario real</button>
+        <button type="button" [class.active]="viewMode === 'HISTORICO'" [attr.aria-pressed]="viewMode === 'HISTORICO'" (click)="selectView('HISTORICO')">Mostrar histórico</button>
+      </div>
+    </section>
     <section class="scan-card" aria-labelledby="scan-title">
       <div class="scan-card__icon"><svg lucideScanBarcode></svg></div>
       <form class="scan-card__form" (ngSubmit)="quickSearch()">
@@ -208,7 +220,7 @@ const printableDocument = (
           <div class="selection-tools">
             <label class="visible-selector"><input type="checkbox" [checked]="allVisibleSelected()" (change)="toggleVisible($event)" /> Seleccionar visibles</label>
             <span>{{ selectedCount() }} seleccionados</span>
-            <button class="btn btn--primary btn--small" type="button" [disabled]="!selectedCount()" (click)="printOptionsOpen.set(true)"><svg lucidePrinter></svg> Imprimir etiquetas</button>
+            <button class="btn btn--primary btn--small" type="button" [disabled]="!selectedCount()" (click)="printLabels('THERMAL')"><svg lucidePrinter></svg> Imprimir etiquetas</button>
           </div>
         </div>
         <div class="table-wrap desktop-table"><table class="data-table inventory-table"><thead><tr><th class="select-column"><input type="checkbox" aria-label="Seleccionar dispositivos visibles" [checked]="allVisibleSelected()" (change)="toggleVisible($event)" /></th><th>ID / Código</th><th>Equipo</th><th>Estado</th><th>Responsable</th><th>Verificación</th><th>Ubicación</th><th><span class="sr-only">Acciones</span></th></tr></thead><tbody>
@@ -249,18 +261,6 @@ const printableDocument = (
         </div>
       }
     </section>
-    @if (printOptionsOpen()) {
-      <div class="print-options-overlay" role="presentation" (click)="printOptionsOpen.set(false)">
-        <section class="print-options-dialog" role="dialog" aria-modal="true" aria-labelledby="print-options-title" (click)="$event.stopPropagation()">
-          <header><div><span>IMPRESIÓN MÚLTIPLE</span><h2 id="print-options-title">Imprimir {{ selectedCount() }} etiquetas</h2></div><button type="button" aria-label="Cerrar" (click)="printOptionsOpen.set(false)"><svg lucideX></svg></button></header>
-          <p>Elija el formato de salida. Las etiquetas incluyen el responsable actual y el teléfono asociado cuando existe; omiten RUT y valores comerciales.</p>
-          <div class="print-choice-grid">
-            <button type="button" (click)="printLabels('A4')"><svg lucidePrinter></svg><strong>Hoja A4</strong><span>Varias etiquetas organizadas en grilla por hoja.</span></button>
-            <button type="button" (click)="printLabels('THERMAL')"><svg lucidePrinter></svg><strong>Brother QL-800</strong><span>Una etiqueta de 60 × 38 mm por dispositivo.</span></button>
-          </div>
-        </section>
-      </div>
-    }
   `,
   styleUrl: './dispositivos-list.scss'
 })
@@ -284,8 +284,10 @@ export class DispositivosList implements OnInit {
   protected readonly scannerOpen = signal(false);
   protected readonly filtersOpen = signal(false);
   protected readonly selectedIds = signal<ReadonlySet<string>>(new Set());
-  protected readonly printOptionsOpen = signal(false);
   protected readonly error = signal('');
+  protected viewMode: InventoryView = 'REAL';
+  private listRequestSequence = 0;
+  private viewItemsRequestSequence = 0;
   protected readonly physicalIdentifier = inventoryPhysicalIdentifier;
   protected readonly assignedWithoutResponsible = isAssignedWithoutResponsible;
   protected readonly verification = verificationLabel;
@@ -294,16 +296,27 @@ export class DispositivosList implements OnInit {
   protected filters: { q: string; tipoDispositivoId: string; estado: string; departamentoId: string; localidad: string; verificacion: '' | FiltroVerificacionDispositivo } = { q: '', tipoDispositivoId: '', estado: '', departamentoId: '', localidad: '', verificacion: '' };
 
   ngOnInit(): void {
+    this.viewMode = this.route.snapshot.queryParamMap.get('vista') === 'historico' ? 'HISTORICO' : 'REAL';
+    this.filters.verificacion = '';
     this.filters.estado=this.route.snapshot.queryParamMap.get('estado')||'';
     this.filters.tipoDispositivoId=this.route.snapshot.queryParamMap.get('tipoDispositivoId')||'';
     this.estados.listar('DISPOSITIVO').subscribe({ next: (items) => this.states.set(items) });
     this.deptService.listar().subscribe({ next: (items) => this.departments.set(items) });
     this.typeService.listar().subscribe({ next: (items) => this.types.set(items) });
-    this.service.listar().subscribe({next:items=>this.allItems.set(items)});
+    this.loadViewItems();
     this.load();
   }
   protected stateCount(code:string):number{return inventoryStateCount(this.allItems(),code);}
-  protected selectState(code:string):void{this.filters.estado=code;void this.router.navigate([], {relativeTo:this.route,queryParams:{estado:code||null},queryParamsHandling:'merge',replaceUrl:true});this.load();}
+  protected selectState(code:string):void{this.filters.estado=code;this.filters.verificacion='';void this.router.navigate([], {relativeTo:this.route,queryParams:{estado:code||null},queryParamsHandling:'merge',replaceUrl:true});this.load();}
+  protected selectView(view: InventoryView): void {
+    this.viewMode = view;
+    this.filters.verificacion = '';
+    this.filters.estado = '';
+    this.selectedIds.set(new Set());
+    void this.router.navigate([], { relativeTo: this.route, queryParams: { vista: view === 'HISTORICO' ? 'historico' : null, estado: null }, queryParamsHandling: 'merge', replaceUrl: true });
+    this.loadViewItems();
+    this.load();
+  }
   protected quickSearch(): void {
     const query = this.quickQuery.trim();
     const qrCode = extractQuickSearchCode(query);
@@ -395,8 +408,27 @@ export class DispositivosList implements OnInit {
     });
   }
   protected load(): void {
+    const requestSequence = ++this.listRequestSequence;
+    const requestedView = this.viewMode;
+    const requestedState = this.filters.estado;
     this.loading.set(true); this.error.set('');
-    this.service.listar({ q: this.filters.q || undefined, tipoDispositivoId: this.filters.tipoDispositivoId ? Number(this.filters.tipoDispositivoId) : undefined, estado: this.filters.estado || undefined, departamentoId: this.filters.departamentoId ? Number(this.filters.departamentoId) : undefined, localidad: this.filters.localidad || undefined, verificacion: this.filters.verificacion || undefined }).subscribe({ next: (items) => { this.items.set(items); const visible = new Set(items.map((item) => item.id)); this.selectedIds.update((selected) => new Set([...selected].filter((id) => visible.has(id)))); this.loading.set(false); }, error: (error) => { this.error.set(errorMessage(error)); this.loading.set(false); } });
+    this.service.listar({ q: this.filters.q || undefined, tipoDispositivoId: this.filters.tipoDispositivoId ? Number(this.filters.tipoDispositivoId) : undefined, estado: this.filters.estado || undefined, departamentoId: this.filters.departamentoId ? Number(this.filters.departamentoId) : undefined, localidad: this.filters.localidad || undefined, origenRegistro: this.originFilter(), verificacion: this.filters.verificacion || this.verificationFilter() }).subscribe({ next: (items) => { if (requestSequence !== this.listRequestSequence || requestedView !== this.viewMode || requestedState !== this.filters.estado) return; const scopedItems = items.filter((item) => this.belongsToView(item, requestedView) && (!requestedState || item.estado.codigo === requestedState)); this.items.set(scopedItems); const visible = new Set(scopedItems.map((item) => item.id)); this.selectedIds.update((selected) => new Set([...selected].filter((id) => visible.has(id)))); this.loading.set(false); }, error: (error) => { if (requestSequence !== this.listRequestSequence || requestedView !== this.viewMode || requestedState !== this.filters.estado) return; this.error.set(errorMessage(error)); this.loading.set(false); } });
+  }
+  private loadViewItems(): void {
+    const requestSequence = ++this.viewItemsRequestSequence;
+    const requestedView = this.viewMode;
+    this.service.listar({ origenRegistro: this.originFilter(), verificacion: this.verificationFilter() }).subscribe({ next: (items) => { if (requestSequence !== this.viewItemsRequestSequence || requestedView !== this.viewMode) return; this.allItems.set(items.filter((item) => this.belongsToView(item, requestedView))); } });
+  }
+  private belongsToView(item: Dispositivo, view: InventoryView): boolean {
+    return view === 'REAL'
+      ? item.origenRegistro === 'MANUAL' || item.verificacionFisica?.resultado === 'VERIFICADO'
+      : item.origenRegistro === 'IMPORTADO';
+  }
+  private verificationFilter(): FiltroVerificacionDispositivo | undefined {
+    return this.viewMode === 'REAL' ? 'VERIFICADO' : undefined;
+  }
+  private originFilter(): 'MANUAL' | 'IMPORTADO' | undefined {
+    return this.viewMode === 'HISTORICO' ? 'IMPORTADO' : undefined;
   }
   protected selected(id: string): boolean { return this.selectedIds().has(id); }
   protected selectedCount(): number { return this.selectedIds().size; }
@@ -410,10 +442,9 @@ export class DispositivosList implements OnInit {
     const checked = (event.target as HTMLInputElement).checked;
     this.selectedIds.set(checked ? new Set(this.items().map((item) => item.id)) : new Set());
   }
-  protected async printLabels(mode: 'A4' | 'THERMAL'): Promise<void> {
+  protected async printLabels(mode: 'THERMAL'): Promise<void> {
     const devices = this.selectedDevices();
     if (!devices.length) return;
-    this.printOptionsOpen.set(false);
     const printWindow = window.open('', '_blank', 'width=900,height=700');
     if (!printWindow) {
       this.toast.error('No se pudo abrir la impresión', 'Permite ventanas emergentes para imprimir las etiquetas.');
@@ -468,7 +499,7 @@ export class DispositivosList implements OnInit {
     const link=document.createElement('a');link.href=url;link.download='inventario-itam-'+new Date().toISOString().slice(0,10)+'.csv';link.click();URL.revokeObjectURL(url);
   }
   protected emptyTitle():string {
-    if(!this.allItems().length)return 'No hay dispositivos registrados';
+    if(!this.allItems().length)return this.viewMode === 'REAL' ? 'No hay equipos verificados' : 'No hay registros históricos pendientes';
     if(this.hasCombinedFilters())return 'Sin resultados para los filtros aplicados';
     return ({DISPONIBLE:'No hay dispositivos disponibles',ASIGNADO:'No hay dispositivos asignados',SERVICIO_TECNICO:'No hay equipos en servicio técnico',EXTRAVIADO:'No hay dispositivos extraviados',DADO_BAJA:'No hay dispositivos dados de baja'} as Record<string,string>)[this.filters.estado]||'Sin resultados para los filtros aplicados';
   }

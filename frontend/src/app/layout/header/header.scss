@@ -14,7 +14,7 @@ nav svg{height:.95rem;width:.95rem}
 .avatar{align-items:center;background:rgba(0,180,216,.18);border:1px solid rgba(144,224,239,.35);border-radius:.65rem;color:#fff;display:flex;font-size:.72rem;font-weight:850;height:2.3rem;justify-content:center;margin-left:1rem;width:2.3rem}
 .menu{align-items:center;background:none;border:0;color:#fff;cursor:pointer;display:none;flex:none;height:2.75rem;justify-content:center;margin-right:.45rem;padding:.35rem;width:2.75rem}
 .menu svg{height:1.4rem;width:1.4rem}
-@media(max-width:1024px){
+@media(max-width:1280px){
   .menu{display:flex}
   nav{display:none}
   .header-inner{padding-left:max(.75rem,env(safe-area-inset-left));padding-right:max(.75rem,env(safe-area-inset-right))}

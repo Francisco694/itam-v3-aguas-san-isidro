@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable, tap } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { ApiCollectionResponse, ApiItemResponse } from '../models/api.models';
-import { AsociarLineaDispositivoInput, AsignarDispositivoColaboradorInput, AsignarDispositivoDepartamentoInput, CambiarEstadoInput, DarBajaInput, DevolverDispositivoInput, Dispositivo, DispositivoFilters, DispositivoInput, HistorialEvento, LineaMovilResumen, ResultadoDevolucion, ResultadoOffboardingInput, ResumenGerencial, TipoIdentificadorDispositivo, TrazabilidadDispositivo, ValidacionIdentificadorDispositivo, VerificacionFisica, VerificacionFisicaResumen } from '../models/itam.models';
+import { AsociarLineaDispositivoInput, AsignarDispositivoColaboradorInput, AsignarDispositivoDepartamentoInput, CambiarEstadoInput, DarBajaInput, DevolverDispositivoInput, Dispositivo, DispositivoFilters, DispositivoInput, FiltroVerificacionDispositivo, HistorialEvento, LineaMovilResumen, ResultadoDevolucion, ResultadoOffboardingInput, ResumenGerencial, TipoIdentificadorDispositivo, TrazabilidadDispositivo, ValidacionIdentificadorDispositivo, VerificacionFisica, VerificacionFisicaResumen } from '../models/itam.models';
 
 interface LineaMovilApiRow {
   id: string | number;
@@ -59,8 +59,8 @@ export class DispositivosService {
   }
   resumenGerencial(){return this.http.get<ApiItemResponse<ResumenGerencial>>(`${this.url}/resumen-gerencial`).pipe(map(normalizeDashboardSummary));}
   obtener(codigo: string | number) { return this.item(this.http.get<ApiItemResponse<Dispositivo>>(`${this.url}/${codigo}`)); }
-  buscarPorCodigoInventario(codigo: number) {
-    return this.listar({ q: String(codigo) }).pipe(map((items) => {
+  buscarPorCodigoInventario(codigo: number, verificacion?: FiltroVerificacionDispositivo, origenRegistro?: 'MANUAL' | 'IMPORTADO') {
+    return this.listar({ q: String(codigo), verificacion, origenRegistro }).pipe(map((items) => {
       const item = items.find((candidate) => candidate.codigoInventario === codigo);
       if (!item) throw new Error('Dispositivo no encontrado.');
       return item;

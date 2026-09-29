@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { vi } from 'vitest';
 import type { Dispositivo } from '../../../core/models/itam.models';
-import { AssetLabel, PHYSICAL_LABEL_CONTACT_PHONE, assetLabelPhone, assetLabelResponsible, compactResponsibleName } from './asset-label';
+import { AssetLabel, PHYSICAL_LABEL_CALL_PHONE, PHYSICAL_LABEL_WHATSAPP, assetLabelPhone, assetLabelResponsible, compactResponsibleName } from './asset-label';
 
 describe('AssetLabel', () => {
   beforeEach(() => {
@@ -37,7 +37,8 @@ describe('AssetLabel', () => {
     expect(element.textContent).toContain('SMARTPHONE');
     expect(element.textContent).toContain('Samsung Galaxy Tab S6 Lite');
     expect(element.textContent).toContain('Responsable: Segundo Samuel T.');
-    expect(element.textContent).toContain('Llamar o WhatsApp: ' + PHYSICAL_LABEL_CONTACT_PHONE);
+    expect(element.textContent).toContain('Llamar: ' + PHYSICAL_LABEL_CALL_PHONE);
+    expect(element.textContent).toContain('WhatsApp: ' + PHYSICAL_LABEL_WHATSAPP);
     expect(element.textContent).not.toContain('IMEI');
     expect(element.textContent).not.toContain('SERIE');
     expect(element.textContent).not.toContain('56961220448');

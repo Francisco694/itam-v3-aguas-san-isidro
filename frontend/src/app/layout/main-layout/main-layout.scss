@@ -21,6 +21,7 @@ aside {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  overflow-x: hidden;
 }
 main {
   animation: fade-in 0.25s ease;
@@ -45,7 +46,7 @@ main {
 .backdrop {
   display: none;
 }
-@media (max-width: 1024px) {
+@media (max-width: 1280px) {
   .shell {
     display: block;
   }

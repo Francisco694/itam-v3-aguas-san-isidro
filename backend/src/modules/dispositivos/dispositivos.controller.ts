@@ -187,6 +187,12 @@ export const listarDispositivosController = asyncHandler(
           "localidad",
           120
         ) ?? undefined,
+      origenRegistro:
+        parseOptionalEnum(
+          req.query.origenRegistro,
+          "origenRegistro",
+          ["MANUAL", "IMPORTADO"] as const
+        ) ?? undefined,
       verificacion:
         parseOptionalEnum(
           req.query.verificacion,

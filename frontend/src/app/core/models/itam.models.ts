@@ -90,7 +90,7 @@ export interface VerificacionFisica {
   usuario: { id: string; nombre: string; email: string } | null;
   fechaVerificacion: string;
 }
-export interface DispositivoFilters { q?: string; tipo?: string; tipoDispositivoId?: number; familiaCodigoInventarioId?: number; estado?: string; colaboradorId?: number; departamentoId?: number; localidad?: string; verificacion?: FiltroVerificacionDispositivo; }
+export interface DispositivoFilters { q?: string; tipo?: string; tipoDispositivoId?: number; familiaCodigoInventarioId?: number; estado?: string; colaboradorId?: number; departamentoId?: number; localidad?: string; origenRegistro?: 'MANUAL'|'IMPORTADO'; verificacion?: FiltroVerificacionDispositivo; }
 export interface IndicadorEconomico { cantidad:number;valor:number; }
 export interface ResumenInventarioActivoPorTipo { tipo: string; cantidad: number; valorTotal: number; porcentajeCantidad: number; }
 export interface ResumenInventarioActivoRealVerificadoPorTipo extends ResumenInventarioActivoPorTipo { porcentajeValor: number; }

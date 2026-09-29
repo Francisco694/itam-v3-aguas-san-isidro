@@ -4,35 +4,35 @@
   background: #fff;
   border: 1px solid var(--gray-200);
   box-sizing: border-box;
-  color: var(--navy);
+  color: #000;
   display: flex;
   flex-direction: column;
   height: 38mm;
   max-height: 38mm;
   max-width: 60mm;
   overflow: hidden;
-  padding: 1.2mm;
+  padding: .8mm;
   width: 60mm;
 }
 
-.asset-label-printable--detail { height: 38mm; max-height: 38mm; max-width: 60mm; padding: 1.2mm; width: 60mm; }
-.asset-label__company { font-size: 7.2pt; font-weight: 900; letter-spacing: .06em; line-height: 1; overflow: hidden; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
-.asset-label-printable--detail .asset-label__company { font-size: 8pt; }
-.asset-label__responsible { font-size: 5.5pt; font-weight: 700; line-height: 1.1; margin-top: .8mm; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.asset-label__divider { border-bottom: .3mm solid var(--cyan); margin: .8mm 0 .7mm; }
-.asset-label__content { align-items: center; display: flex; flex: 1 1 auto; gap: 1.8mm; min-height: 0; }
+.asset-label-printable--detail { height: 38mm; max-height: 38mm; max-width: 60mm; padding: .8mm; width: 60mm; }
+.asset-label__company { font-size: 8.5pt; font-weight: 900; letter-spacing: .06em; line-height: 1; overflow: hidden; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
+.asset-label-printable--detail .asset-label__company { font-size: 9pt; }
+.asset-label__responsible { display: -webkit-box; font-size: 6.7pt; font-weight: 700; line-height: 1.1; margin-top: .3mm; max-height: 2.2em; overflow: hidden; overflow-wrap: anywhere; text-align: center; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.asset-label__divider { height: 0; margin: .3mm 0; }
+.asset-label__content { align-items: center; display: flex; flex: 0 0 20mm; gap: 1.6mm; min-height: 0; }
 .asset-label-printable--detail .asset-label__content { gap: 2mm; }
-.asset-label__qr { flex: 0 0 21mm; height: 21mm !important; max-height: 21mm; max-width: 21mm; width: 21mm !important; }
-.asset-label-printable--detail .asset-label__qr { height: 21mm !important; max-height: 21mm; max-width: 21mm; width: 21mm !important; }
+.asset-label__qr { background: #fff; display: block; flex: 0 0 20mm; height: 20mm !important; max-height: 20mm; max-width: 20mm; width: 20mm !important; }
+.asset-label-printable--detail .asset-label__qr { height: 20mm !important; max-height: 20mm; max-width: 20mm; width: 20mm !important; }
 .asset-label__identity { align-items: flex-start; display: flex; flex: 1; flex-direction: column; min-width: 0; }
-.asset-label__identity small { font-size: 5pt; font-weight: 800; letter-spacing: .08em; line-height: 1; }
-.asset-label-printable--detail .asset-label__identity small { font-size: 5.8pt; }
+.asset-label__identity small { font-size: 5.8pt; font-weight: 800; letter-spacing: .08em; line-height: 1; }
+.asset-label-printable--detail .asset-label__identity small { font-size: 6.5pt; }
 .asset-label__identity strong { font-family: var(--font-mono, "SFMono-Regular", Consolas, monospace); font-size: 9pt; letter-spacing: .04em; line-height: 1.1; margin: .6mm 0; }
-.asset-label-printable--detail .asset-label__identity strong { font-size: 13pt; margin: .5mm 0; }
-.asset-label__identity > span:not(.asset-label__description) { font-size: 6pt; font-weight: 900; line-height: 1.1; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.asset-label-printable--detail .asset-label__identity > span:not(.asset-label__description) { font-size: 6.2pt; }
-.asset-label__description { display: -webkit-box; font-size: 5.6pt; font-weight: 700; line-height: 1.08; max-height: 2.16em; overflow: hidden; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-.asset-label__loss { border-top: .25mm solid var(--gray-300); display: flex; flex-direction: column; gap: .2mm; margin-top: .7mm; padding-top: .55mm; }
-.asset-label__loss strong { font-size: 5.2pt; letter-spacing: .04em; line-height: 1; }
-.asset-label__loss span { font-size: 5.2pt; line-height: 1; white-space: nowrap; }
+.asset-label-printable--detail .asset-label__identity strong { font-size: 14pt; margin: .5mm 0; }
+.asset-label__identity > span:not(.asset-label__description) { font-size: 6.6pt; font-weight: 400; line-height: 1.1; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.asset-label-printable--detail .asset-label__identity > span:not(.asset-label__description) { font-size: 7.1pt; font-weight: 400; }
+.asset-label__description { display: -webkit-box; font-size: 6pt; font-weight: 700; line-height: 1.08; max-height: 2.16em; min-width: 0; overflow: hidden; overflow-wrap: anywhere; text-overflow: clip; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.asset-label__loss { align-items: center; display: flex; flex-direction: column; gap: .1mm; margin-top: .2mm; padding-top: .1mm; text-align: center; width: 100%; }
+.asset-label__loss strong { font-size: 6.1pt; letter-spacing: .04em; line-height: 1; }
+.asset-label__loss span { font-size: 6.3pt; font-weight: 700; line-height: 1.02; white-space: nowrap; }
 .asset-label__print { margin-top: .8rem; width: 100%; }
