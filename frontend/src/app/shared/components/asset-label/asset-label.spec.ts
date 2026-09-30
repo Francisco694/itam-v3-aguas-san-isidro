@@ -45,6 +45,19 @@ describe('AssetLabel', () => {
     expect(canvas).not.toBeNull();
   });
 
+  it('muestra la compañía en lugar del modelo para una SIM', () => {
+    const fixture = TestBed.createComponent(AssetLabel);
+    fixture.componentRef.setInput('code', 2005);
+    fixture.componentRef.setInput('assetType', 'SIM');
+    fixture.componentRef.setInput('brandModel', 'Modelo ignorado');
+    fixture.componentRef.setInput('company', 'Entel');
+    fixture.detectChanges();
+
+    const element = fixture.nativeElement as HTMLElement;
+    expect(element.textContent).toContain('Entel');
+    expect(element.textContent).not.toContain('Modelo ignorado');
+  });
+
   it('mantiene el nombre corto del responsable', () => {
     const smartphone = device({
       colaborador: { id: '1', rut: '1-9', nombre: 'Segundo Samuel Tapia', cargo: null, localidad: null, departamento: null },

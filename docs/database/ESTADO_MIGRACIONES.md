@@ -1,6 +1,6 @@
 # Estado de migraciones
 
-**Actualizado:** 29 de septiembre de 2026
+**Actualizado:** 30 de septiembre de 2026
 **Base analizada:** `itam_dev`
 **Esquema:** `itam`
 **Tipo:** estado técnico e histórico
@@ -50,7 +50,7 @@ Ambos campos no existen actualmente en `itam.ordenes_servicio_tecnico` de `itam_
 
 ## Recomendación de reconciliación futura
 
-Una solución probable, todavía pendiente y no implementada, sería crear:
+La migración correctiva preparada para esta reconciliación es:
 
 ```text
 033_reconcile_technical_service_schema.sql
@@ -63,8 +63,14 @@ Su objetivo sería:
 - reconciliar la diferencia dejada por `029`;
 - mantener intacta la historia anterior.
 
-Esto es solamente una propuesta. El archivo `033` todavía no existe y no se ejecutó ningún SQL para resolver esta situación.
+El archivo está preparado. Se validó únicamente en bases temporales aisladas; no se ejecutó sobre `itam_dev`, `itam_prod` ni AWS.
 
 ## Alcance de esta documentación
 
-En esta etapa no se creó un runner, no se modificó `schema_migrations`, no se agregaron checksums, no se modificaron migraciones existentes y no se ejecutaron comandos sobre PostgreSQL.
+En esta etapa no se creó un runner, no se modificó `schema_migrations` de una base original, no se agregaron checksums y no se modificaron migraciones históricas. La validación temporal quedó documentada en [RECONCILIACION_029.md](RECONCILIACION_029.md).
+
+## Actualización posterior: migración 033 preparada
+
+La migración `033_reconcile_technical_service_schema.sql` ya está preparada en el repositorio y fue ejecutada únicamente en bases temporales. Agrega las columnas faltantes, conserva `NULL` para los tipos históricos desconocidos, evita duplicar restricciones y registra solo la versión `033`.
+
+La versión `029` permanece deliberadamente sin registrar. La estrategia para validarla en copias aisladas y el tratamiento que deberá implementar un futuro runner están documentados en [RECONCILIACION_029.md](RECONCILIACION_029.md). La recomendación anterior de crear `033` debe entenderse como completada en forma de archivo preparado, no como una migración ejecutada.

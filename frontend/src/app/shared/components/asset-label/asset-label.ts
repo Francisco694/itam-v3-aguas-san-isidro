@@ -38,13 +38,14 @@ export const assetLabelPhone = (device: Pick<LabelDevice, 'simAsociada' | 'linea
   || null;
 
 @Component({selector:'app-asset-label',standalone:true,imports:[LucidePrinter],template:`
-<div class="asset-label-printable" [class.asset-label-printable--detail]="detail" [attr.aria-label]="'Etiqueta ITAM ' + code"><div class="asset-label__company">AGUAS SAN ISIDRO</div>@if(detail){<div class="asset-label__responsible">Responsable: {{responsible || 'Bodega TI'}}</div>}<div class="asset-label__divider" aria-hidden="true"></div><div class="asset-label__content"><canvas #qr class="asset-label__qr" role="img" [attr.aria-label]="'QR del activo ITAM ' + code"></canvas><div class="asset-label__identity"><small>INVENTARIO TI</small><strong>ITAM {{code}}</strong><span>{{assetType.toUpperCase()}}</span><span class="asset-label__description">{{brandModel || 'Modelo no registrado'}}</span></div></div><div class="asset-label__loss"><strong>EN CASO DE PÉRDIDA</strong><span>Llamar: {{labelCallPhone}}</span><span>WhatsApp: {{labelWhatsapp}}</span></div></div>
+<div class="asset-label-printable" [class.asset-label-printable--detail]="detail" [attr.aria-label]="'Etiqueta ITAM ' + code"><div class="asset-label__company">AGUAS SAN ISIDRO</div>@if(detail){<div class="asset-label__responsible">Responsable: {{responsible || 'Bodega TI'}}</div>}<div class="asset-label__divider" aria-hidden="true"></div><div class="asset-label__content"><canvas #qr class="asset-label__qr" role="img" [attr.aria-label]="'QR del activo ITAM ' + code"></canvas><div class="asset-label__identity"><small>INVENTARIO TI</small><strong>ITAM {{code}}</strong><span>{{assetType.toUpperCase()}}</span><span class="asset-label__description">{{labelDescription()}}</span></div></div><div class="asset-label__loss"><strong>EN CASO DE PÉRDIDA</strong><span>Llamar: {{labelCallPhone}}</span><span>WhatsApp: {{labelWhatsapp}}</span></div></div>
 @if(showPrintButton){<button class="btn btn--secondary btn--small asset-label__print" type="button" (click)="print()"><svg lucidePrinter></svg>{{printLabel}}</button>}
 `,styleUrl:'./asset-label.scss'})
 export class AssetLabel implements AfterViewInit,OnChanges{
   @Input({ required: true }) code = 0;
   @Input({ required: true }) assetType = '';
   @Input() brandModel = '';
+  @Input() company = '';
   @Input() identifierLabel = '';
   @Input() identifier = '';
   @Input() responsible = '';
@@ -55,6 +56,13 @@ export class AssetLabel implements AfterViewInit,OnChanges{
   protected readonly labelCallPhone = PHYSICAL_LABEL_CALL_PHONE;
   protected readonly labelWhatsapp = PHYSICAL_LABEL_WHATSAPP;
   @ViewChild('qr', { static: true }) private qr?: ElementRef<HTMLCanvasElement>;
+
+  protected labelDescription(): string {
+    if (this.assetType.trim().toUpperCase() === 'SIM') {
+      return this.company.trim() || 'Compañía no registrada';
+    }
+    return this.brandModel.trim() || 'Modelo no registrado';
+  }
 
   ngAfterViewInit(): void { void this.renderQr(); }
   ngOnChanges(): void { queueMicrotask(() => void this.renderQr()); }

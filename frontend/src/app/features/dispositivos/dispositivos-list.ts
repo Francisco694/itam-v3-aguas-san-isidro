@@ -164,12 +164,12 @@ const printableDocument = (
     </app-page-header>
     <section class="inventory-view-switch" aria-label="Vista del inventario">
       <div class="inventory-view-switch__copy">
-        <strong>{{ viewMode === 'REAL' ? 'Inventario real' : 'Inventario histórico / legacy' }}</strong>
+        <strong>{{ viewMode === 'REAL' ? 'Inventario' : 'Histórico' }}</strong>
         <span>{{ viewMode === 'REAL' ? 'Solo equipos verificados, separados del histórico legacy.' : 'Registros provenientes del inventario/base legacy.' }}</span>
       </div>
       <div class="inventory-view-switch__actions" role="group" aria-label="Cambiar inventario">
-        <button type="button" [class.active]="viewMode === 'REAL'" [attr.aria-pressed]="viewMode === 'REAL'" (click)="selectView('REAL')">Inventario real</button>
-        <button type="button" [class.active]="viewMode === 'HISTORICO'" [attr.aria-pressed]="viewMode === 'HISTORICO'" (click)="selectView('HISTORICO')">Mostrar histórico</button>
+        <button type="button" [class.active]="viewMode === 'REAL'" [attr.aria-pressed]="viewMode === 'REAL'" (click)="selectView('REAL')">Inventario</button>
+        <button type="button" [class.active]="viewMode === 'HISTORICO'" [attr.aria-pressed]="viewMode === 'HISTORICO'" (click)="selectView('HISTORICO')">Histórico</button>
       </div>
     </section>
     <section class="scan-card" aria-labelledby="scan-title">

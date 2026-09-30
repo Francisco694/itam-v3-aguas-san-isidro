@@ -87,6 +87,7 @@ import { errorMessage } from '../../shared/utils/error-message';
       <app-asset-created-dialog
         [code]="item.codigoInventario"
         assetType="SIM"
+        [company]="item.compania || ''"
         entityLabel="SIM"
         [detailLink]="['/sim', item.codigoInventario]"
         (close)="finish(item)"
