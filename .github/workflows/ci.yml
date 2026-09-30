@@ -1,0 +1,69 @@
+name: CI de validación y compilación
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend - typecheck y build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Instalar dependencias del backend
+        working-directory: backend
+        run: npm ci
+
+      - name: Validar tipos del backend
+        working-directory: backend
+        run: npm run typecheck
+
+      - name: Compilar backend
+        working-directory: backend
+        run: npm run build
+
+  frontend:
+    name: Frontend - build de producción
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Instalar dependencias del frontend
+        working-directory: frontend
+        run: npm ci
+
+      - name: Compilar frontend para producción
+        working-directory: frontend
+        run: npm run build
+
+      - name: Verificar salida de Angular
+        run: test -f frontend/dist/frontend/browser/index.html
+
+# Este workflow valida compilación y tipado. No ejecuta npm test porque las
+# pruebas backend requieren PostgreSQL y fixtures reproducibles aún pendientes.

@@ -78,6 +78,10 @@ Esta carpeta documenta el sistema ITAM según el código vigente. Los documentos
 
 - [Checklist de producción](PRODUCTION_CHECKLIST.md)
 
+## Integración continua
+
+- [Estado de CI/CD](ci/CI.md)
+
 ## Convenciones
 
 - El nombre del sistema es **ITAM**.
