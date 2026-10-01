@@ -252,7 +252,10 @@ export const validarIdentificadorDispositivo = async (
       }
     : { disponible: true };
 };
-import type { ConfiguracionFormularioTipo } from "../tipos-dispositivo/tipos-dispositivo.types";
+import {
+  tipoDispositivoPermiteSim,
+  type ConfiguracionFormularioTipo
+} from "../tipos-dispositivo/tipos-dispositivo.types";
 
 export const normalizeSpecificAttributes = (
   attributes: Record<string, string | number | null> | undefined,
@@ -405,6 +408,10 @@ const mapDispositivo = (
     activo: row.tipo_dispositivo_activo,
     requiereImei: row.tipo_dispositivo_requiere_imei,
     configuracionFormulario: row.tipo_dispositivo_configuracion_formulario,
+    permiteSim: tipoDispositivoPermiteSim(
+      row.tipo_dispositivo_nombre,
+      row.tipo_dispositivo_configuracion_formulario
+    ),
     familiaCodigoInventario:
       row.tipo_familia_id &&
       row.tipo_familia_nombre &&
@@ -609,8 +616,11 @@ export const asociarLineaADispositivo = async (
       dispositivoId: dispositivo.dispositivo_id,
       colaboradorId: dispositivo.colaborador_id
     });
-    if (dispositivo.tipo_dispositivo_nombre.trim().toUpperCase() !== "SMARTPHONE") {
-      throw new ValidationError("Solo los smartphones pueden tener línea móvil.");
+    if (!tipoDispositivoPermiteSim(
+      dispositivo.tipo_dispositivo_nombre,
+      dispositivo.tipo_dispositivo_configuracion_formulario
+    )) {
+      throw new ValidationError("El tipo de dispositivo no está configurado para llevar SIM.");
     }
     let sim: SimRow | null = null;
     let estadoSimAsignada: { id: string; codigo: string; nombre: string } | null = null;
@@ -1132,21 +1142,24 @@ export const asignarAColaborador = async (
     assertCustodiaDisponible(anterior);
     await assertSinOrdenServicioAbierta(anterior.dispositivo_id, client);
 
-    const esSmartphone = anterior.tipo_dispositivo_nombre.trim().toUpperCase() === "SMARTPHONE";
+    const permiteSim = tipoDispositivoPermiteSim(
+      anterior.tipo_dispositivo_nombre,
+      anterior.tipo_dispositivo_configuracion_formulario
+    );
     const numeroEntregaNormalizado = input.numeroTelefonico?.trim()
       ? normalizarNumeroTelefonicoChileno(input.numeroTelefonico)
       : null;
-    if (numeroEntregaNormalizado && !esSmartphone) {
-      throw new ValidationError("Solo los smartphones pueden tener línea móvil.");
+    if (numeroEntregaNormalizado && !permiteSim) {
+      throw new ValidationError("El tipo de dispositivo no está configurado para llevar SIM.");
     }
 
     let sim: SimRow | null = null;
     let numeroSimNormalizado: string | null = null;
     let estadoSimAsignada: { id: string; codigo: string; nombre: string } | null = null;
     if (input.simCodigoInventario !== undefined) {
-      if (!esSmartphone) {
+      if (!permiteSim) {
         throw new ValidationError(
-          "La entrega conjunta de SIM solo está disponible para Smartphones."
+          "La entrega conjunta de SIM solo está disponible para dispositivos compatibles."
         );
       }
       if (anterior.sim_id || await obtenerSimPorDispositivoId(anterior.dispositivo_id, client)) {
@@ -1681,7 +1694,10 @@ export const cambiarEstadoDispositivoExistente = async (
     if (
       !input.recuperar
       && estado.codigo === "EXTRAVIADO"
-      && anterior.tipo_dispositivo_nombre.trim().toUpperCase() === "SMARTPHONE"
+      && tipoDispositivoPermiteSim(
+        anterior.tipo_dispositivo_nombre,
+        anterior.tipo_dispositivo_configuracion_formulario
+      )
     ) {
       const sim = anterior.sim_codigo_inventario === null
         ? null

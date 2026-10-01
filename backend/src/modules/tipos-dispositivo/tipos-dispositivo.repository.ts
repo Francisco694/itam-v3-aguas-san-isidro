@@ -89,11 +89,19 @@ export const crearTipoDispositivo = async (
 ): Promise<TipoDispositivoRow> => {
   const result = await getDb(client).query<{ id: string }>(
     `INSERT INTO itam.tipos_dispositivo
-      (nombre, descripcion, familia_codigo_inventario_id, activo, requiere_imei)
-     VALUES ($1, $2, $3, COALESCE($4, TRUE), COALESCE($5, FALSE)) RETURNING id`,
+      (nombre, descripcion, familia_codigo_inventario_id, activo, requiere_imei,
+       configuracion_formulario)
+     VALUES ($1, $2, $3, COALESCE($4, TRUE), COALESCE($5, FALSE),
+       jsonb_build_object(
+         'mostrarMarca', TRUE,
+         'mostrarModelo', TRUE,
+         'mostrarNumeroSerie', TRUE,
+         'camposEspecificos', '[]'::jsonb,
+         'permiteSim', COALESCE($6, UPPER(BTRIM($1)) = 'SMARTPHONE')
+       )) RETURNING id`,
     [input.nombre, input.descripcion ?? null,
       input.familiaCodigoInventarioId ?? null, input.activo ?? null,
-      input.requiereImei ?? null]
+      input.requiereImei ?? null, input.permiteSim ?? null]
   );
   return (await obtenerTipoDispositivoPorId(Number(result.rows[0]!.id), client))!;
 };
@@ -109,12 +117,16 @@ export const actualizarTipoDispositivo = async (
        descripcion = CASE WHEN $3::boolean THEN $4 ELSE descripcion END,
        familia_codigo_inventario_id = CASE WHEN $5::boolean THEN $6 ELSE familia_codigo_inventario_id END,
        activo = COALESCE($7, activo),
-       requiere_imei = COALESCE($8, requiere_imei)
+       requiere_imei = COALESCE($8, requiere_imei),
+       configuracion_formulario = CASE WHEN $9::boolean
+         THEN jsonb_set(configuracion_formulario, '{permiteSim}', to_jsonb($10::boolean), true)
+         ELSE configuracion_formulario END
      WHERE id = $1 RETURNING id`,
     [id, input.nombre ?? null, input.descripcion !== undefined,
       input.descripcion ?? null, input.familiaCodigoInventarioId !== undefined,
       input.familiaCodigoInventarioId ?? null, input.activo ?? null,
-      input.requiereImei ?? null]
+      input.requiereImei ?? null, input.permiteSim !== undefined,
+      input.permiteSim ?? false]
   );
   return result.rows[0] ? obtenerTipoDispositivoPorId(id, client) : null;
 };

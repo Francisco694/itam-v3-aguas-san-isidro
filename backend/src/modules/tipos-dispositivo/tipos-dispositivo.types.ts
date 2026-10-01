@@ -26,7 +26,21 @@ export interface ConfiguracionFormularioTipo {
   mostrarModelo: boolean;
   mostrarNumeroSerie: boolean;
   camposEspecificos: CampoEspecificoFormulario[];
+  /** Permite asociar una SIM a los dispositivos de este tipo. */
+  permiteSim?: boolean;
 }
+
+/**
+ * Resuelve la compatibilidad con SIM conservando el comportamiento histórico:
+ * configuraciones antiguas sin la propiedad siguen habilitando Smartphones.
+ */
+export const tipoDispositivoPermiteSim = (
+  nombre: string,
+  configuracion?: Pick<ConfiguracionFormularioTipo, "permiteSim"> | null
+): boolean => {
+  if (typeof configuracion?.permiteSim === "boolean") return configuracion.permiteSim;
+  return nombre.trim().toUpperCase() === "SMARTPHONE";
+};
 
 export interface TipoDispositivo {
   id: string;
@@ -35,6 +49,7 @@ export interface TipoDispositivo {
   activo: boolean;
   requiereImei: boolean;
   configuracionFormulario: ConfiguracionFormularioTipo;
+  permiteSim: boolean;
   familiaCodigoInventario: FamiliaCodigoTipoDispositivo | null;
   creadoEn: string;
   actualizadoEn: string;
@@ -68,6 +83,7 @@ export interface CrearTipoDispositivoInput {
   familiaCodigoInventarioId?: number | null;
   activo?: boolean;
   requiereImei?: boolean;
+  permiteSim?: boolean;
 }
 
 export interface ActualizarTipoDispositivoInput {
@@ -76,6 +92,7 @@ export interface ActualizarTipoDispositivoInput {
   familiaCodigoInventarioId?: number | null;
   activo?: boolean;
   requiereImei?: boolean;
+  permiteSim?: boolean;
 }
 
 export interface FamiliaDispositivoRow {

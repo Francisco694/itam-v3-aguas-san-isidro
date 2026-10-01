@@ -5,6 +5,7 @@ import { assetLabelPhone } from '../../shared/components/asset-label/asset-label
 import {
   deviceActionErrorMessage,
   deviceTechnicalIdentifier,
+  canDeviceCarrySim,
   isChileanPhoneInputValid,
   isSimAvailableForJointDelivery,
   isSmartphoneDevice,
@@ -56,6 +57,11 @@ describe('ficha de dispositivo QA-01/03/11', () => {
   it('identifica Smartphone por el tipo real, sin depender de la serie', () => {
     expect(isSmartphoneDevice({ tipo: { nombre: 'Smartphone' } } as Dispositivo)).toBe(true);
     expect(isSmartphoneDevice({ tipo: { nombre: 'Notebook' } } as Dispositivo)).toBe(false);
+  });
+
+  it('permite SIM en tipos configurados aunque no sean Smartphones', () => {
+    expect(canDeviceCarrySim({ tipo: { nombre: 'Tablet', permiteSim: true } } as Dispositivo)).toBe(true);
+    expect(canDeviceCarrySim({ tipo: { nombre: 'Notebook' } } as Dispositivo)).toBe(false);
   });
 
   it('distingue un Smartphone sin SIM de una SIM pendiente de número', () => {

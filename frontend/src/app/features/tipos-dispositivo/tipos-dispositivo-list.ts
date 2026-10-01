@@ -58,6 +58,8 @@ import { errorMessage } from '../../shared/utils/error-message';
           }
         </select><p class="hint">Sin una familia activa, el tipo se puede catalogar pero no permite crear dispositivos.</p></div>
         <label class="checkbox"><input type="checkbox" formControlName="requiereImei" />Solicitar campo IMEI al registrar activos</label>
+        <label class="checkbox"><input type="checkbox" formControlName="permiteSim" />Permitir asociar SIM a este tipo</label>
+        <p class="hint">Actívelo solo para equipos con ranura o eSIM compatible.</p>
         <label class="checkbox"><input type="checkbox" formControlName="activo" />Tipo activo</label>
         <footer><button class="btn btn--secondary" type="button" (click)="close()">Cancelar</button>
           <button class="btn btn--primary" type="submit" [disabled]="submitting()"><svg lucideSave></svg>{{ submitting() ? 'Guardando…' : 'Guardar' }}</button></footer>
@@ -81,7 +83,7 @@ export class TiposDispositivoList implements OnInit {
   protected readonly submitting = signal(false);
   protected readonly form = this.fb.nonNullable.group({
     nombre: ['', [Validators.required, Validators.maxLength(80)]],
-    descripcion: [''], familiaCodigoInventarioId: [''], requiereImei: [false], activo: [true]
+    descripcion: [''], familiaCodigoInventarioId: [''], requiereImei: [false], permiteSim: [false], activo: [true]
   });
 
   ngOnInit(): void { this.load(); }
@@ -96,12 +98,12 @@ export class TiposDispositivoList implements OnInit {
     return this.families().filter((family) => family.tipoEntidad === 'DISPOSITIVO');
   }
   protected openCreate(): void {
-    this.form.reset({ nombre: '', descripcion: '', familiaCodigoInventarioId: '', requiereImei: false, activo: true });
+    this.form.reset({ nombre: '', descripcion: '', familiaCodigoInventarioId: '', requiereImei: false, permiteSim: false, activo: true });
     this.formError.set(''); this.editing.set({ id: null });
   }
   protected openEdit(item: TipoDispositivo): void {
     this.form.reset({ nombre: item.nombre, descripcion: item.descripcion || '',
-      familiaCodigoInventarioId: item.familiaCodigoInventario?.id || '', requiereImei: item.requiereImei, activo: item.activo });
+      familiaCodigoInventarioId: item.familiaCodigoInventario?.id || '', requiereImei: item.requiereImei, permiteSim: item.permiteSim ?? item.nombre.trim().toUpperCase() === 'SMARTPHONE', activo: item.activo });
     this.formError.set(''); this.editing.set(item);
   }
   protected close(): void { if (!this.submitting()) this.editing.set(null); }
@@ -115,7 +117,7 @@ export class TiposDispositivoList implements OnInit {
     const value = this.form.getRawValue();
     const input = { nombre: value.nombre.trim(), descripcion: value.descripcion.trim() || null,
       familiaCodigoInventarioId: value.familiaCodigoInventarioId
-        ? Number(value.familiaCodigoInventarioId) : null, requiereImei: value.requiereImei, activo: value.activo };
+        ? Number(value.familiaCodigoInventarioId) : null, requiereImei: value.requiereImei, permiteSim: value.permiteSim, activo: value.activo };
     const current = this.editing();
     const request = current && current.id ? this.service.actualizar(Number(current.id), input) : this.service.crear(input);
     request.subscribe({ next: () => { this.submitting.set(false); this.editing.set(null);

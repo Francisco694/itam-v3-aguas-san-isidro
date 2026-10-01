@@ -43,6 +43,7 @@ import type {
   SimResumen,
   SimRow
 } from "./sim.types";
+import { tipoDispositivoPermiteSim } from "../tipos-dispositivo/tipos-dispositivo.types";
 import { normalizarNumeroTelefonicoChileno } from "./sim-phone";
 import { vincularLineaMovil, vincularLineaMovilADispositivo } from "../lineas-moviles/lineas-moviles.service";
 import { actualizarVinculosLinea } from "../lineas-moviles/lineas-moviles.repository";
@@ -472,8 +473,11 @@ export const asociarDispositivo = async (
     if (!dispositivo) {
       throw new NotFoundError("Dispositivo no encontrado.");
     }
-    if (dispositivo.tipo_dispositivo_nombre.trim().toUpperCase() !== "SMARTPHONE") {
-      throw new ValidationError("Solo se puede asociar una SIM a un Smartphone.");
+    if (!tipoDispositivoPermiteSim(
+      dispositivo.tipo_dispositivo_nombre,
+      dispositivo.tipo_dispositivo_configuracion_formulario
+    )) {
+      throw new ValidationError("El tipo de dispositivo no está configurado para llevar SIM.");
     }
     const numeroIngresado = input.numeroAsociado?.trim()
       || sim.numero_asociado?.trim()

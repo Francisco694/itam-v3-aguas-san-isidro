@@ -39,6 +39,10 @@ export const receiversForDepartment = (
 export const isSmartphoneDevice = (device: Dispositivo): boolean =>
   device.tipo.nombre.trim().toLocaleLowerCase('es') === 'smartphone';
 
+export const canDeviceCarrySim = (device: Pick<Dispositivo, 'tipo'>): boolean =>
+  device.tipo.permiteSim ?? device.tipo.configuracionFormulario?.permiteSim
+    ?? isSmartphoneDevice(device as Dispositivo);
+
 export interface DeviceTechnicalIdentifier {
   label: 'IMEI' | 'NÚMERO DE SERIE' | 'IDENTIFICADOR';
   value: string;
@@ -294,7 +298,7 @@ type DeviceAction = 'assign-person' | 'assign-department' | 'return' | 'state' |
               @if(canVerifyManually(device)){
                 <button type="button" (click)="verifyManually()"><svg lucidePackageCheck></svg><span>Verificar equipo<small>Acción opcional de auditoría física</small></span></button>
               }
-              @if(isSmartphone(device) && !terminal()){<button type="button" (click)="openSimAssociation()"><svg lucidePlus></svg><span>{{ lineActionCopy(device).title }}<small>{{ lineActionCopy(device).description }}</small></span></button>}
+              @if(canCarrySim(device) && !terminal()){<button type="button" (click)="openSimAssociation()"><svg lucidePlus></svg><span>{{ lineActionCopy(device).title }}<small>{{ lineActionCopy(device).description }}</small></span></button>}
               @if(device.estado.codigo==='EXTRAVIADO' || device.estado.codigo==='DADO_BAJA'){<button type="button" (click)="open('recover')"><svg lucideRotateCcw></svg><span>Registrar equipo encontrado<small>Reactivar con trazabilidad</small></span></button>}
               <button type="button" class="operation-danger" [disabled]="!stateExists('DADO_BAJA')" (click)="open('retire')"><svg lucideCircleAlert></svg><span>Da de Baja<small>Motivo obligatorio</small></span></button>
             </div>
@@ -326,7 +330,7 @@ type DeviceAction = 'assign-person' | 'assign-department' | 'return' | 'state' |
                       }
                     }
                   </div>
-                  @if(isSmartphone(device)){
+                  @if(canCarrySim(device)){
                     <div class="field delivery-field delivery-sim">
                       <label for="delivery-phone">Número telefónico{{ jointDelivery() ? ' *' : '' }}</label>
                       <input id="delivery-phone" type="tel" inputmode="tel" maxlength="20" placeholder="569XXXXXXXX" [value]="deliveryPhone()" (input)="deliveryPhone.set($any($event.target).value); actionError.set('')" [disabled]="submitting()" />
@@ -552,6 +556,7 @@ export class DispositivoDetail implements OnInit {
   protected readonly createdActa=signal<ActaEntrega|null>(null);
   protected readonly clp=formatClp;
   protected readonly isSmartphone=isSmartphoneDevice;
+  protected readonly canCarrySim=canDeviceCarrySim;
   protected readonly deviceTechnicalIdentifier=deviceTechnicalIdentifier;
   protected readonly isPhoneValid=isChileanPhoneInputValid;
   protected readonly smartphonePhoneText=smartphonePhoneText;
@@ -619,7 +624,7 @@ export class DispositivoDetail implements OnInit {
   }
   protected openSimAssociation(): void {
     const device=this.item();
-    if(!device || !isSmartphoneDevice(device) || this.submitting())return;
+    if(!device || !canDeviceCarrySim(device) || this.submitting())return;
     const currentPhone=smartphonePhoneText(device);this.action.set(null);this.selectedSim.set(null);this.simPhone.set(currentPhone==='Sin número telefónico asociado'||currentPhone==='Número telefónico pendiente de registrar'?'':currentPhone);this.simError.set('');this.modalError.set(null);this.associationSims.set([]);this.simAssociationOpen.set(true);this.simLoading.set(true);
     this.simService.listar().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({next:sims=>{this.associationSims.set(sims.filter(isSimAvailableForDeviceAssociation));this.simLoading.set(false);},error:error=>{const message=errorMessage(error);this.simError.set(message);this.showModalError('No se pudieron cargar las SIM disponibles',message);this.simLoading.set(false);}});
   }
@@ -713,7 +718,7 @@ export class DispositivoDetail implements OnInit {
       this.toast.error('No se pudo guardar el número telefónico',message);
     }});
   }
-  protected open(action: DeviceAction): void { const actor=this.auth.user();if(!actor){this.actionError.set('La sesión no permite identificar al responsable TI.');this.toast.error('Sesión no válida','Vuelva a iniciar sesión antes de registrar una operación.');return;}if(action==='service'&&this.technicalServiceActive()){this.actionErrorTitle.set('No se pudo registrar el envío a servicio técnico');this.actionError.set('El equipo ya se encuentra en servicio técnico.');return;}this.actionForm.reset({ colaboradorId: '', departamentoId: '',recibidoPorId:'', localidad: this.item()?.localidad || '', ubicacionDetalle: this.item()?.ubicacionDetalle || '', estadoId: '',accionLineaExtravio:'',proveedor:'',fechaEnvio: action==='service' ? todayDateInputValue() : '',tipoServicio: action==='service' ? 'DIAGNOSTICO' : '',fallaReportada:'',accesoriosEntregados:'',motivoBaja:'',motivoRecuperacion:'', responsable: actor.nombre, observaciones: '' }); this.searchCollaborator(''); this.jointDelivery.set(false); this.deliveryPhone.set(action==='assign-person'&&this.item()&&isSmartphoneDevice(this.item()!) ? smartphonePhoneValue(this.item()!) || '' : ''); this.searchSim(''); this.actionError.set(''); this.actionErrorTitle.set(''); this.action.set(action); }
+   protected open(action: DeviceAction): void { const actor=this.auth.user();if(!actor){this.actionError.set('La sesión no permite identificar al responsable TI.');this.toast.error('Sesión no válida','Vuelva a iniciar sesión antes de registrar una operación.');return;}if(action==='service'&&this.technicalServiceActive()){this.actionErrorTitle.set('No se pudo registrar el envío a servicio técnico');this.actionError.set('El equipo ya se encuentra en servicio técnico.');return;}this.actionForm.reset({ colaboradorId: '', departamentoId: '',recibidoPorId:'', localidad: this.item()?.localidad || '', ubicacionDetalle: this.item()?.ubicacionDetalle || '', estadoId: '',accionLineaExtravio:'',proveedor:'',fechaEnvio: action==='service' ? todayDateInputValue() : '',tipoServicio: action==='service' ? 'DIAGNOSTICO' : '',fallaReportada:'',accesoriosEntregados:'',motivoBaja:'',motivoRecuperacion:'', responsable: actor.nombre, observaciones: '' }); this.searchCollaborator(''); this.jointDelivery.set(false); this.deliveryPhone.set(action==='assign-person'&&this.item()&&canDeviceCarrySim(this.item()!) ? smartphonePhoneValue(this.item()!) || '' : ''); this.searchSim(''); this.actionError.set(''); this.actionErrorTitle.set(''); this.action.set(action); }
   protected openState(code: string): void { const state = this.states().find((item) => item.codigo === code); if (!state) return; this.open('state'); this.actionForm.controls.estadoId.setValue(state.id); if(code==='EXTRAVIADO'&&this.item()&&isSmartphoneDevice(this.item()!)&&!this.item()!.simAsociada)this.actionForm.controls.accionLineaExtravio.setValue('NO_APLICA'); }
   protected isReportingSmartphoneLost(): boolean { const target=this.states().find(state=>state.id===this.actionForm.controls.estadoId.value);const device=this.item();return this.action()==='state'&&!!device&&isSmartphoneDevice(device)&&target?.codigo==='EXTRAVIADO'; }
   protected actionTitle(): string { return { 'assign-person': 'Registrar entrega', 'assign-department': 'Entregar a departamento', return: 'Registrar recepción', state: 'Cambiar situación del equipo', recover: 'Registrar equipo encontrado', service:'Orden de Trabajo - Servicio Técnico',retire:'Retirar del inventario' }[this.action() || 'return']; }
@@ -736,8 +741,8 @@ export class DispositivoDetail implements OnInit {
     this.actionForm.controls.responsable.setValue(actor.nombre);
     if (action === 'assign-person' && !value.colaboradorId) { this.actionError.set('Selecciona un colaborador.'); return; }
     const deliveryPhoneValue = this.deliveryPhone().trim();
-    if (action === 'assign-person' && this.item() && isSmartphoneDevice(this.item()!) && deliveryPhoneValue && !isChileanPhoneInputValid(deliveryPhoneValue)) { this.actionError.set('Ingresa un número telefónico chileno válido.'); return; }
-    if (action === 'assign-person' && this.jointDelivery() && (!this.selectedSim() || !this.item() || !isSmartphoneDevice(this.item()!) || this.item()!.simAsociada)) { this.actionError.set('Selecciona una SIM disponible para este Smartphone.'); return; }
+    if (action === 'assign-person' && this.item() && canDeviceCarrySim(this.item()!) && deliveryPhoneValue && !isChileanPhoneInputValid(deliveryPhoneValue)) { this.actionError.set('Ingresa un número telefónico chileno válido.'); return; }
+    if (action === 'assign-person' && this.jointDelivery() && (!this.selectedSim() || !this.item() || !canDeviceCarrySim(this.item()!) || this.item()!.simAsociada)) { this.actionError.set('Selecciona una SIM disponible para este dispositivo.'); return; }
     if (action === 'assign-person' && this.jointDelivery() && !isChileanPhoneInputValid(deliveryPhoneValue)) { this.actionError.set('Ingresa un número telefónico chileno válido para la SIM.'); return; }
     if (action === 'assign-department' && (!value.departamentoId||!value.recibidoPorId)) { this.actionError.set('Selecciona el departamento y el colaborador que recibe.'); return; }
     if (action === 'state' && !value.estadoId) { this.actionError.set('Selecciona un estado.'); return; }
@@ -756,7 +761,7 @@ export class DispositivoDetail implements OnInit {
     if (action === 'state' && target?.codigo === 'EXTRAVIADO' && !await this.confirmation.confirm('Esta acción marcará el equipo como perdido y quedará registrada en su historial.', { title: 'Reportar equipo perdido', confirmLabel: 'Reportar', tone: 'danger' })) return;
     const common = { responsable: actor.nombre, observaciones: value.observaciones.trim() || null };
     let request: Observable<Dispositivo|OrdenServicio|ResultadoDevolucion>;
-    if (action === 'assign-person') request = this.service.asignarColaborador(this.codigo, { ...common, colaboradorId: Number(value.colaboradorId), ...(deliveryPhoneValue && this.item() && isSmartphoneDevice(this.item()!) ? { numeroTelefonico: deliveryPhoneValue } : {}), ...(this.jointDelivery() && this.selectedSim() ? { simCodigoInventario: this.selectedSim()!.codigoInventario } : {}) });
+    if (action === 'assign-person') request = this.service.asignarColaborador(this.codigo, { ...common, colaboradorId: Number(value.colaboradorId), ...(deliveryPhoneValue && this.item() && canDeviceCarrySim(this.item()!) ? { numeroTelefonico: deliveryPhoneValue } : {}), ...(this.jointDelivery() && this.selectedSim() ? { simCodigoInventario: this.selectedSim()!.codigoInventario } : {}) });
     else if (action === 'assign-department') request = this.service.asignarDepartamento(this.codigo, { ...common, departamentoId: Number(value.departamentoId),recibidoPorId:Number(value.recibidoPorId), localidad: value.localidad.trim() || null, ubicacionDetalle: value.ubicacionDetalle.trim() || null });
     else if (action === 'return') request = this.service.devolver(this.codigo, common);
     else if(action==='service')request=this.technicalService.crear({dispositivoCodigo:this.codigo,proveedor:value.proveedor.trim()||null,areaSolicitante:value.areaSolicitante.trim()||this.item()?.departamento?.nombre||'Area TI - Aguas San Isidro',contactoServicio:value.contactoServicio.trim()||null,fechaEnvio:value.fechaEnvio||null,tipoServicio:value.tipoServicio as 'GARANTIA'|'REPARACION'|'MANTENCION'|'DIAGNOSTICO',fallaReportada:value.fallaReportada.trim(),accesoriosEntregados:value.accesoriosEntregados.trim()||null,observaciones:value.observaciones.trim()||null,responsable:actor.nombre});
@@ -772,7 +777,7 @@ export class DispositivoDetail implements OnInit {
         }
         this.action.set(null);
         this.submitting.set(false);
-        if ('codigoInventario' in result && action === 'assign-person' && isSmartphoneDevice(result) && deliveryPhoneValue) {
+        if ('codigoInventario' in result && action === 'assign-person' && canDeviceCarrySim(result) && deliveryPhoneValue) {
           const savedNumber = smartphonePhoneValue(result) || normalizeChileanPhoneInput(deliveryPhoneValue);
           const simStatus = this.jointDelivery() ? 'SIM asociada correctamente' : 'SIM pendiente de asociar';
           this.showFeedback({

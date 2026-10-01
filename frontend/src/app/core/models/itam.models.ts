@@ -15,10 +15,10 @@ export interface InventoryCodeFamilyInput { nombreFamilia: string; prefijo: stri
 export interface PrefixSuggestion { prefijo: string | null; disponible: boolean; mensaje: string; }
 export type TipoCampoFormulario = 'text' | 'select' | 'number';
 export interface CampoEspecificoFormulario { clave: string; etiqueta: string; tipo: TipoCampoFormulario; requerido: boolean; maxLength?: number; min?: number; max?: number; opciones?: string[]; }
-export interface ConfiguracionFormularioTipo { mostrarMarca: boolean; mostrarModelo: boolean; mostrarNumeroSerie: boolean; camposEspecificos: CampoEspecificoFormulario[]; }
+export interface ConfiguracionFormularioTipo { mostrarMarca: boolean; mostrarModelo: boolean; mostrarNumeroSerie: boolean; camposEspecificos: CampoEspecificoFormulario[]; permiteSim?: boolean; }
 export interface FamiliaCodigoTipoDispositivo { id: string; nombre: string; prefijo: string; activo: boolean; estrategiaCodigo: InventoryCodeStrategy; agrupaTipos: boolean; etiquetaOperativa: string | null; }
-export interface TipoDispositivo { id: string; nombre: string; descripcion: string | null; activo: boolean; requiereImei: boolean; configuracionFormulario: ConfiguracionFormularioTipo; familiaCodigoInventario: FamiliaCodigoTipoDispositivo | null; creadoEn: string; actualizadoEn: string; }
-export interface TipoDispositivoInput { nombre: string; descripcion?: string | null; familiaCodigoInventarioId?: number | null; activo?: boolean; requiereImei?: boolean; }
+export interface TipoDispositivo { id: string; nombre: string; descripcion: string | null; activo: boolean; requiereImei: boolean; configuracionFormulario: ConfiguracionFormularioTipo; permiteSim?: boolean; familiaCodigoInventario: FamiliaCodigoTipoDispositivo | null; creadoEn: string; actualizadoEn: string; }
+export interface TipoDispositivoInput { nombre: string; descripcion?: string | null; familiaCodigoInventarioId?: number | null; activo?: boolean; requiereImei?: boolean; permiteSim?: boolean; }
 export interface StockAlertConfiguration {
   tipoDispositivo: { id: string; nombre: string };
   disponibles: number;

@@ -8,14 +8,16 @@ import { actualizarTipoDispositivo, crearTipoDispositivo,
   obtenerFamiliaDispositivoPorId,
   obtenerTipoDispositivoPorId, obtenerTipoDispositivoPorNombre
 } from "./tipos-dispositivo.repository";
-import type { ActualizarTipoDispositivoInput, CrearTipoDispositivoInput,
-  TipoDispositivo, TipoDispositivoFilters, TipoDispositivoRow
+import { tipoDispositivoPermiteSim,
+  type ActualizarTipoDispositivoInput, type CrearTipoDispositivoInput,
+  type TipoDispositivo, type TipoDispositivoFilters, type TipoDispositivoRow
 } from "./tipos-dispositivo.types";
 
 export const mapTipoDispositivo = (row: TipoDispositivoRow): TipoDispositivo => ({
   id: row.id, nombre: row.nombre, descripcion: row.descripcion, activo: row.activo,
   requiereImei: row.requiere_imei,
   configuracionFormulario: row.configuracion_formulario,
+  permiteSim: tipoDispositivoPermiteSim(row.nombre, row.configuracion_formulario),
   familiaCodigoInventario:
     row.familia_codigo_inventario_id && row.familia_nombre &&
     row.familia_prefijo && row.familia_activa !== null

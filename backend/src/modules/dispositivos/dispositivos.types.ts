@@ -35,6 +35,7 @@ export interface TipoDispositivoResumen {
   activo: boolean;
   requiereImei: boolean;
   configuracionFormulario: import("../tipos-dispositivo/tipos-dispositivo.types").ConfiguracionFormularioTipo;
+  permiteSim: boolean;
   familiaCodigoInventario: {
     id: string;
     nombre: string;

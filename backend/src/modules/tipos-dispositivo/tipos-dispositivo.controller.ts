@@ -32,7 +32,8 @@ export const crearTipoDispositivoController = asyncHandler(
       familiaCodigoInventarioId: parseOptionalPositiveInteger(
         body.familiaCodigoInventarioId, "familiaCodigoInventarioId"),
       activo: parseOptionalBoolean(body.activo, "activo"),
-      requiereImei: parseOptionalBoolean(body.requiereImei, "requiereImei")
+      requiereImei: parseOptionalBoolean(body.requiereImei, "requiereImei"),
+      permiteSim: parseOptionalBoolean(body.permiteSim, "permiteSim")
     };
     sendItem(res, await crearNuevoTipoDispositivo(input), 201);
   }
@@ -43,7 +44,7 @@ export const actualizarTipoDispositivoController = asyncHandler(
     const id = parsePositiveInteger(req.params.id, "id");
     const body = parseBodyObject(req.body);
     requireAtLeastOneDefined(body,
-      ["nombre", "descripcion", "familiaCodigoInventarioId", "activo", "requiereImei"]);
+      ["nombre", "descripcion", "familiaCodigoInventarioId", "activo", "requiereImei", "permiteSim"]);
     const input: ActualizarTipoDispositivoInput = {
       nombre: body.nombre === undefined ? undefined
         : parseRequiredString(body.nombre, "nombre", 80),
@@ -51,7 +52,8 @@ export const actualizarTipoDispositivoController = asyncHandler(
       familiaCodigoInventarioId: parseOptionalPositiveInteger(
         body.familiaCodigoInventarioId, "familiaCodigoInventarioId"),
       activo: parseOptionalBoolean(body.activo, "activo"),
-      requiereImei: parseOptionalBoolean(body.requiereImei, "requiereImei")
+      requiereImei: parseOptionalBoolean(body.requiereImei, "requiereImei"),
+      permiteSim: parseOptionalBoolean(body.permiteSim, "permiteSim")
     };
     sendItem(res, await actualizarTipoDispositivoExistente(id, input));
   }
