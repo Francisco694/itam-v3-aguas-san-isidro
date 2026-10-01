@@ -13,14 +13,7 @@ import {
   logout,
   refreshSession
 } from "./auth.service";
-
-const cookieOptions = {
-  httpOnly: true,
-  sameSite: "lax" as const,
-  secure: env.nodeEnv === "production",
-  path: "/",
-  maxAge: 12 * 60 * 60 * 1000
-};
+import { sessionCookieOptions } from "../../shared/session-cookie";
 
 const parsePin = (value: unknown, field: string): string => {
   if (typeof value !== "string" || !/^\d{6}$/.test(value)) {
@@ -37,8 +30,8 @@ const parsePassword = (value: unknown, field: string): string => {
   return password;
 };
 
-const setSession = (res: Response, token: string): void => {
-  res.cookie(SESSION_COOKIE, token, cookieOptions);
+const setSession = (req: Request, res: Response, token: string): void => {
+  res.cookie(SESSION_COOKIE, token, sessionCookieOptions(req));
 };
 
 export const loginController = asyncHandler(
@@ -48,7 +41,7 @@ export const loginController = asyncHandler(
       parseRequiredString(body.email, "email", 254),
       parseRequiredString(body.password, "password", 200)
     );
-    setSession(res, result.token);
+    setSession(req, res, result.token);
     sendItem(res, result.user);
   }
 );
@@ -60,7 +53,7 @@ export const loginPinController = asyncHandler(
       parseRequiredString(body.email, "email", 254),
       parsePin(body.pin, "pin")
     );
-    setSession(res, result.token);
+    setSession(req, res, result.token);
     sendItem(res, result.user);
   }
 );
@@ -107,7 +100,7 @@ export const logoutController = asyncHandler(
   async (req: Request, res: Response) => {
     await logout(cookieValue(req.headers.cookie, SESSION_COOKIE));
     res.clearCookie(SESSION_COOKIE, {
-      ...cookieOptions,
+      ...sessionCookieOptions(req),
       maxAge: undefined
     });
     res.status(204).send();

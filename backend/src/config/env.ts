@@ -46,10 +46,7 @@ export const env = {
   nodeEnv: process.env.NODE_ENV ?? "development",
 
   host:
-    process.env.BACKEND_HOST ??
-    ((process.env.NODE_ENV ?? "development") === "development"
-      ? "127.0.0.1"
-      : "0.0.0.0"),
+    process.env.BACKEND_HOST ?? "127.0.0.1",
 
   port: Number(process.env.PORT ?? 3000),
 

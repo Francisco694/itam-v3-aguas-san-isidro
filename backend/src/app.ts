@@ -28,6 +28,11 @@ import { auditMutations, requireAuth } from "./shared/auth.middleware";
 
 const app = express();
 
+// Nginx es el único proxy público y se conecta por loopback. Esto permite que
+// req.secure refleje X-Forwarded-Proto sin aceptar ese encabezado desde una
+// conexión externa directa al backend.
+app.set("trust proxy", "loopback");
+
 const configuredCorsOrigin =
   env.corsOrigin?.trim() ||
   (env.nodeEnv === "development"

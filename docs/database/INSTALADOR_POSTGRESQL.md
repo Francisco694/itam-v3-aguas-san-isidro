@@ -2,7 +2,7 @@
 
 ## Alcance
 
-`database/install.sh` prepara una base PostgreSQL 16 completamente vacía para ITAM. El instalador ejecuta 32 archivos en un orden explícito, detiene la ejecución ante cualquier error y valida el resultado final.
+`database/install.sh` prepara una base PostgreSQL 16 completamente vacía para ITAM. El instalador ejecuta 33 archivos en un orden explícito, detiene la ejecución ante cualquier error y valida el resultado final.
 
 No modifica `itam_dev` ni `itam_prod` por defecto. No recibe contraseñas en la línea de comandos y no contiene credenciales.
 
@@ -13,11 +13,12 @@ No modifica `itam_dev` ni `itam_prod` por defecto. No recibe contraseñas en la 
 - `023_canonical_collaborator_rut.sql` depende de los colaboradores históricos con ID 1 y 392. No es reproducible en una base nueva y queda fuera del instalador.
 - `023N_canonical_collaborator_rut_clean_install.sql` se utiliza únicamente en una instalación vacía. No crea colaboradores ficticios, conserva las restricciones canónicas del RUT y registra `023N`, nunca `023`.
 - `029` se ejecuta antes de `030`–`032` en una instalación nueva. `033` normaliza el esquema de Servicio Técnico, elimina el `DEFAULT` y la nulabilidad obligatoria de `tipo_servicio`, y no inventa datos históricos.
+- `034` crea `sesiones_usuario.ultima_actividad` y el índice parcial `idx_sesiones_usuario_actividad`, corrigiendo el defecto histórico de `018` sin modificar esa migración.
 
 El orden final es:
 
 ```text
-001–017, 019–022, 023N, 024–033
+001–017, 019–022, 023N, 024–034
 ```
 
 ## Modo verificación
@@ -39,7 +40,7 @@ Antes de ejecutar una migración, el instalador:
 3. exige que la base de destino exista;
 4. verifica que no contenga tablas, vistas, secuencias ni otros objetos de usuario;
 5. utiliza `ON_ERROR_STOP=1` en cada llamada a `psql`;
-6. valida que el resultado tenga 28 tablas, 32 registros de migraciones y no registre `018` ni `023`.
+6. valida que el resultado tenga 28 tablas, 33 registros de migraciones y no registre `018` ni `023`.
 
 Para una ejecución futura y deliberada sobre `itam_prod`, se requiere además:
 
@@ -121,7 +122,7 @@ WHERE table_schema = 'itam' \
 ORDER BY column_name;"
 ```
 
-Se espera obtener 28 tablas, 32 migraciones, `023N` sin `023`, ausencia de `018`, y `tipo_servicio` como `VARCHAR(20)`, nullable y sin valor predeterminado.
+Se espera obtener 28 tablas, 33 migraciones, `023N` sin `023`, ausencia de `018`, y `sesiones_usuario.ultima_actividad` como `TIMESTAMPTZ NOT NULL DEFAULT now()` junto con su índice parcial.
 
 ## Resultado esperado y límites
 

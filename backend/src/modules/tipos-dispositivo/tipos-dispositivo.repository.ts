@@ -91,13 +91,13 @@ export const crearTipoDispositivo = async (
     `INSERT INTO itam.tipos_dispositivo
       (nombre, descripcion, familia_codigo_inventario_id, activo, requiere_imei,
        configuracion_formulario)
-     VALUES ($1, $2, $3, COALESCE($4, TRUE), COALESCE($5, FALSE),
+     VALUES ($1::varchar, $2, $3, COALESCE($4, TRUE), COALESCE($5, FALSE),
        jsonb_build_object(
          'mostrarMarca', TRUE,
          'mostrarModelo', TRUE,
          'mostrarNumeroSerie', TRUE,
          'camposEspecificos', '[]'::jsonb,
-         'permiteSim', COALESCE($6, UPPER(BTRIM($1)) = 'SMARTPHONE')
+         'permiteSim', COALESCE($6, UPPER(BTRIM($1::varchar)) = 'SMARTPHONE')
        )) RETURNING id`,
     [input.nombre, input.descripcion ?? null,
       input.familiaCodigoInventarioId ?? null, input.activo ?? null,
