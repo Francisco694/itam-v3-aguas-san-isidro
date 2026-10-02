@@ -1,0 +1,195 @@
+name: CD despliegue automatico a AWS
+
+on:
+  workflow_run:
+    workflows:
+      - CI de validación y compilación
+    types:
+      - completed
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: itam-production-deploy
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: 24
+  DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+jobs:
+  deploy:
+    name: Desplegar release en AWS
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Descargar commit validado
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
+
+      - name: Configurar Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      - name: Instalar y compilar backend
+        working-directory: backend
+        run: |
+          npm ci
+          npm run typecheck
+          npm run build
+
+      - name: Instalar y compilar frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+          test -f dist/frontend/browser/index.html
+
+      - name: Empaquetar release
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_id="${DEPLOY_SHA:0:7}"
+          mkdir -p .deploy
+          tar -czf ".deploy/backend-${release_id}.tar.gz" \
+            -C backend dist package.json package-lock.json
+          tar -czf ".deploy/frontend-${release_id}.tar.gz" \
+            -C frontend/dist/frontend/browser .
+
+      - name: Configurar acceso SSH
+        shell: bash
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.AWS_SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.AWS_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          test -n "$SSH_PRIVATE_KEY"
+          test -n "$SSH_KNOWN_HOSTS"
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$SSH_PRIVATE_KEY" > "$HOME/.ssh/itam_deploy_key"
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/itam_deploy_key" "$HOME/.ssh/known_hosts"
+
+      - name: Transferir artefactos
+        shell: bash
+        env:
+          AWS_HOST: ${{ secrets.AWS_HOST }}
+          AWS_USER: ${{ secrets.AWS_USER }}
+        run: |
+          set -euo pipefail
+          test -n "$AWS_HOST"
+          test -n "$AWS_USER"
+          release_id="${DEPLOY_SHA:0:7}"
+          scp -i "$HOME/.ssh/itam_deploy_key" \
+            ".deploy/backend-${release_id}.tar.gz" \
+            ".deploy/frontend-${release_id}.tar.gz" \
+            "${AWS_USER}@${AWS_HOST}:/tmp/"
+
+      - name: Crear release, actualizar servicios y validar
+        shell: bash
+        env:
+          AWS_HOST: ${{ secrets.AWS_HOST }}
+          AWS_USER: ${{ secrets.AWS_USER }}
+        run: |
+          set -euo pipefail
+          release_id="${DEPLOY_SHA:0:7}"
+          ssh -i "$HOME/.ssh/itam_deploy_key" "${AWS_USER}@${AWS_HOST}" \
+            "RELEASE_ID=${release_id} bash -s" <<'REMOTE_SCRIPT'
+          set -Eeuo pipefail
+
+          release_dir="/opt/itam/releases/${RELEASE_ID}"
+          backend_archive="/tmp/backend-${RELEASE_ID}.tar.gz"
+          frontend_archive="/tmp/frontend-${RELEASE_ID}.tar.gz"
+          nginx_config="/etc/nginx/sites-enabled/itam"
+          nginx_backup="/var/backups/itam/nginx-itam-before-${RELEASE_ID}"
+
+          if [ -e "$release_dir" ]; then
+            echo "El release ya existe: $release_dir"
+            exit 1
+          fi
+          test -f "$backend_archive"
+          test -f "$frontend_archive"
+
+          previous_backend="$(pm2 jlist | node -e '
+            let input = "";
+            process.stdin.on("data", (chunk) => input += chunk);
+            process.stdin.on("end", () => {
+              const processes = JSON.parse(input);
+              const app = processes.find((item) => item.name === "itam-backend");
+              process.stdout.write(app?.pm2_env?.pm_cwd ?? "");
+            });
+          ')"
+          test -n "$previous_backend"
+          test -f "$previous_backend/.env"
+
+          mkdir -p "$release_dir/backend" "$release_dir/frontend-dist"
+          tar -xzf "$backend_archive" -C "$release_dir/backend"
+          tar -xzf "$frontend_archive" -C "$release_dir/frontend-dist"
+          test -f "$release_dir/backend/dist/server.js"
+          test -f "$release_dir/frontend-dist/index.html"
+          cp "$previous_backend/.env" "$release_dir/backend/.env"
+
+          (
+            cd "$release_dir/backend"
+            npm ci --omit=dev --no-audit --no-fund
+          )
+
+          sudo mkdir -p /var/backups/itam
+          sudo cp "$nginx_config" "$nginx_backup"
+
+          rollback_backend() {
+            set +e
+            pm2 delete itam-backend
+            pm2 start "$previous_backend/dist/server.js" \
+              --name itam-backend \
+              --cwd "$previous_backend" \
+              --update-env
+            pm2 save
+          }
+
+          pm2 delete itam-backend
+          pm2 start "$release_dir/backend/dist/server.js" \
+            --name itam-backend \
+            --cwd "$release_dir/backend" \
+            --update-env
+          sleep 3
+
+          if ! curl -fsS --max-time 10 http://127.0.0.1:3000/api/v1/health; then
+            echo "El backend nuevo no supero el health check; se restaura el anterior."
+            rollback_backend
+            exit 1
+          fi
+
+          sudo sed -E -i \
+            "s#/opt/itam/releases/[A-Za-z0-9._-]+/frontend-dist#/opt/itam/releases/${RELEASE_ID}/frontend-dist#g" \
+            "$nginx_config"
+
+          if ! sudo nginx -t; then
+            echo "La configuracion Nginx no es valida; se restaura el release anterior."
+            sudo cp "$nginx_backup" "$nginx_config"
+            sudo nginx -t
+            sudo systemctl reload nginx
+            rollback_backend
+            exit 1
+          fi
+
+          sudo systemctl reload nginx
+          pm2 save
+          rm -f "$backend_archive" "$frontend_archive"
+          echo "Release ${RELEASE_ID} desplegado correctamente."
+          REMOTE_SCRIPT
