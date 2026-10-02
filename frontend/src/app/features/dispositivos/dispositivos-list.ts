@@ -160,7 +160,7 @@ const printableDocument = (
   template: `
     <app-page-header title="Inventario de Equipos" subtitle="Control físico, custodias y condición operativa de los activos.">
       <button class="btn btn--navy mobile-qr-action" type="button" (click)="scannerOpen.set(true)"><svg lucideCamera></svg> Escanear QR</button>
-      @if (auth.canWrite()) { <a class="btn btn--primary inventory-new-action" routerLink="nuevo"><svg lucidePlus></svg> Nuevo activo</a> }
+      @if (auth.user()?.rol !== 'SOLO_LECTURA') { <a class="btn btn--primary inventory-new-action" routerLink="nuevo"><svg lucidePlus></svg> Nuevo activo</a> }
       <button class="btn btn--secondary inventory-export-action" type="button" [disabled]="!items().length" (click)="exportCsv()"><svg lucideDownload></svg> Exportar CSV</button>
     </app-page-header>
     <section class="inventory-view-switch" aria-label="Vista del inventario">
@@ -214,7 +214,7 @@ const printableDocument = (
       </form>
       @if (loading()) { <app-view-state kind="loading" title="Cargando dispositivos" message="Consultando el inventario real…" /> }
       @else if (error()) { <app-view-state kind="error" title="No se pudo cargar" [message]="error()" (retry)="load()" /> }
-      @else if (!items().length) { <div class="empty-with-action"><app-view-state kind="empty" [title]="emptyTitle()" [message]="emptyMessage()" />@if(!allItems().length && auth.canWrite()){<a class="btn btn--primary" routerLink="nuevo"><svg lucidePlus></svg> Registrar dispositivo</a>}</div> }
+      @else if (!items().length) { <div class="empty-with-action"><app-view-state kind="empty" [title]="emptyTitle()" [message]="emptyMessage()" />@if(!allItems().length && auth.user()?.rol !== 'SOLO_LECTURA'){<a class="btn btn--primary" routerLink="nuevo"><svg lucidePlus></svg> Registrar dispositivo</a>}</div> }
       @else {
         <div class="table-heading">
           <div><strong>{{ items().length }}</strong><span>{{ items().length === 1 ? 'equipo encontrado' : 'equipos encontrados' }}</span></div>
@@ -234,7 +234,7 @@ const printableDocument = (
             } @else {
               <span class="cell-primary">{{ custody(item) }}</span><span class="cell-secondary">{{ item.colaborador?.rut ? rut(item.colaborador!.rut) : item.departamento?.nombre || 'Sin responsable actual' }}</span>
             }
-          </td><td><span class="verification-badge" [class.verification-badge--PENDIENTE]="item.origenRegistro === 'IMPORTADO' && item.verificacionFisica?.resultado !== 'VERIFICADO'" [class.verification-badge--VERIFICADO]="item.origenRegistro === 'MANUAL' || item.verificacionFisica?.resultado === 'VERIFICADO'" [class.verification-badge--REVISAR]="false">{{ verification(item.verificacionFisica?.resultado, item.origenRegistro) }}</span></td><td class="location-cell"><span class="cell-primary">{{ item.localidad || 'Sin localidad' }}</span><span class="cell-secondary">{{ item.ubicacionDetalle || 'Sin detalle de ubicación' }}</span></td><td><div class="actions"><a class="btn btn--secondary btn--small table-icon-action" [routerLink]="[item.codigoInventario]" title="Ver detalle" [attr.aria-label]="'Ver detalle de ITAM ' + item.codigoInventario"><svg lucideEye aria-hidden="true"></svg></a><a class="btn btn--secondary btn--small table-icon-action" [routerLink]="[item.codigoInventario,'editar']" title="Editar ficha" [attr.aria-label]="'Editar ficha de ITAM ' + item.codigoInventario"><svg lucidePencil aria-hidden="true"></svg></a></div></td></tr>}
+          </td><td><span class="verification-badge" [class.verification-badge--PENDIENTE]="item.origenRegistro === 'IMPORTADO' && item.verificacionFisica?.resultado !== 'VERIFICADO'" [class.verification-badge--VERIFICADO]="item.origenRegistro === 'MANUAL' || item.verificacionFisica?.resultado === 'VERIFICADO'" [class.verification-badge--REVISAR]="false">{{ verification(item.verificacionFisica?.resultado, item.origenRegistro) }}</span></td><td class="location-cell"><span class="cell-primary">{{ item.localidad || 'Sin localidad' }}</span><span class="cell-secondary">{{ item.ubicacionDetalle || 'Sin detalle de ubicación' }}</span></td><td><div class="actions"><a class="btn btn--secondary btn--small table-icon-action" [routerLink]="[item.codigoInventario]" title="Ver detalle" [attr.aria-label]="'Ver detalle de ITAM ' + item.codigoInventario"><svg lucideEye aria-hidden="true"></svg></a>@if (auth.user()?.rol !== 'SOLO_LECTURA') { <a class="btn btn--secondary btn--small table-icon-action" [routerLink]="[item.codigoInventario,'editar']" title="Editar ficha" [attr.aria-label]="'Editar ficha de ITAM ' + item.codigoInventario"><svg lucidePencil aria-hidden="true"></svg></a> }</div></td></tr>}
         </tbody></table></div>
         <div class="mobile-record-list inventory-mobile-list">
           @for(item of items(); track item.id) {
@@ -255,7 +255,7 @@ const printableDocument = (
               </dl>
               <footer class="mobile-record-card__actions">
                 <a class="btn btn--primary" [routerLink]="[item.codigoInventario]">Gestionar</a>
-                <a class="btn btn--secondary" [routerLink]="[item.codigoInventario,'editar']">Editar</a>
+                @if (auth.user()?.rol !== 'SOLO_LECTURA') { <a class="btn btn--secondary" [routerLink]="[item.codigoInventario,'editar']">Editar</a> }
               </footer>
             </article>
           }

@@ -130,7 +130,7 @@ type DetailSource = 'search' | 'desktop' | 'mobile';
                     >
                       {{ isExpanded(result.procesoAbiertoId, 'search') ? 'Contraer' : 'Continuar proceso' }}
                     </button>
-                  } @else {
+                  } @else if (auth.user()?.rol !== 'SOLO_LECTURA') {
                     <button class="btn btn--primary" type="button" (click)="requestStart(result)">
                       Iniciar proceso
                     </button>
@@ -325,7 +325,7 @@ export class OffboardingPage implements OnInit {
   private readonly fb = inject(FormBuilder);
   private readonly offboardingService = inject(OffboardingService);
   private readonly devicesService = inject(DispositivosService);
-  private readonly auth = inject(AuthService);
+  protected readonly auth = inject(AuthService);
   protected readonly proofService = inject(ComprobantesDevolucionService);
   private readonly toast = inject(ToastService);
 
@@ -414,12 +414,14 @@ export class OffboardingPage implements OnInit {
   }
 
   protected requestStart(candidate: OffboardingSearchResult): void {
+    if (this.auth.user()?.rol === 'SOLO_LECTURA') return;
     this.startForm.reset({ observations: '' });
     this.startError.set('');
     this.startCandidate.set(candidate);
   }
 
   protected startProcess(): void {
+    if (this.auth.user()?.rol === 'SOLO_LECTURA') return;
     const candidate = this.startCandidate();
     if (!candidate || this.starting()) return;
     this.starting.set(true);
@@ -498,12 +500,14 @@ export class OffboardingPage implements OnInit {
   }
 
   protected openResolution(asset: OffboardingAsset): void {
+    if (this.auth.user()?.rol === 'SOLO_LECTURA') return;
     this.resolutionForm.reset({ resultado: 'DEVUELTO', condicion: '', observaciones: '' });
     this.resolutionError.set('');
     this.resolvingAsset.set(asset);
   }
 
   protected resolveAsset(): void {
+    if (this.auth.user()?.rol === 'SOLO_LECTURA') return;
     const asset = this.resolvingAsset();
     if (!asset || this.resolutionForm.invalid || this.resolving()) return;
     const value = this.resolutionForm.getRawValue();
@@ -543,12 +547,14 @@ export class OffboardingPage implements OnInit {
   }
 
   protected requestClose(process: OffboardingProcessDetail): void {
+    if (this.auth.user()?.rol === 'SOLO_LECTURA') return;
     if (process.equiposPendientes > 0) return;
     this.closeError.set('');
     this.closeCandidate.set(process);
   }
 
   protected completeProcess(): void {
+    if (this.auth.user()?.rol === 'SOLO_LECTURA') return;
     const process = this.closeCandidate();
     if (!process || this.closing()) return;
     this.closing.set(true);

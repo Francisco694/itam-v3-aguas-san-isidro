@@ -31,7 +31,7 @@ export class AuthService {
     return this.http
       .get<ApiItemResponse<AuthUser>>(`${this.url}/me`)
       .pipe(
-        map((response) => response.data),
+        map((response) => this.normalizeUser(response.data)),
         tap((user) => {
           this.user.set(user);
           this.checked = true;
@@ -95,11 +95,19 @@ export class AuthService {
     return this.http
       .post<ApiItemResponse<AuthUser>>(`${this.url}${path}`, credentials)
       .pipe(
-        map((response) => response.data),
+        map((response) => this.normalizeUser(response.data)),
         tap((user) => {
           this.user.set(user);
           this.checked = true;
         })
       );
+  }
+
+  private normalizeUser(user: AuthUser): AuthUser {
+    const rol = String(user.rol || '')
+      .trim()
+      .toUpperCase()
+      .replace(/[ -]+/g, '_') as AuthUser['rol'];
+    return { ...user, rol };
   }
 }

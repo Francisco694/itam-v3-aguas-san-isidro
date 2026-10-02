@@ -3,6 +3,7 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { LucideHash, LucidePencil, LucidePlus, LucideSave, LucideX } from '@lucide/angular';
 import { InventoryCodeFamily } from '../../core/models/itam.models';
 import { InventoryCodeService } from '../../core/services/inventory-code.service';
+import { AuthService } from '../../core/services/auth.service';
 import { ToastService } from '../../core/services/toast.service';
 import { PageHeader } from '../../shared/components/page-header/page-header';
 import { ViewState } from '../../shared/components/view-state/view-state';
@@ -16,7 +17,7 @@ import { errorMessage } from '../../shared/utils/error-message';
     <app-page-header title="Familias de código"
       subtitle="Administra los prefijos que identifican cada familia patrimonial. Los códigos ya emitidos nunca se recalculan."
       eyebrow="Administración">
-      <button class="btn btn--primary" type="button" (click)="openCreate()"><svg lucidePlus></svg>Nueva familia</button>
+      @if (auth.user()?.rol !== 'SOLO_LECTURA') { <button class="btn btn--primary" type="button" (click)="openCreate()"><svg lucidePlus></svg>Nueva familia</button> }
     </app-page-header>
 
     @if (loading()) { <section class="card"><app-view-state kind="loading" title="Cargando familias" /></section> }
@@ -32,7 +33,7 @@ import { errorMessage } from '../../shared/utils/error-message';
         <td><strong>{{ item.ultimoOrdinal }}</strong><span class="cell-secondary">Próximo: {{ item.proximoCodigoEstimado ?? 'No disponible' }}</span></td>
         <td>@if (item.tiposAsociados.length) { <div class="type-list">@for (type of item.tiposAsociados; track type.id) { <span [class.inactive]="!type.activo">{{ type.nombre }}</span> }</div> } @else { <span class="cell-secondary">Sin tipos</span> }</td>
         <td><span class="catalog-status" [class.inactive]="!item.activo">{{ item.activo ? 'Activa' : 'Inactiva' }}</span></td>
-        <td><button class="btn btn--secondary btn--small" type="button" (click)="openEdit(item)"><svg lucidePencil></svg>Editar</button></td>
+        <td>@if (auth.user()?.rol !== 'SOLO_LECTURA') { <button class="btn btn--secondary btn--small" type="button" (click)="openEdit(item)"><svg lucidePencil></svg>Editar</button> }</td>
       </tr> }</tbody></table></div> }
     </section> }
 
@@ -59,6 +60,7 @@ import { errorMessage } from '../../shared/utils/error-message';
   styles: [`.family-card{overflow:hidden;padding:0}.family-card strong{display:block}.prefix{align-items:center;background:var(--navy);border-radius:.55rem;color:#fff;display:inline-flex;font-family:var(--font-mono);font-size:1rem;font-weight:900;height:2.2rem;justify-content:center;width:2.2rem}.locked{color:var(--slate-500);display:block;font-size:.65rem;margin-top:.35rem}.type-list{display:flex;flex-wrap:wrap;gap:.3rem}.type-list span{background:var(--cyan-soft);border-radius:99px;color:var(--blue);font-size:.68rem;font-weight:800;padding:.25rem .5rem}.type-list span.inactive{background:var(--gray-100);color:var(--slate-500)}.catalog-status{background:#dcfce7;border-radius:99px;color:#166534;display:inline-flex;font-size:.72rem;font-weight:800;padding:.3rem .65rem}.catalog-status.inactive{background:var(--gray-100);color:var(--slate-500)}.family-dialog{max-width:36rem;padding:0 1.5rem 1.5rem}.family-dialog>header{align-items:center;background:var(--navy);color:#fff;display:flex;gap:.8rem;margin:0 -1.5rem 1.25rem;padding:1.1rem 1.5rem}.family-dialog>header>span{color:var(--cyan)}.family-dialog h2,.family-dialog small{margin:0}.family-dialog h2{font-size:1.15rem}.family-dialog small{color:#bae6fd;font-size:.65rem;font-weight:800;letter-spacing:.12em}.family-dialog .icon-button{margin-left:auto}.family-dialog footer{display:flex;gap:.75rem;justify-content:flex-end;margin-top:1.25rem}.prefix-control{display:flex;gap:.6rem}.prefix-control input{max-width:7rem}.checkbox{align-items:center;display:flex;gap:.55rem;font-weight:700;margin-top:1rem}.checkbox input{width:auto}`]
 })
 export class FamiliasCodigoList implements OnInit {
+  protected readonly auth = inject(AuthService);
   private readonly fb = inject(FormBuilder);
   private readonly service = inject(InventoryCodeService);
   private readonly toast = inject(ToastService);

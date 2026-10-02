@@ -61,7 +61,7 @@ export const visibleReconciliationLabel = (classification: ClasificacionConcilia
       title="Detalle del colaborador"
       subtitle="Equipos actuales, historial y registros que requieren revisión."
     >
-      @if (item() && auth.canWrite()) { <a class="btn btn--secondary" [routerLink]="['editar']">Editar</a> }
+      @if (item() && auth.user()?.rol !== 'SOLO_LECTURA') { <a class="btn btn--secondary" [routerLink]="['editar']">Editar</a> }
     </app-page-header>
 
     @if (loading()) {

@@ -19,7 +19,7 @@ import { errorMessage } from '../../shared/utils/error-message';
       title="Colaboradores"
       subtitle="Colaboradores habilitados para recibir equipos y líneas corporativas."
     >
-      @if (auth.canWrite()) { <a class="btn btn--primary" routerLink="nuevo">+ Nuevo colaborador</a> }
+      @if (auth.user()?.rol !== 'SOLO_LECTURA') { <a class="btn btn--primary" routerLink="nuevo">+ Nuevo colaborador</a> }
     </app-page-header>
     @if (notice()) { <div class="notice notice--success">{{ notice() }}</div> }
     @if (actionError()) { <div class="notice notice--error">{{ actionError() }}</div> }
@@ -75,7 +75,7 @@ import { errorMessage } from '../../shared/utils/error-message';
                   <td>{{ item.cargo || 'Sin cargo' }}</td>
                   <td>{{ item.departamento?.nombre || 'Sin departamento' }}</td>
                   <td class="status-column"><app-status-badge [code]="item.activo" [label]="item.activo ? 'Activo' : 'Inactivo'" /></td>
-                  <td class="actions-column"><div class="actions"><a class="btn btn--ghost btn--small" [routerLink]="[item.id]">Ver</a><a class="btn btn--ghost btn--small" [routerLink]="[item.id,'editar']">Editar</a>@if (item.activo) { <button class="btn btn--danger btn--small" type="button" (click)="deactivate(item)">Desactivar</button> }</div></td>
+                  <td class="actions-column"><div class="actions"><a class="btn btn--ghost btn--small" [routerLink]="[item.id]">Ver</a>@if (auth.user()?.rol !== 'SOLO_LECTURA') { <a class="btn btn--ghost btn--small" [routerLink]="[item.id,'editar']">Editar</a>@if (item.activo) { <button class="btn btn--danger btn--small" type="button" (click)="deactivate(item)">Desactivar</button> } }</div></td>
                 </tr>
               }
             </tbody>
@@ -95,8 +95,8 @@ import { errorMessage } from '../../shared/utils/error-message';
               </dl>
               <footer class="mobile-record-card__actions">
                 <a class="btn btn--primary" [routerLink]="[item.id]">Ver</a>
-                <a class="btn btn--secondary" [routerLink]="[item.id,'editar']">Editar</a>
-                @if (item.activo) { <button class="btn btn--danger" type="button" (click)="deactivate(item)">Desactivar</button> }
+                @if (auth.user()?.rol !== 'SOLO_LECTURA') { <a class="btn btn--secondary" [routerLink]="[item.id,'editar']">Editar</a>
+                @if (item.activo) { <button class="btn btn--danger" type="button" (click)="deactivate(item)">Desactivar</button> } }
               </footer>
             </article>
           }

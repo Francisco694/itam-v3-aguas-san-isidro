@@ -92,3 +92,18 @@
 @media(max-width:430px){
   app-confirmation-dialog .confirm__actions,app-reportes .report-actions{grid-template-columns:1fr}
 }
+
+/* El perfil SOLO_LECTURA conserva consultas e impresión, pero no muestra controles de mutación. */
+.read-only-user a[href$="/editar"],
+.read-only-user a[href$="/nuevo"],
+.read-only-user [title="Editar ficha"],
+.read-only-user app-dispositivo-detail .operation-list,
+.read-only-user app-dispositivo-detail .action-form,
+.read-only-user app-dispositivo-detail .sim-association-overlay,
+.read-only-user app-servicio-tecnico .order-detail form,
+.read-only-user app-servicio-tecnico .order-detail .order-actions .btn--primary,
+.read-only-user app-offboarding-process-detail .btn--primary,
+.read-only-user app-stock-alerts .stock-action .btn,
+.read-only-user app-stock-alerts .save-all,
+.read-only-user app-dashboard .stock-replenishment,
+.read-only-user app-sidebar a[href="/alertas-stock"]{display:none!important}

@@ -5,6 +5,7 @@ import { forkJoin } from 'rxjs';
 import { InventoryCodeFamily, TipoDispositivo } from '../../core/models/itam.models';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { InventoryCodeService } from '../../core/services/inventory-code.service';
+import { AuthService } from '../../core/services/auth.service';
 import { TiposDispositivoService } from '../../core/services/tipos-dispositivo.service';
 import { ToastService } from '../../core/services/toast.service';
 import { PageHeader } from '../../shared/components/page-header/page-header';
@@ -19,7 +20,7 @@ import { errorMessage } from '../../shared/utils/error-message';
     <app-page-header title="Tipos de Dispositivo"
       subtitle="Catálogo normalizado y relación con las familias que generan códigos ITAM."
       eyebrow="Administración">
-      <button class="btn btn--primary" type="button" (click)="openCreate()"><svg lucidePlus></svg>Nuevo tipo</button>
+      @if (auth.user()?.rol !== 'SOLO_LECTURA') { <button class="btn btn--primary" type="button" (click)="openCreate()"><svg lucidePlus></svg>Nuevo tipo</button> }
     </app-page-header>
 
     @if (loading()) { <section class="card"><app-view-state kind="loading" title="Cargando catálogo" /></section> }
@@ -36,8 +37,8 @@ import { errorMessage } from '../../shared/utils/error-message';
               @if (!family.activo) { <span class="cell-secondary warning">Familia inactiva</span> }
             } @else { <span class="unconfigured">Sin familia configurada</span> }</td>
             <td><span class="catalog-status" [class.inactive]="!item.activo">{{ item.activo ? 'Activo' : 'Inactivo' }}</span></td>
-            <td><div class="actions"><button class="btn btn--secondary btn--small" type="button" (click)="openEdit(item)"><svg lucidePencil></svg>Editar</button>
-              @if (item.activo) { <button class="btn btn--ghost btn--small" type="button" (click)="deactivate(item)"><svg lucidePower></svg>Desactivar</button> }
+            <td><div class="actions">@if (auth.user()?.rol !== 'SOLO_LECTURA') { <button class="btn btn--secondary btn--small" type="button" (click)="openEdit(item)"><svg lucidePencil></svg>Editar</button>
+              @if (item.activo) { <button class="btn btn--ghost btn--small" type="button" (click)="deactivate(item)"><svg lucidePower></svg>Desactivar</button> } }
             </div></td>
           </tr> }
         </tbody></table></div> }
@@ -69,6 +70,7 @@ import { errorMessage } from '../../shared/utils/error-message';
   styles: [`.catalog-card{overflow:hidden;padding:0}.catalog-card strong{display:block}.family-code{align-items:center;background:var(--cyan-soft);border-radius:.45rem;color:var(--blue);display:inline-flex;font-family:var(--font-mono);font-weight:800;height:1.8rem;justify-content:center;margin-right:.55rem;width:1.8rem}.unconfigured,.warning{color:#b45309;font-size:.75rem;font-weight:700}.catalog-status{background:#dcfce7;border-radius:99px;color:#166534;display:inline-flex;font-size:.72rem;font-weight:800;padding:.3rem .65rem}.catalog-status.inactive{background:var(--gray-100);color:var(--slate-500)}.type-dialog{max-width:36rem;padding:0 1.5rem 1.5rem}.type-dialog>header{align-items:center;background:var(--navy);color:#fff;display:flex;gap:.8rem;margin:0 -1.5rem 1.25rem;padding:1.1rem 1.5rem}.type-dialog>header>span{color:var(--cyan)}.type-dialog h2,.type-dialog small{margin:0}.type-dialog h2{font-size:1.15rem}.type-dialog small{color:#bae6fd;font-size:.65rem;font-weight:800;letter-spacing:.12em}.type-dialog .icon-button{margin-left:auto}.type-dialog footer{display:flex;gap:.75rem;justify-content:flex-end;margin-top:1.25rem}.checkbox{align-items:center;display:flex;gap:.55rem;font-weight:700;margin-top:1rem}.checkbox input{width:auto}`]
 })
 export class TiposDispositivoList implements OnInit {
+  protected readonly auth = inject(AuthService);
   private readonly fb = inject(FormBuilder);
   private readonly service = inject(TiposDispositivoService);
   private readonly codeService = inject(InventoryCodeService);

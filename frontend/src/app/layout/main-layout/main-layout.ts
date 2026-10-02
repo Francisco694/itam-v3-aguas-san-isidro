@@ -6,6 +6,7 @@ import { ConfirmationDialog } from '../../shared/components/confirmation-dialog/
 import { ToastViewport } from '../../shared/components/toast-viewport/toast-viewport';
 import { SessionIdleService } from '../../core/services/session-idle.service';
 import { SessionIdleDialog } from '../../shared/components/session-idle-dialog/session-idle-dialog';
+import { AuthService } from '../../core/services/auth.service';
 
 @Component({
   selector: 'app-main-layout',
@@ -18,7 +19,7 @@ import { SessionIdleDialog } from '../../shared/components/session-idle-dialog/s
     SessionIdleDialog
   ],
   template: `
-    <div class="app-shell">
+    <div class="app-shell" [class.read-only-user]="auth.isReadOnly()">
       <app-header [menuOpen]="sidebarOpen()" (menu)="sidebarOpen.update((value) => !value)" />
       <div class="shell">
         <aside id="itam-sidebar" [class.open]="sidebarOpen()"><app-sidebar (navigate)="sidebarOpen.set(false)" /></aside>
@@ -32,6 +33,7 @@ import { SessionIdleDialog } from '../../shared/components/session-idle-dialog/s
 })
 export class MainLayout {
   private readonly sessionIdle = inject(SessionIdleService);
+  protected readonly auth = inject(AuthService);
   protected readonly sidebarOpen = signal(false);
 
   @HostListener('document:keydown.escape')

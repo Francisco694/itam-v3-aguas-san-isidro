@@ -1,5 +1,5 @@
 import { DatePipe } from '@angular/common';
-import { Component, input, output } from '@angular/core';
+import { Component, inject, input, output } from '@angular/core';
 import {
   LucideCircleCheck,
   LucidePackageCheck,
@@ -9,6 +9,7 @@ import {
   OffboardingAsset,
   OffboardingProcessDetail,
 } from '../../core/models/offboarding.models';
+import { AuthService } from '../../core/services/auth.service';
 import { StatusBadge } from '../../shared/components/status-badge/status-badge';
 import { formatClp } from '../../shared/utils/currency';
 
@@ -60,9 +61,11 @@ import { formatClp } from '../../shared/utils/currency';
                 <app-status-badge [code]="asset.estado.codigo" [label]="asset.estado.nombre" />
                 <strong>{{ clp(asset.valorComercial) }}</strong>
               </div>
-              <button class="btn btn--primary btn--small" type="button" (click)="resolve.emit(asset)">
-                <svg lucideRotateCcw></svg>Resolver activo
-              </button>
+              @if (auth.user()?.rol !== 'SOLO_LECTURA') {
+                <button class="btn btn--primary btn--small" type="button" (click)="resolve.emit(asset)">
+                  <svg lucideRotateCcw></svg>Resolver activo
+                </button>
+              }
             </article>
           }
         </div>
@@ -74,6 +77,7 @@ import { formatClp } from '../../shared/utils/currency';
         </div>
       }
 
+      @if (auth.user()?.rol !== 'SOLO_LECTURA') {
       <footer>
         <button
           class="btn btn--primary"
@@ -84,11 +88,13 @@ import { formatClp } from '../../shared/utils/currency';
           <svg lucideCircleCheck></svg>{{ closing() ? 'Completando…' : 'Completar proceso' }}
         </button>
       </footer>
+      }
     </section>
   `,
   styleUrl: './offboarding-process-detail.scss',
 })
 export class OffboardingProcessDetailComponent {
+  protected readonly auth = inject(AuthService);
   readonly process = input.required<OffboardingProcessDetail>();
   readonly closing = input(false);
   readonly resolve = output<OffboardingAsset>();

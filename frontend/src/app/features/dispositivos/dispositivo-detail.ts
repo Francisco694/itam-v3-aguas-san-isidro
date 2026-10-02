@@ -254,7 +254,7 @@ interface SimilarAssignedDevicePrompt {
       }
       <section class="device-banner">
         <div><span>EQUIPO TECNOLÓGICO</span><h2>{{ device.tipo.nombre }} · {{ device.marca || 'Sin marca' }} {{ device.modelo || '' }}</h2><p>{{ deviceTechnicalIdentifier(device).label }}: {{ deviceTechnicalIdentifier(device).value }}</p></div>
-        <div><app-status-badge [code]="device.estado.codigo" [label]="device.estado.nombre" /><a class="btn btn--secondary btn--small" [routerLink]="['editar']"><svg lucidePencil></svg>Editar ficha</a></div>
+        <div><app-status-badge [code]="device.estado.codigo" [label]="device.estado.nombre" />@if (auth.user()?.rol !== 'SOLO_LECTURA') { <a class="btn btn--secondary btn--small" [routerLink]="['editar']"><svg lucidePencil></svg>Editar ficha</a> }</div>
       </section>
       <section class="traceability-overview" aria-label="Resumen de trazabilidad">
         <article class="traceability-card traceability-card--state"><span class="traceability-card__icon"><svg lucidePackageCheck></svg></span><div><small>ESTADO DEL EQUIPO</small><strong>{{ device.estado.nombre }}</strong><span>{{ terminal() ? 'Fuera de la operación normal' : 'Estado registrado actualmente' }}</span></div></article>
@@ -293,6 +293,7 @@ interface SimilarAssignedDevicePrompt {
         </article>
         <aside class="panoramic-column actions-column">
           <div class="column-title"><span>03</span><div><small>GESTIÓN</small><h3>Acciones del equipo</h3></div></div>
+          @if (auth.user()?.rol !== 'SOLO_LECTURA') {
           @if (!action()) {
             <div class="operation-list">
               <button type="button" [disabled]="terminal() || technicalServiceActive() || device.tipoCustodia!=='NONE'" (click)="open('assign-person')"><svg lucideUserCheck></svg><span>Entregar equipo<small>A un colaborador habilitado</small></span></button>
@@ -423,6 +424,12 @@ interface SimilarAssignedDevicePrompt {
               @if(action()==='service'){<div class="form-grid"><div class="field"><label for="service-area">Área solicitante</label><input id="service-area" formControlName="areaSolicitante" maxlength="180" /></div><div class="field"><label for="service-contact">Contacto del servicio técnico</label><input id="service-contact" formControlName="contactoServicio" maxlength="180" /></div></div><div class="field"><label for="service-responsible">Responsable TI *</label><input id="service-responsible" formControlName="responsable" maxlength="150" /></div>}
             </form>
           }
+          } @else {
+            <div class="notice notice--info">
+              <strong>Perfil de solo lectura</strong>
+              <span>Puede consultar el equipo y su trazabilidad, pero no modificar operaciones.</span>
+            </div>
+          }
         </aside>
       </section>
       @if(device.facturaAdquisicion;as factura){<section class="card device-notes"><strong>Antecedentes de adquisición</strong><p>Factura {{factura.numeroFactura}} · {{factura.fechaFactura||'Fecha no informada'}} · {{factura.proveedor||'Proveedor no informado'}} · {{factura.montoTotal===null?'Monto no informado':clp(factura.montoTotal)}}</p>@if(factura.observaciones){<p>{{factura.observaciones}}</p>}<div class="invoice-document">@if(factura.documento;as document){<span><svg lucideFileText></svg><strong>{{document.nombreOriginal}}</strong></span><a class="btn btn--ghost btn--small" [href]="facturas.documentoUrl(factura.id,false)" target="_blank" rel="noopener"><svg lucideExternalLink></svg>Ver documento</a><a class="btn btn--ghost btn--small" [href]="facturas.documentoUrl(factura.id,true)"><svg lucideDownload></svg>Descargar</a>}@else{<span>No se adjuntó documento.</span>}</div></section>}
@@ -493,7 +500,7 @@ interface SimilarAssignedDevicePrompt {
   `]
 })
 export class DispositivoDetail implements OnInit {
-  private readonly auth = inject(AuthService);
+  protected readonly auth = inject(AuthService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly simService = inject(SimService);
   protected readonly collaboratorQuery = signal('');
@@ -729,7 +736,7 @@ export class DispositivoDetail implements OnInit {
       : 'Auditoría física del inventario';
   }
   protected async verifyManually(): Promise<void> {
-    if (!this.auth.canWrite()) return;
+    if (this.auth.user()?.rol === 'SOLO_LECTURA') return;
     if(this.submitting() || (this.item()?.verificacionFisica?.resultado || 'PENDIENTE')!=='PENDIENTE') return;
     const confirmed=await this.confirmation.confirm('Esta es una acción opcional de auditoría física. Confirme que revisó correctamente el código ITAM, tipo de equipo, marca/modelo, IMEI o número de serie, responsable actual, ubicación y estado operativo. Solo esta acción marcará el equipo como verificado y registrará un evento en su historial.',{title:'Verificar equipo',confirmLabel:'Confirmar verificación'});
     if(!confirmed)return;
@@ -737,7 +744,7 @@ export class DispositivoDetail implements OnInit {
     this.service.verificarManual(this.codigo).subscribe({next:()=>{this.submitting.set(false);this.toast.success('Equipo verificado','La verificación manual quedó registrada en el historial.');this.load();},error:error=>{this.submitting.set(false);this.toast.error('No se pudo verificar',errorMessage(error));}});
   }
   protected openSimAssociation(): void {
-    if (!this.auth.canWrite()) return;
+    if (this.auth.user()?.rol === 'SOLO_LECTURA') return;
     const device=this.item();
     if(!device || !canDeviceCarrySim(device) || this.submitting())return;
     const currentPhone=smartphonePhoneText(device);this.action.set(null);this.selectedSim.set(null);this.simPhone.set(currentPhone==='Sin número telefónico asociado'||currentPhone==='Número telefónico pendiente de registrar'?'':currentPhone);this.simError.set('');this.modalError.set(null);this.associationSims.set([]);this.simAssociationOpen.set(true);this.simLoading.set(true);
@@ -966,7 +973,7 @@ export class DispositivoDetail implements OnInit {
   }
 
   protected async execute(): Promise<void> {
-    if (!this.auth.canWrite()) return;
+    if (this.auth.user()?.rol === 'SOLO_LECTURA') return;
     const action = this.action(); if (!action || this.submitting()) return;
     const value = this.actionForm.getRawValue();
     const actor = this.auth.user();

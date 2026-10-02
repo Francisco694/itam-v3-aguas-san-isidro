@@ -22,7 +22,7 @@ const simPrintDocument = (sims: readonly Sim[], qrs: readonly string[], mode: 'A
   imports: [FormsModule, RouterLink, PageHeader, StatusBadge, ViewState, LucidePrinter, LucideX],
   template: `
     <app-page-header title="Tarjetas SIM" subtitle="Lineas corporativas, asignaciones y asociacion con dispositivos.">
-      @if (auth.canWrite()) { <a class="btn btn--primary" routerLink="nuevo">+ Nueva SIM</a> }
+      @if (auth.user()?.rol !== 'SOLO_LECTURA') { <a class="btn btn--primary" routerLink="nuevo">+ Nueva SIM</a> }
     </app-page-header>
     <section class="card">
       <div class="toolbar">
@@ -55,7 +55,7 @@ const simPrintDocument = (sims: readonly Sim[], qrs: readonly string[], mode: 'A
                   <td><app-status-badge [code]="item.estado.codigo" [label]="item.estado.nombre" /></td>
                   <td>{{ item.colaborador?.nombre || 'Sin asignar' }}</td>
                   <td>{{ item.dispositivo ? '#' + item.dispositivo.codigoInventario : 'Sin asociar' }}</td>
-                  <td><div class="actions"><a class="btn btn--ghost btn--small" [routerLink]="[item.codigoInventario]">Ver</a><a class="btn btn--ghost btn--small" [routerLink]="[item.codigoInventario,'editar']">Editar</a></div></td>
+                  <td><div class="actions"><a class="btn btn--ghost btn--small" [routerLink]="[item.codigoInventario]">Ver</a>@if (auth.user()?.rol !== 'SOLO_LECTURA') { <a class="btn btn--ghost btn--small" [routerLink]="[item.codigoInventario,'editar']">Editar</a> }</div></td>
                 </tr>
               }
             </tbody>
@@ -79,7 +79,7 @@ const simPrintDocument = (sims: readonly Sim[], qrs: readonly string[], mode: 'A
               </dl>
               <footer class="mobile-record-card__actions">
                 <a class="btn btn--primary" [routerLink]="[item.codigoInventario]">Ver</a>
-                <a class="btn btn--secondary" [routerLink]="[item.codigoInventario,'editar']">Editar</a>
+                @if (auth.user()?.rol !== 'SOLO_LECTURA') { <a class="btn btn--secondary" [routerLink]="[item.codigoInventario,'editar']">Editar</a> }
               </footer>
             </article>
           }
