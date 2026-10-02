@@ -1,7 +1,7 @@
 import { pool } from "../config/database";
 import { hashPassword } from "../shared/password";
 
-type UserRole = "SUPER_USUARIO" | "USUARIO";
+type UserRole = "SUPER_USUARIO" | "USUARIO" | "SOLO_LECTURA";
 
 interface BootstrapUser {
   nombre: string;
@@ -11,7 +11,11 @@ interface BootstrapUser {
   cargo: string;
 }
 
-const roles = new Set<UserRole>(["SUPER_USUARIO", "USUARIO"]);
+const roles = new Set<UserRole>([
+  "SUPER_USUARIO",
+  "USUARIO",
+  "SOLO_LECTURA"
+]);
 
 const requiredValue = (index: number, field: string): string => {
   const key = `BOOTSTRAP_USER_${index}_${field}`;
@@ -30,7 +34,7 @@ const readUser = (index: number): BootstrapUser => {
 
   if (!roles.has(rol)) {
     throw new Error(
-      `BOOTSTRAP_USER_${index}_ROLE debe ser SUPER_USUARIO o USUARIO.`
+      `BOOTSTRAP_USER_${index}_ROLE debe ser SUPER_USUARIO, USUARIO o SOLO_LECTURA.`
     );
   }
 

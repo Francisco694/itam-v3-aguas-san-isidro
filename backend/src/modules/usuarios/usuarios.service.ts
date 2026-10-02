@@ -6,7 +6,7 @@ import {
 } from "../../shared/errors";
 import { hashPassword, hashPin } from "../../shared/password";
 
-type UserRole = "SUPER_USUARIO" | "USUARIO";
+type UserRole = "SUPER_USUARIO" | "USUARIO" | "SOLO_LECTURA";
 
 interface UserRow {
   id: string | number;

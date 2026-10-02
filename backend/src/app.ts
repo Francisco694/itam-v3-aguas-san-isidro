@@ -24,7 +24,11 @@ import authRoutes from "./modules/auth/auth.routes";
 import usuariosRoutes from "./modules/usuarios/usuarios.routes";
 import offboardingRoutes from "./modules/offboarding/offboarding.routes";
 import stockAlertsRoutes from "./modules/stock-alerts/stock-alerts.routes";
-import { auditMutations, requireAuth } from "./shared/auth.middleware";
+import {
+  auditMutations,
+  rejectReadOnlyMutations,
+  requireAuth
+} from "./shared/auth.middleware";
 
 const app = express();
 
@@ -58,6 +62,7 @@ app.use(helmet());
 app.use(express.json());
 app.use("/api/v1/auth",authRoutes);
 app.use((req,res,next)=>req.path.startsWith("/api/v1/health")?next():requireAuth(req,res,next));
+app.use(rejectReadOnlyMutations);
 app.use(auditMutations);
 
 app.use("/api/v1/estados", estadosRoutes);

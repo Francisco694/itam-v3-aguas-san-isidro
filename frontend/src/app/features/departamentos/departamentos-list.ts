@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { Departamento } from '../../core/models/itam.models';
 import { ConfirmationService } from '../../core/services/confirmation.service';
+import { AuthService } from '../../core/services/auth.service';
 import { DepartamentosService } from '../../core/services/departamentos.service';
 import { PageHeader } from '../../shared/components/page-header/page-header';
 import { StatusBadge } from '../../shared/components/status-badge/status-badge';
@@ -15,7 +16,7 @@ import { errorMessage } from '../../shared/utils/error-message';
   imports: [DatePipe, FormsModule, RouterLink, PageHeader, StatusBadge, ViewState],
   template: `
     <app-page-header title="Departamentos" subtitle="Areas responsables y unidades de custodia del inventario.">
-      <a class="btn btn--primary" routerLink="nuevo">+ Nuevo departamento</a>
+      @if (auth.canWrite()) { <a class="btn btn--primary" routerLink="nuevo">+ Nuevo departamento</a> }
     </app-page-header>
     @if (notice()) { <div class="notice notice--success">{{ notice() }}</div> }
     @if (actionError()) { <div class="notice notice--error">{{ actionError() }}</div> }
@@ -81,6 +82,7 @@ import { errorMessage } from '../../shared/utils/error-message';
   styles: [`@media(max-width:767px){.department-actions:has(.btn--danger){grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:620px){.department-actions:has(.btn--danger){grid-template-columns:1fr}}`]
 })
 export class DepartamentosList implements OnInit {
+  protected readonly auth = inject(AuthService);
   private readonly service = inject(DepartamentosService);
   private readonly confirmation = inject(ConfirmationService);
   protected readonly items = signal<Departamento[]>([]);

@@ -17,7 +17,7 @@ import {
   listarUsuarios
 } from "./usuarios.service";
 
-const roles = ["SUPER_USUARIO", "USUARIO"] as const;
+const roles = ["SUPER_USUARIO", "USUARIO", "SOLO_LECTURA"] as const;
 
 const validatePassword = (value: string): string => {
   if (value.length < 12) {

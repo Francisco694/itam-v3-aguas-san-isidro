@@ -8,6 +8,7 @@ import { catchError, forkJoin, of } from 'rxjs';
 import { Departamento, Dispositivo, Estado, FiltroVerificacionDispositivo, ResultadoVerificacionFisica, TipoDispositivo } from '../../core/models/itam.models';
 import { DepartamentosService } from '../../core/services/departamentos.service';
 import { DispositivosService } from '../../core/services/dispositivos.service';
+import { AuthService } from '../../core/services/auth.service';
 import { EstadosService } from '../../core/services/estados.service';
 import { SimService } from '../../core/services/sim.service';
 import { ToastService } from '../../core/services/toast.service';
@@ -159,7 +160,7 @@ const printableDocument = (
   template: `
     <app-page-header title="Inventario de Equipos" subtitle="Control físico, custodias y condición operativa de los activos.">
       <button class="btn btn--navy mobile-qr-action" type="button" (click)="scannerOpen.set(true)"><svg lucideCamera></svg> Escanear QR</button>
-      <a class="btn btn--primary inventory-new-action" routerLink="nuevo"><svg lucidePlus></svg> Nuevo activo</a>
+      @if (auth.canWrite()) { <a class="btn btn--primary inventory-new-action" routerLink="nuevo"><svg lucidePlus></svg> Nuevo activo</a> }
       <button class="btn btn--secondary inventory-export-action" type="button" [disabled]="!items().length" (click)="exportCsv()"><svg lucideDownload></svg> Exportar CSV</button>
     </app-page-header>
     <section class="inventory-view-switch" aria-label="Vista del inventario">
@@ -213,7 +214,7 @@ const printableDocument = (
       </form>
       @if (loading()) { <app-view-state kind="loading" title="Cargando dispositivos" message="Consultando el inventario real…" /> }
       @else if (error()) { <app-view-state kind="error" title="No se pudo cargar" [message]="error()" (retry)="load()" /> }
-      @else if (!items().length) { <div class="empty-with-action"><app-view-state kind="empty" [title]="emptyTitle()" [message]="emptyMessage()" />@if(!allItems().length){<a class="btn btn--primary" routerLink="nuevo"><svg lucidePlus></svg> Registrar dispositivo</a>}</div> }
+      @else if (!items().length) { <div class="empty-with-action"><app-view-state kind="empty" [title]="emptyTitle()" [message]="emptyMessage()" />@if(!allItems().length && auth.canWrite()){<a class="btn btn--primary" routerLink="nuevo"><svg lucidePlus></svg> Registrar dispositivo</a>}</div> }
       @else {
         <div class="table-heading">
           <div><strong>{{ items().length }}</strong><span>{{ items().length === 1 ? 'equipo encontrado' : 'equipos encontrados' }}</span></div>
@@ -265,6 +266,7 @@ const printableDocument = (
   styleUrl: './dispositivos-list.scss'
 })
 export class DispositivosList implements OnInit {
+  protected readonly auth = inject(AuthService);
   private readonly service = inject(DispositivosService);
   private readonly simService = inject(SimService);
   private readonly estados = inject(EstadosService);

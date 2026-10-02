@@ -4,7 +4,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { LucideBuilding, LucideCircleAlert, LucideDownload, LucideExternalLink, LucideFileText, LucideHistory, LucidePackageCheck, LucidePencil, LucidePlus, LucideRotateCcw, LucideShieldAlert, LucideShieldCheck, LucideUserCheck, LucideUsers, LucideWrench, LucideX } from '@lucide/angular';
-import { catchError, combineLatest, forkJoin, Observable, of } from 'rxjs';
+import { catchError, combineLatest, forkJoin, map, Observable, of, switchMap } from 'rxjs';
 import { ActaEntrega, Colaborador, ComprobanteDevolucion, Departamento, Dispositivo, Estado, HistorialEvento, LineaMovilResumen, OrdenServicio, ResultadoDevolucion, Sim, TrazabilidadDispositivo } from '../../core/models/itam.models';
 import { ColaboradoresService } from '../../core/services/colaboradores.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
@@ -228,6 +228,12 @@ export const lastKnownPersonalResponsible = (events: readonly HistorialEvento[])
 };
 
 type DeviceAction = 'assign-person' | 'assign-department' | 'return' | 'state' | 'recover' | 'service' | 'retire';
+type AssignmentResolution = 'ADD' | 'REPLACE';
+
+interface SimilarAssignedDevicePrompt {
+  collaborator: Colaborador;
+  devices: Dispositivo[];
+}
 
 @Component({
   selector: 'app-dispositivo-detail',
@@ -308,6 +314,31 @@ type DeviceAction = 'assign-person' | 'assign-department' | 'return' | 'state' |
               <header><div><small>OPERACIÓN EN CURSO</small><h4>{{ actionTitle() }}</h4></div><button class="icon-button" type="button" aria-label="Cancelar operación" [disabled]="submitting()" (click)="action.set(null)"><svg lucideX></svg></button></header>
               @if(actionError()){<div class="notice notice--error" role="alert"><strong>{{ actionErrorTitle() || 'No se pudo registrar la operación' }}</strong><span>{{ actionError() }}</span></div>}
               @if(action()==='assign-person'){
+                @if(checkingAssignment()){<div class="notice notice--info" role="status">Verificando si el colaborador ya tiene un equipo del mismo tipo...</div>}
+                @if(similarAssignedDevices(); as duplicate){
+                  @if(!assignmentResolution()){
+                    <section class="assignment-warning" role="alert">
+                      <strong>El colaborador ya tiene un equipo del mismo tipo</strong>
+                      <span>{{duplicate.collaborator.nombre}} ya tiene {{duplicate.devices.length === 1 ? 'un equipo' : duplicate.devices.length + ' equipos'}} {{device.tipo.nombre}} asignado{{duplicate.devices.length === 1 ? '' : 's'}}.</span>
+                      <div class="assignment-warning__devices">@for(existing of duplicate.devices; track existing.codigoInventario){<span>ITAM {{existing.codigoInventario}} · {{existing.marca || 'Sin marca'}} {{existing.modelo || ''}}</span>}</div>
+                      <div class="assignment-warning__buttons">
+                        <button class="btn btn--primary" type="button" (click)="chooseAddAssignment()">Agregar</button>
+                        <button class="btn btn--secondary" type="button" (click)="chooseReplaceAssignment()">Reemplazar</button>
+                        <button class="btn btn--ghost" type="button" (click)="cancelAssignmentDecision()">Cancelar</button>
+                      </div>
+                    </section>
+                  }
+                  @if(assignmentResolution()==='REPLACE' && replacementDevice(); as oldDevice){
+                    <section class="replacement-confirmation" role="alert">
+                      <strong>Confirmar reemplazo de equipo</strong>
+                      <span>El equipo ITAM {{oldDevice.codigoInventario}} será recibido en bodega antes de entregar el nuevo equipo.</span>
+                      @if(duplicate.devices.length > 1){<div class="field"><label for="replacement-device">Equipo que será reemplazado *</label><select id="replacement-device" [value]="replacementDevice()?.codigoInventario || ''" (change)="selectReplacementDevice($any($event.target).value, duplicate.devices)">@for(existing of duplicate.devices; track existing.codigoInventario){<option [value]="existing.codigoInventario">ITAM {{existing.codigoInventario}} · {{existing.marca || 'Sin marca'}} {{existing.modelo || ''}}</option>}</select></div>}
+                      <div class="field"><label for="replacement-state">Estado del equipo recibido *</label><select id="replacement-state" [value]="replacementStateId()" (change)="replacementStateId.set($any($event.target).value)"><option value="">Seleccionar estado</option>@for(state of replacementStates(); track state.id){<option [value]="state.id">{{state.nombre}}</option>}</select><small class="delivery-help">Disponible, retenido para revisión, servicio técnico o dado de baja.</small></div>
+                      @if(replacementRequiresBajaReason()){<div class="field"><label for="replacement-baja-reason">Motivo de baja *</label><select id="replacement-baja-reason" [value]="replacementBajaMotivo()" (change)="replacementBajaMotivo.set($any($event.target).value)"><option value="">Seleccionar motivo</option><option value="IRREPARABLE">Irreparable</option><option value="REPARACION_NO_CONVENIENTE">Reparación no conveniente</option><option value="MULTIPLES_REPARACIONES">Múltiples reparaciones</option><option value="OBSOLESCENCIA">Obsolescencia</option><option value="DANO_FISICO">Daño físico</option><option value="SIN_REPUESTOS">Sin repuestos</option><option value="OTRO">Otro</option></select></div>}
+                      <div class="assignment-warning__buttons"><button class="btn btn--primary" type="button" [disabled]="submitting()" (click)="confirmReplacement()">Confirmar reemplazo</button><button class="btn btn--ghost" type="button" [disabled]="submitting()" (click)="cancelAssignmentDecision()">Cancelar</button></div>
+                    </section>
+                  }
+                }
                 <div class="delivery-form">
                   <div class="field delivery-field">
                     <label for="colaborador">Colaborador responsable *</label>
@@ -418,6 +449,7 @@ type DeviceAction = 'assign-person' | 'assign-department' | 'return' | 'state' |
   styleUrl: './dispositivo-detail.scss',
   styles: [`
     .invoice-document{align-items:center;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:.7rem;display:flex;flex-wrap:wrap;gap:.6rem;margin-top:.8rem;padding:.7rem}.invoice-document>span{align-items:center;color:var(--slate-500);display:flex;font-size:.74rem;gap:.45rem;margin-right:auto}.invoice-document>span svg{color:var(--blue);height:1rem;width:1rem}.device-feedback{align-items:flex-start;display:flex;gap:.75rem;justify-content:space-between;margin-bottom:1rem;position:relative;z-index:1}.device-feedback div,.modal-save-error{display:grid;gap:.25rem}.device-feedback span,.modal-save-error span{display:block}
+    .assignment-warning,.replacement-confirmation{background:#fff7ed;border:1px solid #fed7aa;border-radius:.85rem;display:grid;gap:.65rem;margin-bottom:1rem;padding:1rem}.assignment-warning>strong,.replacement-confirmation>strong{color:#9a3412;font-size:.82rem}.assignment-warning>span,.replacement-confirmation>span{color:#7c2d12;font-size:.72rem;line-height:1.45}.assignment-warning__devices{display:grid;gap:.3rem}.assignment-warning__devices span{background:#ffedd5;border-radius:.45rem;color:#7c2d12;font-size:.68rem;padding:.45rem .6rem}.assignment-warning__buttons{display:flex;flex-wrap:wrap;gap:.55rem}.replacement-confirmation{background:#eff6ff;border-color:#bfdbfe}.replacement-confirmation>strong{color:#1d4ed8}.replacement-confirmation>span{color:#1e3a8a}.replacement-confirmation .field{margin-top:.15rem}
     .traceability-overview { background: transparent; border: 0; display: grid; gap: .75rem; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: .75rem 0; }
     .traceability-card { align-items: flex-start; background: #fff; border: 1px solid var(--gray-200); border-radius: .85rem; box-shadow: var(--shadow-sm); display: flex; gap: .7rem; min-width: 0; padding: .95rem; }
     .traceability-overview .traceability-card + .traceability-card { border-left: 1px solid var(--gray-200); }
@@ -466,6 +498,13 @@ export class DispositivoDetail implements OnInit {
   private readonly simService = inject(SimService);
   protected readonly collaboratorQuery = signal('');
   protected readonly selectedCollaborator = signal<Colaborador | null>(null);
+  protected readonly similarAssignedDevices = signal<SimilarAssignedDevicePrompt | null>(null);
+  protected readonly assignmentResolution = signal<AssignmentResolution | null>(null);
+  protected readonly replacementDevice = signal<Dispositivo | null>(null);
+  protected readonly replacementStateId = signal('');
+  protected readonly replacementBajaMotivo = signal('');
+  protected readonly checkingAssignment = signal(false);
+  protected readonly replacementConfirmed = signal(false);
   protected readonly jointDelivery = signal(false);
   protected readonly simQuery = signal('');
   protected readonly selectedSim = signal<Sim | null>(null);
@@ -480,8 +519,72 @@ export class DispositivoDetail implements OnInit {
   protected readonly feedback = signal<FeedbackMessage | null>(null);
   private feedbackTimer?: number;
   protected matchingCollaborators(): Colaborador[] { return this.collaborators().filter(person => collaboratorMatchesQuery(person, this.collaboratorQuery())); }
-  protected searchCollaborator(query: string): void { this.collaboratorQuery.set(query); this.selectedCollaborator.set(null); this.actionForm.controls.colaboradorId.setValue(''); }
-  protected selectCollaborator(person: Colaborador): void { this.selectedCollaborator.set(person); this.collaboratorQuery.set(person.nombre); this.actionForm.controls.colaboradorId.setValue(person.id); }
+  protected searchCollaborator(query: string): void {
+    this.collaboratorQuery.set(query);
+    this.selectedCollaborator.set(null);
+    this.actionForm.controls.colaboradorId.setValue('');
+    this.resetAssignmentDecision();
+  }
+  protected selectCollaborator(person: Colaborador): void {
+    this.selectedCollaborator.set(person);
+    this.collaboratorQuery.set(person.nombre);
+    this.actionForm.controls.colaboradorId.setValue(person.id);
+    this.resetAssignmentDecision();
+  }
+  protected replacementStates(): Estado[] {
+    const allowed = new Set(['DISPONIBLE', 'RETENIDO_REVISION', 'SERVICIO_TECNICO', 'DADO_BAJA']);
+    return this.states().filter(state => allowed.has(state.codigo));
+  }
+  protected replacementStateName(): string {
+    return this.replacementStates().find(state => state.id === this.replacementStateId())?.nombre || 'Seleccionar estado';
+  }
+  protected replacementRequiresBajaReason(): boolean {
+    return this.replacementStates().find(state => state.id === this.replacementStateId())?.codigo === 'DADO_BAJA';
+  }
+  protected chooseAddAssignment(): void {
+    this.assignmentResolution.set('ADD');
+    this.replacementDevice.set(null);
+    this.replacementStateId.set('');
+    this.replacementBajaMotivo.set('');
+    this.replacementConfirmed.set(false);
+    this.actionError.set('');
+  }
+  protected chooseReplaceAssignment(): void {
+    const prompt = this.similarAssignedDevices();
+    if (!prompt?.devices.length) return;
+    this.assignmentResolution.set('REPLACE');
+    this.replacementDevice.set(prompt.devices[0]);
+    this.replacementStateId.set(this.states().find(state => state.codigo === 'RETENIDO_REVISION')?.id || '');
+    this.replacementBajaMotivo.set('');
+    this.replacementConfirmed.set(false);
+    this.actionError.set('');
+  }
+  protected selectReplacementDevice(code: string, devices: Dispositivo[]): void {
+    this.replacementDevice.set(devices.find(device => device.codigoInventario === Number(code)) || null);
+    this.replacementConfirmed.set(false);
+  }
+  protected cancelAssignmentDecision(): void {
+    this.action.set(null);
+    this.resetAssignmentDecision();
+  }
+  protected async confirmReplacement(): Promise<void> {
+    const oldDevice = this.replacementDevice();
+    if (!oldDevice) return;
+    if (!this.replacementStateId()) {
+      this.actionError.set('Selecciona el estado en que quedará el equipo recibido.');
+      return;
+    }
+    if (this.replacementRequiresBajaReason() && !this.replacementBajaMotivo()) {
+      this.actionError.set('Selecciona el motivo de baja del equipo reemplazado.');
+      return;
+    }
+    if (this.replacementRequiresBajaReason() && oldDevice.simAsociada) {
+      this.actionError.set('No se puede dar de baja el equipo anterior mientras tenga una SIM asociada. Desasocia primero la SIM.');
+      return;
+    }
+    this.replacementConfirmed.set(true);
+    await this.execute();
+  }
   protected matchingSims(): Sim[] { return this.deliverySims().filter(sim => isSimAvailableForJointDelivery(sim) && simMatchesQuery(sim, this.simQuery())); }
   protected searchSim(query: string): void { const previous=this.selectedSim();if(!query&&previous?.numeroAsociado&&normalizeChileanPhoneInput(this.deliveryPhone())===normalizeChileanPhoneInput(previous.numeroAsociado))this.deliveryPhone.set('');this.simQuery.set(query);this.selectedSim.set(null); }
   protected selectSim(sim: Sim): void { this.selectedSim.set(sim); this.simQuery.set(String(sim.codigoInventario)); if(sim.numeroAsociado)this.deliveryPhone.set(sim.numeroAsociado); this.actionError.set(''); }
@@ -510,6 +613,15 @@ export class DispositivoDetail implements OnInit {
   private showModalError(title: string, detail: string): void {
     this.modalError.set({ title, detail });
   }
+  private resetAssignmentDecision(): void {
+    this.similarAssignedDevices.set(null);
+    this.assignmentResolution.set(null);
+    this.replacementDevice.set(null);
+    this.replacementStateId.set('');
+    this.replacementBajaMotivo.set('');
+    this.replacementConfirmed.set(false);
+    this.checkingAssignment.set(false);
+  }
   private resetDetailStateForRoute(): void {
     this.submitting.set(false);
     this.action.set(null);
@@ -524,6 +636,7 @@ export class DispositivoDetail implements OnInit {
     this.simPhone.set('');
     this.simError.set('');
     this.modalError.set(null);
+    this.resetAssignmentDecision();
     this.clearFeedback();
   }
   private readonly service = inject(DispositivosService);
@@ -616,6 +729,7 @@ export class DispositivoDetail implements OnInit {
       : 'Auditoría física del inventario';
   }
   protected async verifyManually(): Promise<void> {
+    if (!this.auth.canWrite()) return;
     if(this.submitting() || (this.item()?.verificacionFisica?.resultado || 'PENDIENTE')!=='PENDIENTE') return;
     const confirmed=await this.confirmation.confirm('Esta es una acción opcional de auditoría física. Confirme que revisó correctamente el código ITAM, tipo de equipo, marca/modelo, IMEI o número de serie, responsable actual, ubicación y estado operativo. Solo esta acción marcará el equipo como verificado y registrará un evento en su historial.',{title:'Verificar equipo',confirmLabel:'Confirmar verificación'});
     if(!confirmed)return;
@@ -623,6 +737,7 @@ export class DispositivoDetail implements OnInit {
     this.service.verificarManual(this.codigo).subscribe({next:()=>{this.submitting.set(false);this.toast.success('Equipo verificado','La verificación manual quedó registrada en el historial.');this.load();},error:error=>{this.submitting.set(false);this.toast.error('No se pudo verificar',errorMessage(error));}});
   }
   protected openSimAssociation(): void {
+    if (!this.auth.canWrite()) return;
     const device=this.item();
     if(!device || !canDeviceCarrySim(device) || this.submitting())return;
     const currentPhone=smartphonePhoneText(device);this.action.set(null);this.selectedSim.set(null);this.simPhone.set(currentPhone==='Sin número telefónico asociado'||currentPhone==='Número telefónico pendiente de registrar'?'':currentPhone);this.simError.set('');this.modalError.set(null);this.associationSims.set([]);this.simAssociationOpen.set(true);this.simLoading.set(true);
@@ -718,7 +833,7 @@ export class DispositivoDetail implements OnInit {
       this.toast.error('No se pudo guardar el número telefónico',message);
     }});
   }
-   protected open(action: DeviceAction): void { const actor=this.auth.user();if(!actor){this.actionError.set('La sesión no permite identificar al responsable TI.');this.toast.error('Sesión no válida','Vuelva a iniciar sesión antes de registrar una operación.');return;}if(action==='service'&&this.technicalServiceActive()){this.actionErrorTitle.set('No se pudo registrar el envío a servicio técnico');this.actionError.set('El equipo ya se encuentra en servicio técnico.');return;}this.actionForm.reset({ colaboradorId: '', departamentoId: '',recibidoPorId:'', localidad: this.item()?.localidad || '', ubicacionDetalle: this.item()?.ubicacionDetalle || '', estadoId: '',accionLineaExtravio:'',proveedor:'',fechaEnvio: action==='service' ? todayDateInputValue() : '',tipoServicio: action==='service' ? 'DIAGNOSTICO' : '',fallaReportada:'',accesoriosEntregados:'',motivoBaja:'',motivoRecuperacion:'', responsable: actor.nombre, observaciones: '' }); this.searchCollaborator(''); this.jointDelivery.set(false); this.deliveryPhone.set(action==='assign-person'&&this.item()&&canDeviceCarrySim(this.item()!) ? smartphonePhoneValue(this.item()!) || '' : ''); this.searchSim(''); this.actionError.set(''); this.actionErrorTitle.set(''); this.action.set(action); }
+   protected open(action: DeviceAction): void { const actor=this.auth.user();if(!actor){this.actionError.set('La sesión no permite identificar al responsable TI.');this.toast.error('Sesión no válida','Vuelva a iniciar sesión antes de registrar una operación.');return;}if(action==='service'&&this.technicalServiceActive()){this.actionErrorTitle.set('No se pudo registrar el envío a servicio técnico');this.actionError.set('El equipo ya se encuentra en servicio técnico.');return;}this.actionForm.reset({ colaboradorId: '', departamentoId: '',recibidoPorId:'', localidad: this.item()?.localidad || '', ubicacionDetalle: this.item()?.ubicacionDetalle || '', estadoId: '',accionLineaExtravio:'',proveedor:'',fechaEnvio: action==='service' ? todayDateInputValue() : '',tipoServicio: action==='service' ? 'DIAGNOSTICO' : '',fallaReportada:'',accesoriosEntregados:'',motivoBaja:'',motivoRecuperacion:'', responsable: actor.nombre, observaciones: '' }); this.searchCollaborator(''); this.resetAssignmentDecision(); this.jointDelivery.set(false); this.deliveryPhone.set(action==='assign-person'&&this.item()&&canDeviceCarrySim(this.item()!) ? smartphonePhoneValue(this.item()!) || '' : ''); this.searchSim(''); this.actionError.set(''); this.actionErrorTitle.set(''); this.action.set(action); }
   protected openState(code: string): void { const state = this.states().find((item) => item.codigo === code); if (!state) return; this.open('state'); this.actionForm.controls.estadoId.setValue(state.id); if(code==='EXTRAVIADO'&&this.item()&&isSmartphoneDevice(this.item()!)&&!this.item()!.simAsociada)this.actionForm.controls.accionLineaExtravio.setValue('NO_APLICA'); }
   protected isReportingSmartphoneLost(): boolean { const target=this.states().find(state=>state.id===this.actionForm.controls.estadoId.value);const device=this.item();return this.action()==='state'&&!!device&&isSmartphoneDevice(device)&&target?.codigo==='EXTRAVIADO'; }
   protected actionTitle(): string { return { 'assign-person': 'Registrar entrega', 'assign-department': 'Entregar a departamento', return: 'Registrar recepción', state: 'Cambiar situación del equipo', recover: 'Registrar equipo encontrado', service:'Orden de Trabajo - Servicio Técnico',retire:'Retirar del inventario' }[this.action() || 'return']; }
@@ -733,13 +848,139 @@ export class DispositivoDetail implements OnInit {
     return 'Sin responsable';
   }
 
+  private checkForSimilarAssignment(collaboratorId: number): void {
+    const current = this.item();
+    const collaborator = this.selectedCollaborator();
+    if (!current || !collaborator) return;
+    this.checkingAssignment.set(true);
+    this.actionError.set('');
+    this.service.listar({ colaboradorId: collaboratorId, estado: 'ASIGNADO' })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: devices => {
+          this.checkingAssignment.set(false);
+          const similar = devices.filter(device =>
+            device.codigoInventario !== current.codigoInventario
+            && device.tipo.id === current.tipo.id
+          );
+          if (!similar.length) {
+            this.assignmentResolution.set('ADD');
+            void this.execute();
+            return;
+          }
+          this.similarAssignedDevices.set({ collaborator, devices: similar });
+        },
+        error: error => {
+          this.checkingAssignment.set(false);
+          this.actionErrorTitle.set('No se pudo verificar la custodia existente');
+          this.actionError.set(errorMessage(error));
+        }
+      });
+  }
+
+  private executeReplacementAssignment(
+    value: ReturnType<typeof this.actionForm.getRawValue>,
+    actor: { nombre: string },
+    deliveryPhoneValue: string
+  ): void {
+    const oldDevice = this.replacementDevice();
+    const targetState = this.replacementStates().find(state => state.id === this.replacementStateId());
+    if (!oldDevice || !targetState) {
+      this.actionError.set('Selecciona el equipo anterior y el estado final del reemplazo.');
+      return;
+    }
+
+    const observation = [
+      `Reemplazo por equipo ITAM ${this.codigo}.`,
+      value.observaciones.trim()
+    ].filter(Boolean).join(' ');
+    const assignmentInput = {
+      responsable: actor.nombre,
+      observaciones: value.observaciones.trim() || null,
+      colaboradorId: Number(value.colaboradorId),
+      ...(deliveryPhoneValue && this.item() && canDeviceCarrySim(this.item()!)
+        ? { numeroTelefonico: deliveryPhoneValue }
+        : {}),
+      ...(this.jointDelivery() && this.selectedSim()
+        ? { simCodigoInventario: this.selectedSim()!.codigoInventario }
+        : {})
+    };
+
+    this.submitting.set(true);
+    this.actionError.set('');
+    this.actionErrorTitle.set('');
+    this.service.devolver(oldDevice.codigoInventario, {
+      responsable: actor.nombre,
+      observaciones: observation,
+      resultado: targetState.codigo === 'SERVICIO_TECNICO' ? 'DANADO' : 'DEVUELTO'
+    }).pipe(
+      switchMap(() => {
+        if (targetState.codigo === 'RETENIDO_REVISION') return of(null);
+        if (targetState.codigo === 'DADO_BAJA') {
+          return this.service.darBaja(oldDevice.codigoInventario, {
+            responsable: actor.nombre,
+            motivo: this.replacementBajaMotivo() as import('../../core/models/itam.models').MotivoBaja,
+            observaciones: observation
+          }).pipe(map(() => null));
+        }
+        return this.service.cambiarEstado(oldDevice.codigoInventario, {
+          estadoId: Number(targetState.id),
+          responsable: actor.nombre,
+          observaciones: observation
+        }).pipe(map(() => null));
+      }),
+      switchMap(() => this.service.asignarColaborador(this.codigo, assignmentInput))
+    ).subscribe({
+      next: updated => {
+        this.action.set(null);
+        this.submitting.set(false);
+        this.resetAssignmentDecision();
+        const simStatus = this.jointDelivery() ? 'SIM asociada correctamente' : 'SIM pendiente de asociar';
+        this.showFeedback({
+          type: 'success',
+          title: 'Reemplazo registrado correctamente',
+          detail: `ITAM ${oldDevice.codigoInventario} quedó en ${targetState.nombre}. El nuevo equipo fue entregado. ${simStatus}.`
+        });
+        this.toast.success('Reemplazo registrado', `El equipo anterior quedó en ${targetState.nombre} y el nuevo equipo fue asignado.`);
+        this.actasService.crear({
+          colaboradorId: Number(value.colaboradorId),
+          departamentoId: null,
+          recepcionanteId: null,
+          localidad: value.localidad.trim() || updated.localidad,
+          responsableTi: actor.nombre,
+          observaciones: value.observaciones.trim() || null,
+          dispositivosCodigos: [updated.codigoInventario]
+        }).subscribe({
+          next: acta => this.createdActa.set(acta),
+          error: error => this.toast.warning('Reemplazo registrado', `No fue posible generar el acta: ${errorMessage(error)}`)
+        });
+        this.load();
+      },
+      error: error => {
+        this.submitting.set(false);
+        this.replacementConfirmed.set(false);
+        this.actionErrorTitle.set('No se pudo completar el reemplazo');
+        this.actionError.set(errorMessage(error));
+      }
+    });
+  }
+
   protected async execute(): Promise<void> {
+    if (!this.auth.canWrite()) return;
     const action = this.action(); if (!action || this.submitting()) return;
     const value = this.actionForm.getRawValue();
     const actor = this.auth.user();
     if (!actor?.nombre.trim()) { this.actionErrorTitle.set('No se pudo registrar la operación'); this.actionError.set('La sesión no permite identificar al responsable TI.'); return; }
     this.actionForm.controls.responsable.setValue(actor.nombre);
     if (action === 'assign-person' && !value.colaboradorId) { this.actionError.set('Selecciona un colaborador.'); return; }
+    if (action === 'assign-person' && !this.assignmentResolution()) {
+      this.checkForSimilarAssignment(Number(value.colaboradorId));
+      return;
+    }
+    if (action === 'assign-person' && this.assignmentResolution() === 'REPLACE' && !this.replacementConfirmed()) {
+      this.actionError.set('Confirma el reemplazo y el estado final del equipo anterior.');
+      return;
+    }
     const deliveryPhoneValue = this.deliveryPhone().trim();
     if (action === 'assign-person' && this.item() && canDeviceCarrySim(this.item()!) && deliveryPhoneValue && !isChileanPhoneInputValid(deliveryPhoneValue)) { this.actionError.set('Ingresa un número telefónico chileno válido.'); return; }
     if (action === 'assign-person' && this.jointDelivery() && (!this.selectedSim() || !this.item() || !canDeviceCarrySim(this.item()!) || this.item()!.simAsociada)) { this.actionError.set('Selecciona una SIM disponible para este dispositivo.'); return; }
@@ -759,6 +1000,10 @@ export class DispositivoDetail implements OnInit {
     const target = this.states().find((state) => state.id === value.estadoId);
     if (action === 'state' && target?.esTerminal && !await this.confirmation.confirm(`El equipo cambiará a la situación “${target.nombre}”.`, { title: 'Confirmar cambio de situación', confirmLabel: 'Cambiar situación', tone: 'danger' })) return;
     if (action === 'state' && target?.codigo === 'EXTRAVIADO' && !await this.confirmation.confirm('Esta acción marcará el equipo como perdido y quedará registrada en su historial.', { title: 'Reportar equipo perdido', confirmLabel: 'Reportar', tone: 'danger' })) return;
+    if (action === 'assign-person' && this.assignmentResolution() === 'REPLACE') {
+      this.executeReplacementAssignment(value, actor, deliveryPhoneValue);
+      return;
+    }
     const common = { responsable: actor.nombre, observaciones: value.observaciones.trim() || null };
     let request: Observable<Dispositivo|OrdenServicio|ResultadoDevolucion>;
     if (action === 'assign-person') request = this.service.asignarColaborador(this.codigo, { ...common, colaboradorId: Number(value.colaboradorId), ...(deliveryPhoneValue && this.item() && canDeviceCarrySim(this.item()!) ? { numeroTelefonico: deliveryPhoneValue } : {}), ...(this.jointDelivery() && this.selectedSim() ? { simCodigoInventario: this.selectedSim()!.codigoInventario } : {}) });

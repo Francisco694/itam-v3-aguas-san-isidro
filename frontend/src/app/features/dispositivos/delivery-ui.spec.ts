@@ -19,7 +19,7 @@ describe('Registrar entrega: formulario', () => {
   const sim = { id: '8', codigoInventario: 555, numeroAsociado: '912345678', compania: 'Operador', estado: { codigo: 'DISPONIBLE' }, dispositivo: null, colaborador: null };
   beforeEach(async () => {
     vi.spyOn(AssetLabel.prototype as any, 'renderQr').mockResolvedValue(undefined);
-    api = { asignarColaborador: vi.fn(() => NEVER), cambiarEstado: vi.fn(() => of({})), verificarManual: vi.fn(() => of({ resultado: 'VERIFICADO' })), asociarLinea: vi.fn(() => of({ id: '15', numeroTelefonico: '56912345678', estado: 'ACTIVA', dispositivoId: '1', simId: '8' })) };
+    api = { listar: vi.fn(() => of([])), asignarColaborador: vi.fn(() => NEVER), devolver: vi.fn(() => of({ dispositivo: {}, comprobante: {} })), darBaja: vi.fn(() => of({})), cambiarEstado: vi.fn(() => of({})), verificarManual: vi.fn(() => of({ resultado: 'VERIFICADO' })), asociarLinea: vi.fn(() => of({ id: '15', numeroTelefonico: '56912345678', estado: 'ACTIVA', dispositivoId: '1', simId: '8' })) };
     simApi = { listar: vi.fn(() => of([sim, { ...sim, id: '9', codigoInventario: 556, colaborador: person }])), asociarDispositivo: vi.fn(() => of(sim)) };
     confirmation = { confirm: vi.fn(async () => true) };
     await TestBed.configureTestingModule({ imports: [DispositivoDetail], providers: [provideHttpClient(), provideRouter([]),
@@ -32,7 +32,7 @@ describe('Registrar entrega: formulario', () => {
     component = fixture.componentInstance;
     component.codigo = 1445;
     component.load = () => {};
-    component.item.set({ id: '1', codigoInventario: 1445, tipo: { nombre: 'Smartphone', configuracionFormulario: { camposEspecificos: [] } }, estado: { codigo: 'DISPONIBLE', nombre: 'Disponible' }, tipoCustodia: 'NONE', simAsociada: null, atributosEspecificos: {}, creadoEn: '2026-01-01', valorComercial: 0 });
+    component.item.set({ id: '1', codigoInventario: 1445, tipo: { id: '1', nombre: 'Smartphone', configuracionFormulario: { camposEspecificos: [] } }, estado: { codigo: 'DISPONIBLE', nombre: 'Disponible' }, tipoCustodia: 'NONE', simAsociada: null, atributosEspecificos: {}, creadoEn: '2026-01-01', valorComercial: 0 });
     component.collaborators.set([person]);
     component.loading.set(false);
     component.open('assign-person');
@@ -77,6 +77,32 @@ describe('Registrar entrega: formulario', () => {
     expect(api.asignarColaborador.mock.calls[0][1].simCodigoInventario).toBeUndefined();
     component.open('assign-person');
     expect(component.selectedCollaborator()).toBeNull(); expect(component.selectedSim()).toBeNull();
+  });
+  it('advierte cuando el colaborador ya tiene el mismo tipo y ofrece agregar o reemplazar', async () => {
+    api.listar.mockReturnValue(of([{ id: '22', codigoInventario: 2002, tipo: { id: '1', nombre: 'Smartphone' }, marca: 'Samsung', modelo: 'A13', estado: { codigo: 'ASIGNADO', nombre: 'Asignado' } }]));
+    component.selectCollaborator(person);
+    await component.execute(); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('ya tiene un equipo del mismo tipo');
+    expect(fixture.nativeElement.textContent).toContain('Agregar');
+    expect(fixture.nativeElement.textContent).toContain('Reemplazar');
+    fixture.nativeElement.querySelector('.assignment-warning .btn--primary').click(); fixture.detectChanges();
+    expect(component.assignmentResolution()).toBe('ADD');
+  });
+  it('al elegir reemplazar solicita el estado final del equipo anterior', async () => {
+    api.listar.mockReturnValue(of([{ id: '22', codigoInventario: 2002, tipo: { id: '1', nombre: 'Smartphone' }, marca: 'Samsung', modelo: 'A13', estado: { codigo: 'ASIGNADO', nombre: 'Asignado' } }]));
+    component.states.set([
+      { id: '1', codigo: 'DISPONIBLE', nombre: 'Disponible', esTerminal: false, activo: true },
+      { id: '5', codigo: 'RETENIDO_REVISION', nombre: 'Retenido / En Revisión', esTerminal: false, activo: true },
+      { id: '4', codigo: 'SERVICIO_TECNICO', nombre: 'Servicio Técnico', esTerminal: false, activo: true },
+      { id: '7', codigo: 'DADO_BAJA', nombre: 'Dado de Baja', esTerminal: true, activo: true }
+    ]);
+    component.selectCollaborator(person);
+    await component.execute(); fixture.detectChanges();
+    fixture.nativeElement.querySelector('.assignment-warning .btn--secondary').click(); fixture.detectChanges();
+    expect(component.assignmentResolution()).toBe('REPLACE');
+    expect(fixture.nativeElement.textContent).toContain('será recibido en bodega');
+    expect(fixture.nativeElement.querySelector('#replacement-state')).not.toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Confirmar reemplazo');
   });
   it('confirma una verificación manual pendiente y evita mostrarla después', async () => {
     component.item.update((device: any) => ({ ...device, verificacionFisica: { resultado: 'PENDIENTE' } }));

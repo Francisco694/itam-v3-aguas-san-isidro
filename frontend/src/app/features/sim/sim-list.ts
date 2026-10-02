@@ -5,6 +5,7 @@ import { LucidePrinter, LucideX } from '@lucide/angular';
 import QRCode from 'qrcode';
 import { Estado, Sim } from '../../core/models/itam.models';
 import { EstadosService } from '../../core/services/estados.service';
+import { AuthService } from '../../core/services/auth.service';
 import { SimService } from '../../core/services/sim.service';
 import { PageHeader } from '../../shared/components/page-header/page-header';
 import { StatusBadge } from '../../shared/components/status-badge/status-badge';
@@ -21,7 +22,7 @@ const simPrintDocument = (sims: readonly Sim[], qrs: readonly string[], mode: 'A
   imports: [FormsModule, RouterLink, PageHeader, StatusBadge, ViewState, LucidePrinter, LucideX],
   template: `
     <app-page-header title="Tarjetas SIM" subtitle="Lineas corporativas, asignaciones y asociacion con dispositivos.">
-      <a class="btn btn--primary" routerLink="nuevo">+ Nueva SIM</a>
+      @if (auth.canWrite()) { <a class="btn btn--primary" routerLink="nuevo">+ Nueva SIM</a> }
     </app-page-header>
     <section class="card">
       <div class="toolbar">
@@ -98,6 +99,7 @@ const simPrintDocument = (sims: readonly Sim[], qrs: readonly string[], mode: 'A
   styles: [`.sim-selection-toolbar{align-items:center;display:flex;gap:1rem;margin:.8rem 0}.sim-selection-toolbar span{color:var(--slate-500);font-size:.8rem;margin-right:auto}.select-column{width:2.5rem}.print-options-overlay{align-items:center;background:rgba(15,23,42,.58);display:flex;inset:0;justify-content:center;position:fixed;z-index:1000}.print-options-dialog{background:#fff;border-radius:1rem;box-shadow:var(--shadow-lg);max-width:34rem;padding:1.4rem;width:calc(100% - 2rem)}.print-options-dialog header{align-items:start;display:flex;justify-content:space-between}.print-options-dialog header span{color:var(--blue);font-size:.65rem;font-weight:800}.print-options-dialog h2{font-size:1.1rem;margin:.25rem 0}.print-options-dialog header button{background:none;border:0;cursor:pointer}.print-choice-grid{display:grid;gap:.7rem;grid-template-columns:1fr 1fr}.print-choice-grid button{background:var(--gray-50);border:1px solid var(--gray-200);border-radius:.7rem;cursor:pointer;display:grid;gap:.3rem;padding:1rem;text-align:left}.print-choice-grid button svg{color:var(--blue)}.print-choice-grid button span{color:var(--slate-500);font-size:.72rem}.asset-link{color:var(--color-primary);font-weight:800;text-decoration:none}.sim-iccid{grid-column:1/-1}.sim-iccid dd{font-family:var(--font-mono);overflow-wrap:anywhere;word-break:break-word}`]
 })
 export class SimList implements OnInit {
+  protected readonly auth = inject(AuthService);
   private readonly service = inject(SimService);
   private readonly estados = inject(EstadosService);
   protected readonly items = signal<Sim[]>([]);

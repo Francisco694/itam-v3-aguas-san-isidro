@@ -1,4 +1,4 @@
-export type UserRole = 'SUPER_USUARIO' | 'USUARIO';
+export type UserRole = 'SUPER_USUARIO' | 'USUARIO' | 'SOLO_LECTURA';
 
 export interface AuthUser {
   id: string;

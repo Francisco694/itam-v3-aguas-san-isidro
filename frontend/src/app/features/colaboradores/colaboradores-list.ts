@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { Colaborador, Departamento } from '../../core/models/itam.models';
 import { ColaboradoresService } from '../../core/services/colaboradores.service';
+import { AuthService } from '../../core/services/auth.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { DepartamentosService } from '../../core/services/departamentos.service';
 import { PageHeader } from '../../shared/components/page-header/page-header';
@@ -18,7 +19,7 @@ import { errorMessage } from '../../shared/utils/error-message';
       title="Colaboradores"
       subtitle="Colaboradores habilitados para recibir equipos y líneas corporativas."
     >
-      <a class="btn btn--primary" routerLink="nuevo">+ Nuevo colaborador</a>
+      @if (auth.canWrite()) { <a class="btn btn--primary" routerLink="nuevo">+ Nuevo colaborador</a> }
     </app-page-header>
     @if (notice()) { <div class="notice notice--success">{{ notice() }}</div> }
     @if (actionError()) { <div class="notice notice--error">{{ actionError() }}</div> }
@@ -106,6 +107,7 @@ import { errorMessage } from '../../shared/utils/error-message';
   styles: [`.link{color:var(--color-primary);text-decoration:none}.data-table th:first-child,.data-table td:first-child{text-align:left}.data-table th:nth-child(2),.data-table td:nth-child(2){min-width:8rem}.data-table th:nth-child(3),.data-table td:nth-child(3){min-width:10rem}.data-table th:nth-child(4),.data-table td:nth-child(4){min-width:11rem}.data-table .status-column{text-align:center;white-space:nowrap}.data-table .actions-column{text-align:right;white-space:nowrap}.actions{justify-content:flex-end}@media(max-width:767px){.mobile-record-card__actions:has(.btn--danger){grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:560px){.mobile-record-card__actions:has(.btn--danger){grid-template-columns:1fr}}`]
 })
 export class ColaboradoresList implements OnInit {
+  protected readonly auth = inject(AuthService);
   private readonly service = inject(ColaboradoresService);
   private readonly deptService = inject(DepartamentosService);
   private readonly confirmation = inject(ConfirmationService);

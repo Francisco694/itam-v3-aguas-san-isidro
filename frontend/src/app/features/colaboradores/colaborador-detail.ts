@@ -1,5 +1,6 @@
 import { DatePipe } from '@angular/common';
 import { Component, OnInit, inject, signal } from '@angular/core';
+import { AuthService } from '../../core/services/auth.service';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { forkJoin } from 'rxjs';
 import {
@@ -60,7 +61,7 @@ export const visibleReconciliationLabel = (classification: ClasificacionConcilia
       title="Detalle del colaborador"
       subtitle="Equipos actuales, historial y registros que requieren revisión."
     >
-      @if (item()) { <a class="btn btn--secondary" [routerLink]="['editar']">Editar</a> }
+      @if (item() && auth.canWrite()) { <a class="btn btn--secondary" [routerLink]="['editar']">Editar</a> }
     </app-page-header>
 
     @if (loading()) {
@@ -167,6 +168,7 @@ export const visibleReconciliationLabel = (classification: ClasificacionConcilia
   `],
 })
 export class ColaboradorDetail implements OnInit {
+  protected readonly auth = inject(AuthService);
   private readonly service = inject(ColaboradoresService);
   private readonly route = inject(ActivatedRoute);
   protected readonly item = signal<Colaborador | null>(null);

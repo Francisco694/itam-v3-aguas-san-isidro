@@ -5,7 +5,7 @@ export interface AuthUser {
   nombre: string;
   email: string;
   cargo: string | null;
-  rol: "SUPER_USUARIO" | "USUARIO";
+  rol: "SUPER_USUARIO" | "USUARIO" | "SOLO_LECTURA";
   debeCambiarPassword: boolean;
   debeCambiarPin: boolean;
 }

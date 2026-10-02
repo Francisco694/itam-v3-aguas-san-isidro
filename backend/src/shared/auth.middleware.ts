@@ -195,6 +195,31 @@ export const requireRole =
           )
         );
 
+/**
+ * El perfil SOLO_LECTURA puede consultar información, pero nunca ejecutar
+ * operaciones que cambien el estado de la aplicación.
+ *
+ * Se aplica de forma global después de requireAuth para que la protección no
+ * dependa de que cada módulo recuerde agregar un middleware a sus rutas POST,
+ * PATCH, PUT o DELETE.
+ */
+export const rejectReadOnlyMutations: RequestHandler = (req, _res, next) => {
+  if (
+    req.authUser?.rol === "SOLO_LECTURA" &&
+    !["GET", "HEAD", "OPTIONS"].includes(req.method)
+  ) {
+    next(
+      new AppError(
+        403,
+        "READ_ONLY",
+        "El perfil de solo lectura no puede modificar ni agregar información."
+      )
+    );
+    return;
+  }
+  next();
+};
+
 export const auditMutations: RequestHandler = (req, res, next) => {
   if (["GET", "HEAD", "OPTIONS"].includes(req.method)) {
     next();

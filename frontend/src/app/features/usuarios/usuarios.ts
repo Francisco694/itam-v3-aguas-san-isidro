@@ -119,6 +119,7 @@ import { errorMessage } from '../../shared/utils/error-message';
             <select id="user-role" formControlName="rol">
               <option value="USUARIO">Usuario</option>
               <option value="SUPER_USUARIO">Super usuario</option>
+              <option value="SOLO_LECTURA">Solo lectura</option>
             </select>
           </div>
           <label class="check">

@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import test, { after } from "node:test";
 import type { NextFunction, Request, Response } from "express";
 import { pool } from "../../config/database";
-import { requireRole } from "../../shared/auth.middleware";
+import {
+  rejectReadOnlyMutations,
+  requireRole
+} from "../../shared/auth.middleware";
 import { AppError } from "../../shared/errors";
 import { parseOptionalNonNegativeInteger } from "../../shared/validation";
 import { stockAlertIsTriggered, stockAlertMessage } from "./stock-alerts.service";
@@ -45,6 +48,33 @@ test("un usuario normal no supera la autorización de actualización", () => {
   );
   assert.ok(received instanceof AppError);
   assert.equal((received as AppError).statusCode, 403);
+});
+
+test("el perfil SOLO_LECTURA puede consultar, pero no mutar", () => {
+  const request = {
+    method: "PATCH",
+    authUser: {
+      id: "9", nombre: "Consulta", email: "read@example.test", cargo: null,
+      rol: "SOLO_LECTURA", debeCambiarPassword: false, debeCambiarPin: false
+    }
+  } as Request;
+  let received: unknown;
+  rejectReadOnlyMutations(
+    request,
+    {} as Response,
+    ((error?: unknown) => { received = error; }) as NextFunction
+  );
+  assert.ok(received instanceof AppError);
+  assert.equal((received as AppError).code, "READ_ONLY");
+
+  const readRequest = { ...request, method: "GET" } as Request;
+  let continued = false;
+  rejectReadOnlyMutations(
+    readRequest,
+    {} as Response,
+    (() => { continued = true; }) as NextFunction
+  );
+  assert.equal(continued, true);
 });
 
 test("calcula disponibles desde inventario usando solo el estado DISPONIBLE", async () => {

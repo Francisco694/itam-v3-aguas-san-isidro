@@ -1,5 +1,5 @@
 import { HttpClient } from '@angular/common/http';
-import { Injectable, inject, signal } from '@angular/core';
+import { computed, Injectable, inject, signal } from '@angular/core';
 import { map, of, Subject, tap } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { ApiItemResponse } from '../models/api.models';
@@ -14,6 +14,8 @@ export class AuthService {
   private readonly http = inject(HttpClient);
   private readonly url = `${environment.apiUrl}/auth`;
   readonly user = signal<AuthUser | null>(null);
+  readonly isReadOnly = computed(() => this.user()?.rol === 'SOLO_LECTURA');
+  readonly canWrite = computed(() => !this.isReadOnly() && !!this.user());
   readonly sessionEnded = new Subject<SessionEndReason>();
   private checked = false;
 
