@@ -25,6 +25,16 @@ import { formatRut } from '../../shared/utils/rut';
 
 type InventoryView = 'REAL' | 'HISTORICO';
 
+const CURRENT_OPERATIONAL_STATE_CODES = new Set([
+  'DISPONIBLE',
+  'ASIGNADO',
+  'PRESTAMO_TEMPORAL',
+  'SERVICIO_TECNICO',
+  'EN_SERVICIO_TECNICO',
+  'RETENIDO_REVISION',
+  'EN_BODEGA',
+]);
+
 const normalizeInventorySearch = (value: unknown): string => String(value ?? '')
   .normalize('NFD')
   .replace(/[\u0300-\u036f]/g, '')
@@ -466,7 +476,8 @@ export class DispositivosList implements OnInit {
   }
   private belongsToView(item: Dispositivo, view: InventoryView): boolean {
     return view === 'REAL'
-      ? item.origenRegistro === 'MANUAL' || item.verificacionFisica?.resultado === 'VERIFICADO'
+      ? CURRENT_OPERATIONAL_STATE_CODES.has(item.estado.codigo)
+        && (item.origenRegistro === 'MANUAL' || item.verificacionFisica?.resultado === 'VERIFICADO')
       : item.origenRegistro === 'IMPORTADO';
   }
   private verificationFilter(): FiltroVerificacionDispositivo | undefined {
