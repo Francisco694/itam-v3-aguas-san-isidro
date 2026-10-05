@@ -330,7 +330,7 @@ export const listarDispositivos = async (
 
   if (filters.departamentoId !== undefined) {
     values.push(filters.departamentoId);
-    where.push(`d.departamento_id = $${values.length}`);
+    where.push(`(d.departamento_id = $${values.length} OR c.departamento_id = $${values.length})`);
   }
 
   if (filters.familiaCodigoInventarioId !== undefined) {

@@ -202,7 +202,7 @@ const printableDocument = (
       {{ filtersOpen() ? 'Ocultar filtros' : 'Filtros avanzados' }}
     </button>
     <section class="card inventory-card">
-      <form id="inventory-filters" class="filter-panel" [class.filter-panel--open]="filtersOpen()" (ngSubmit)="load()">
+      <form id="inventory-filters" class="filter-panel" [class.filter-panel--open]="filtersOpen()" (submit)="applyFilters($event)">
         <div class="filter-panel__title"><svg lucideSlidersHorizontal></svg><strong>Filtros del inventario</strong></div>
         <div class="field filter-search"><label for="q">Búsqueda general</label><input id="q" name="q" [(ngModel)]="filters.q" placeholder="Código, serie, marca o modelo" /></div>
         <div class="field"><label for="tipo">Tipo</label><select id="tipo" name="tipo" [(ngModel)]="filters.tipoDispositivoId"><option value="">Todos</option>@for(type of types(); track type.id){<option [value]="type.id">{{ type.nombre }}</option>}</select></div>
@@ -299,9 +299,12 @@ export class DispositivosList implements OnInit {
 
   ngOnInit(): void {
     this.viewMode = this.route.snapshot.queryParamMap.get('vista') === 'historico' ? 'HISTORICO' : 'REAL';
-    this.filters.verificacion = '';
-    this.filters.estado=this.route.snapshot.queryParamMap.get('estado')||'';
-    this.filters.tipoDispositivoId=this.route.snapshot.queryParamMap.get('tipoDispositivoId')||'';
+    this.filters.q = this.route.snapshot.queryParamMap.get('q') || '';
+    this.filters.verificacion = (this.route.snapshot.queryParamMap.get('verificacion') as FiltroVerificacionDispositivo | null) || '';
+    this.filters.estado = this.route.snapshot.queryParamMap.get('estado') || '';
+    this.filters.tipoDispositivoId = this.route.snapshot.queryParamMap.get('tipoDispositivoId') || '';
+    this.filters.departamentoId = this.route.snapshot.queryParamMap.get('departamentoId') || '';
+    this.filters.localidad = this.route.snapshot.queryParamMap.get('localidad') || '';
     this.estados.listar('DISPOSITIVO').subscribe({ next: (items) => this.states.set(items) });
     this.deptService.listar().subscribe({ next: (items) => this.departments.set(items) });
     this.typeService.listar().subscribe({ next: (items) => this.types.set(items) });
@@ -310,6 +313,24 @@ export class DispositivosList implements OnInit {
   }
   protected stateCount(code:string):number{return inventoryStateCount(this.allItems(),code);}
   protected selectState(code:string):void{this.filters.estado=code;this.filters.verificacion='';void this.router.navigate([], {relativeTo:this.route,queryParams:{estado:code||null},queryParamsHandling:'merge',replaceUrl:true});this.load();}
+  protected applyFilters(event: Event): void {
+    event.preventDefault();
+    event.stopPropagation();
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: {
+        q: this.filters.q || null,
+        tipoDispositivoId: this.filters.tipoDispositivoId || null,
+        estado: this.filters.estado || null,
+        departamentoId: this.filters.departamentoId || null,
+        localidad: this.filters.localidad || null,
+        verificacion: this.filters.verificacion || null
+      },
+      queryParamsHandling: 'merge',
+      replaceUrl: true
+    });
+    this.load();
+  }
   protected selectView(view: InventoryView): void {
     this.viewMode = view;
     this.filters.verificacion = '';
@@ -479,7 +500,17 @@ export class DispositivosList implements OnInit {
       this.toast.error('No se pudieron generar las etiquetas', errorMessage(error));
     }
   }
-  protected clear(): void { this.quickQuery = ''; this.filters = { q: '', tipoDispositivoId: '', estado: '', departamentoId: '', localidad: '', verificacion: '' }; this.load(); }
+  protected clear(): void {
+    this.quickQuery = '';
+    this.filters = { q: '', tipoDispositivoId: '', estado: '', departamentoId: '', localidad: '', verificacion: '' };
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { q: null, tipoDispositivoId: null, estado: null, departamentoId: null, localidad: null, verificacion: null },
+      queryParamsHandling: 'merge',
+      replaceUrl: true
+    });
+    this.load();
+  }
   protected custody(item: Dispositivo): string { return item.colaborador?.nombre || item.departamento?.nombre || 'Sin responsable actual'; }
   protected closedCustody(item: Dispositivo): boolean { return isClosedCustodyState(item.estado.codigo); }
   protected lastResponsibleName(item: Dispositivo): string {
@@ -512,6 +543,6 @@ export class DispositivosList implements OnInit {
     return 'No existen activos en este estado actualmente.';
   }
   private hasCombinedFilters():boolean {
-    return Boolean(this.filters.q||this.filters.tipoDispositivoId||this.filters.departamentoId||this.filters.localidad);
+    return Boolean(this.filters.q||this.filters.tipoDispositivoId||this.filters.estado||this.filters.departamentoId||this.filters.localidad||this.filters.verificacion);
   }
 }
