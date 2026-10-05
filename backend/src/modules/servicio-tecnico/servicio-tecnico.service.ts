@@ -13,6 +13,7 @@ import type { MotivoBaja } from "../dispositivos/dispositivos.types";
 import { listarEntregasTemporales, listarOrdenes, obtenerCotizacionArchivo, obtenerEntregaTemporal, obtenerOrden, obtenerOrdenAbiertaPorDispositivo, obtenerOrdenParaActualizar } from "./servicio-tecnico.repository";
 import { resolveTechnicalQuoteFilePath, removeTechnicalQuoteFile } from "./servicio-tecnico.upload";
 import type { CerrarOrdenInput, CerrarTemporalInput, CotizacionArchivo, CotizacionArchivoAlmacenado, CotizacionArchivoRow, CotizacionInput, CrearOrdenServicioInput, DecisionServicioInput, EditarOrdenServicioInput, EntregaTemporalRow, EntregarTemporalInput, OrdenServicioRow } from "./servicio-tecnico.types";
+import { buildTechnicalOrderPdf } from "./servicio-tecnico.pdf";
 
 const mapTemporal=(r:EntregaTemporalRow)=>({id:r.id,ordenServicioId:r.orden_servicio_id,
  dispositivo:{id:r.dispositivo_temporal_id,codigoInventario:r.codigo_inventario,tipo:r.tipo_dispositivo,marca:r.marca,modelo:r.modelo},
@@ -162,7 +163,7 @@ const generarEnvioServicioPdfLegacy=async(id:number,client?:PoolClient)=>{
  doc.end();return{buffer:await done,filename:"ST-"+row.id+"-envio.pdf"};
 };
 
-export const generarEnvioServicioPdf=async(id:number,client?:PoolClient)=>{
+const generarEnvioServicioPdfLegacy2=async(id:number,client?:PoolClient)=>{
  const row=await obtenerOrden(id,client);if(!row)throw new NotFoundError("Orden de servicio no encontrada.");
  const doc=new PDFDocument({size:"A4",margin:36,info:{Title:"Orden de Trabajo Servicio Técnico OT-"+row.id}});const chunks:Buffer[]=[];
  doc.on("data",chunk=>chunks.push(Buffer.from(chunk)));const done=new Promise<Buffer>((resolve,reject)=>{doc.on("end",()=>resolve(Buffer.concat(chunks)));doc.on("error",reject)});
@@ -187,6 +188,11 @@ export const generarEnvioServicioPdf=async(id:number,client?:PoolClient)=>{
  section("5. RECEPCIÓN Y DEVOLUCIÓN");const reviewFinalized=["CERRADA","BAJA","REPARACION_RECHAZADA"].includes(row.estado);const diagnostic=row.diagnostico&&row.plazo_informado?[row.diagnostico,row.plazo_informado].join(" - "):row.diagnostico??"";drawTable(["Campo","Detalle"],[["Fecha de recepción",serviceDateOnly(row.fecha_envio)],["N° OT / ticket proveedor",textValue(row.ticket_proveedor)],["Diagnóstico y plazo informado",reviewFinalized||row.diagnostico?textValue(diagnostic):"____________________________"],["Costo cotizado",row.monto_cotizacion===null?"____________________________":moneyValue(Number(row.monto_cotizacion))],["Observaciones de cotización",textValue(row.observaciones_cotizacion)],["Fecha de devolución",row.fecha_retorno?serviceDateOnly(row.fecha_retorno):"____________________________"],["Estado final",finalState(row.estado_final)],["Resultado / observaciones de retorno",reviewFinalized?textValue([row.resultado,row.observaciones_retorno].filter(Boolean).join(" - ")):"____________________________"]],[190,pageWidth-190]);
  section("6. FIRMAS");const signatureY=doc.y,signatureGap=24,signatureWidth=(pageWidth-signatureGap)/2;const signature=(x:number,title:string,role:string)=>{doc.fillColor(gray).font("Helvetica-Bold").fontSize(7.5).text(title,x,signatureY,{width:signatureWidth,align:"center"});doc.strokeColor(line).lineWidth(1).moveTo(x+12,signatureY+30).lineTo(x+signatureWidth-12,signatureY+30).stroke();doc.fillColor(muted).font("Helvetica").fontSize(7).text(role,x,signatureY+35,{width:signatureWidth,align:"center"});doc.text("Nombre: __________________________",x,signatureY+54,{width:signatureWidth,align:"center"});doc.text("Fecha: ___________________________",x,signatureY+70,{width:signatureWidth,align:"center"});};signature(doc.page.margins.left,"RECEPCIÓN EN SERVICIO TÉCNICO","Representante del servicio técnico");signature(doc.page.margins.left+signatureWidth+signatureGap,"RECEPCIÓN POST SERVICIO - ÁREA TI","Responsable TI - Aguas San Isidro");doc.y=signatureY+91;doc.fillColor(muted).font("Helvetica").fontSize(7).text("Área TI - Aguas San Isidro | Formulario TI-OT | v1.0",{align:"center"});
  doc.end();return{buffer:await done,filename:"ST-"+row.id+"-envio.pdf"};
+};
+
+export const generarEnvioServicioPdf=async(id:number,client?:PoolClient)=>{
+ const row=await obtenerOrden(id,client);if(!row)throw new NotFoundError("Orden de servicio no encontrada.");
+ return buildTechnicalOrderPdf(row);
 };
 
 export const registrarCotizacion=async(id:number,input:CotizacionInput)=>{
