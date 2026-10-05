@@ -150,7 +150,7 @@
 }
 .filter-panel {
   display: grid;
-  grid-template-columns: 1.35fr repeat(4, minmax(7rem, 1fr)) auto;
+  grid-template-columns: minmax(14rem, 1.35fr) repeat(4, minmax(7rem, 1fr));
   gap: 0.8rem;
   align-items: end;
   padding: 1.15rem 1.25rem;
@@ -171,6 +171,7 @@
 .filter-panel__actions {
   display: flex;
   gap: 0.35rem;
+  grid-column: 1 / -1;
   padding-bottom: 0.05rem;
 }
 .table-heading {
@@ -322,10 +323,10 @@
 }
 @media (max-width: 1180px) {
   .filter-panel {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
   .filter-panel__actions {
-    grid-column: span 2;
+    grid-column: 1 / -1;
   }
 }
 @media (max-width: 767px) {
