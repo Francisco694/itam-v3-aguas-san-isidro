@@ -43,6 +43,7 @@ const dateOnly = (input:Date|string|null):string => {
 };
 const money = (input:string|number|null):string => input === null || input === undefined || input === "" ? "" : new Intl.NumberFormat("es-CL", {style:"currency", currency:"CLP", maximumFractionDigits:0}).format(Number(input));
 const checked = (isChecked:boolean):string => isChecked ? "[x]" : "[ ]";
+const technicalOrderNumber = (input:string|number):string => String(input).padStart(3, "0");
 
 const serviceType = (selected:string):string => [
   ["GARANTIA", "Garantía"], ["REPARACION", "Reparación"], ["MANTENCION", "Mantención"], ["DIAGNOSTICO", "Diagnóstico"]
@@ -69,7 +70,7 @@ const fontPaths = () => ({
 });
 
 export const buildTechnicalOrderPdf = async (row:ExtendedOrdenServicioRow):Promise<{buffer:Buffer;filename:string}> => {
-  const doc = new PDFDocument({size:[PAGE_WIDTH, PAGE_HEIGHT], margin:0, info:{Title:`Orden de Trabajo OT-${row.id}`}});
+  const doc = new PDFDocument({size:[PAGE_WIDTH, PAGE_HEIGHT], margin:0, info:{Title:`Orden de Trabajo OT-${technicalOrderNumber(row.numero_ot)}`}});
   const chunks:Buffer[] = [];
   doc.on("data", chunk => chunks.push(Buffer.from(chunk)));
   const completed = new Promise<Buffer>((resolvePromise, reject) => {
@@ -90,7 +91,7 @@ export const buildTechnicalOrderPdf = async (row:ExtendedOrdenServicioRow):Promi
     if (path) doc.image(path, MARGIN_LEFT, MARGIN_TOP, {fit:[58, 58], align:"center", valign:"center"});
     doc.fillColor(BLUE).font(boldFont).fontSize(17).text("ORDEN DE TRABAJO", 210, 36, {width:CONTENT_WIDTH - 210, align:"right"});
     doc.fillColor(BLUE).font(regularFont).fontSize(9.5).text("ENVÍO DE EQUIPOS A SERVICIO TÉCNICO", 210, 59, {width:CONTENT_WIDTH - 210, align:"right"});
-    doc.fillColor(TEXT).font(regularFont).fontSize(8).text(`N° de orden: OT-${value(row.id)}`, MARGIN_LEFT, 93, {width:230});
+    doc.fillColor(TEXT).font(regularFont).fontSize(8).text(`N° de orden: OT-${technicalOrderNumber(row.numero_ot)}`, MARGIN_LEFT, 93, {width:230});
     doc.text(`Fecha: ${dateOnly(row.fecha_envio)}`, PAGE_WIDTH - MARGIN_RIGHT - 190, 93, {width:190, align:"right"});
     y = 111;
   };
@@ -155,5 +156,5 @@ export const buildTechnicalOrderPdf = async (row:ExtendedOrdenServicioRow):Promi
   y += 91;
   doc.fillColor(MUTED).font(regularFont).fontSize(7).text(FOOTER, MARGIN_LEFT, PAGE_HEIGHT - MARGIN_BOTTOM - 9, {width:CONTENT_WIDTH, align:"center"});
   doc.end();
-  return {buffer:await completed, filename:`ST-${row.id}-envio.pdf`};
+  return {buffer:await completed, filename:`ST-${technicalOrderNumber(row.numero_ot)}-envio.pdf`};
 };

@@ -4,7 +4,7 @@ export type EstadoOrdenServicio =
   | "EN_REPARACION" | "REPARACION_TERMINADA" | "CERRADA" | "BAJA";
 
 export interface OrdenServicioRow {
-  id:string; dispositivo_id:string; codigo_inventario:number;
+  id:string; numero_ot:string|number; dispositivo_id:string; codigo_inventario:number;
   tipo_dispositivo:string; marca:string|null; modelo:string|null;
   numero_serie:string|null;imei:string|null;observaciones_envio:string|null;
   area_solicitante:string|null; contacto_servicio:string|null;

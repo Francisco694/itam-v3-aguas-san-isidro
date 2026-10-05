@@ -68,7 +68,7 @@ jobs:
           mkdir -p .deploy
           tar -czf ".deploy/backend-${release_id}.tar.gz" \
             -C backend dist package.json package-lock.json \
-            -C ../database/migrations 035_read_only_user_role.sql
+            -C ../database/migrations 036_correlative_technical_work_order_numbers.sql
           tar -czf ".deploy/frontend-${release_id}.tar.gz" \
             -C frontend/dist/frontend/browser .
 
@@ -146,7 +146,7 @@ jobs:
           tar -xzf "$backend_archive" -C "$release_dir/backend"
           tar -xzf "$frontend_archive" -C "$release_dir/frontend-dist"
           test -f "$release_dir/backend/dist/server.js"
-          test -f "$release_dir/backend/035_read_only_user_role.sql"
+          test -f "$release_dir/backend/036_correlative_technical_work_order_numbers.sql"
           test -f "$release_dir/frontend-dist/index.html"
           cp "$previous_backend/.env" "$release_dir/backend/.env"
 
@@ -161,7 +161,7 @@ jobs:
             --username="$DB_USER" \
             --dbname="$DB_NAME" \
             --set=ON_ERROR_STOP=1 \
-            --file="$release_dir/backend/035_read_only_user_role.sql"
+            --file="$release_dir/backend/036_correlative_technical_work_order_numbers.sql"
 
           sudo mkdir -p /var/backups/itam
           sudo cp "$nginx_config" "$nginx_backup"

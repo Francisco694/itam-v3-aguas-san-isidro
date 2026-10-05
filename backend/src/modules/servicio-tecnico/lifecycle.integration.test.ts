@@ -1,11 +1,19 @@
 import assert from "node:assert/strict";
 import test, { after } from "node:test";
+import type { PoolClient } from "pg";
 import { pool } from "../../config/database";
 import { ConflictError } from "../../shared/errors";
 import { assertSinOrdenServicioAbierta } from "../dispositivos/dispositivos.service";
 import { DECLARACION_OBLIGATORIA_TRABAJADOR } from "../actas-entrega/actas-entrega.service";
 
 after(async()=>{await pool.end()});
+
+const nextTechnicalOrderNumber=async(client:PoolClient):Promise<string|null>=>{
+ const column=await client.query<{exists:boolean}>("SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='itam' AND table_name='ordenes_servicio_tecnico' AND column_name='numero_ot') AS exists");
+ if(!column.rows[0]?.exists)return null;
+ const result=await client.query<{numero_ot:string}>("SELECT COALESCE(MAX(numero_ot),0)+1 AS numero_ot FROM itam.ordenes_servicio_tecnico");
+ return result.rows[0]!.numero_ot;
+};
 
 test("la migración patrimonial agrega valor comercial no negativo",async()=>{
  const result=await pool.query<{version:string}>("SELECT version FROM itam.schema_migrations WHERE version='008'");assert.equal(result.rows[0]?.version,"008");
@@ -21,11 +29,11 @@ test("las órdenes técnicas persisten diagnóstico, cotización y costos",async
 });
 
 test("PostgreSQL rechaza montos negativos de cotización",async()=>{
- const client=await pool.connect();try{await client.query("BEGIN");const device=await client.query<{id:string}>("SELECT id FROM itam.dispositivos LIMIT 1");await assert.rejects(client.query("INSERT INTO itam.ordenes_servicio_tecnico(dispositivo_id,falla_reportada,responsable_envio,monto_cotizacion) VALUES($1,'TEST falla','TEST',-1)",[device.rows[0]!.id]),(e:unknown)=>(e as {code?:string}).code==="23514");}finally{await client.query("ROLLBACK");client.release()}
+ const client=await pool.connect();try{await client.query("BEGIN");const device=await client.query<{id:string}>("SELECT id FROM itam.dispositivos LIMIT 1");const number=await nextTechnicalOrderNumber(client);const query=number===null?"INSERT INTO itam.ordenes_servicio_tecnico(dispositivo_id,falla_reportada,responsable_envio,monto_cotizacion) VALUES($1,'TEST falla','TEST',-1)":"INSERT INTO itam.ordenes_servicio_tecnico(numero_ot,dispositivo_id,falla_reportada,responsable_envio,monto_cotizacion) VALUES($1,$2,'TEST falla','TEST',-1)";const params=number===null?[device.rows[0]!.id]:[number,device.rows[0]!.id];await assert.rejects(client.query(query,params),(e:unknown)=>(e as {code?:string}).code==="23514");}finally{await client.query("ROLLBACK");client.release()}
 });
 
 test("un dispositivo no admite dos órdenes técnicas abiertas",async()=>{
- const client=await pool.connect();try{await client.query("BEGIN");const device=await client.query<{id:string}>("SELECT d.id FROM itam.dispositivos d WHERE NOT EXISTS(SELECT 1 FROM itam.ordenes_servicio_tecnico o WHERE o.dispositivo_id=d.id) LIMIT 1");await client.query("INSERT INTO itam.ordenes_servicio_tecnico(dispositivo_id,falla_reportada,responsable_envio) VALUES($1,'TEST 1','TEST')",[device.rows[0]!.id]);await assert.rejects(client.query("INSERT INTO itam.ordenes_servicio_tecnico(dispositivo_id,falla_reportada,responsable_envio) VALUES($1,'TEST 2','TEST')",[device.rows[0]!.id]),(e:unknown)=>(e as {code?:string}).code==="23505");}finally{await client.query("ROLLBACK");client.release()}
+ const client=await pool.connect();try{await client.query("BEGIN");const device=await client.query<{id:string}>("SELECT d.id FROM itam.dispositivos d WHERE NOT EXISTS(SELECT 1 FROM itam.ordenes_servicio_tecnico o WHERE o.dispositivo_id=d.id) LIMIT 1");const number=await nextTechnicalOrderNumber(client);if(number===null){await client.query("INSERT INTO itam.ordenes_servicio_tecnico(dispositivo_id,falla_reportada,responsable_envio) VALUES($1,'TEST 1','TEST')",[device.rows[0]!.id]);await assert.rejects(client.query("INSERT INTO itam.ordenes_servicio_tecnico(dispositivo_id,falla_reportada,responsable_envio) VALUES($1,'TEST 2','TEST')",[device.rows[0]!.id]),(e:unknown)=>(e as {code?:string}).code==="23505");}else{await client.query("INSERT INTO itam.ordenes_servicio_tecnico(numero_ot,dispositivo_id,falla_reportada,responsable_envio) VALUES($1,$2,'TEST 1','TEST')",[number,device.rows[0]!.id]);await assert.rejects(client.query("INSERT INTO itam.ordenes_servicio_tecnico(numero_ot,dispositivo_id,falla_reportada,responsable_envio) VALUES($1,$2,'TEST 2','TEST')",[number,device.rows[0]!.id]),(e:unknown)=>(e as {code?:string}).code==="23505");}}finally{await client.query("ROLLBACK");client.release()}
 });
 
 test("la baja exige motivo controlado y valor histórico",async()=>{
@@ -43,7 +51,9 @@ test("un acta admite varios equipos sin duplicar el mismo activo",async()=>{
 test("una orden tecnica abierta bloquea la asignacion del dispositivo",async()=>{
  const client=await pool.connect();try{await client.query("BEGIN");
   const device=await client.query<{id:string}>("SELECT d.id FROM itam.dispositivos d WHERE NOT EXISTS(SELECT 1 FROM itam.ordenes_servicio_tecnico o WHERE o.dispositivo_id=d.id AND o.estado NOT IN ('CERRADA','BAJA','REPARACION_RECHAZADA')) LIMIT 1");assert.ok(device.rows[0]);
-  await client.query("INSERT INTO itam.ordenes_servicio_tecnico(dispositivo_id,falla_reportada,responsable_envio) VALUES($1,'TEST bloqueo','TEST')",[device.rows[0]!.id]);
+  const number=await nextTechnicalOrderNumber(client);
+  if(number===null)await client.query("INSERT INTO itam.ordenes_servicio_tecnico(dispositivo_id,falla_reportada,responsable_envio) VALUES($1,'TEST bloqueo','TEST')",[device.rows[0]!.id]);
+  else await client.query("INSERT INTO itam.ordenes_servicio_tecnico(numero_ot,dispositivo_id,falla_reportada,responsable_envio) VALUES($1,$2,'TEST bloqueo','TEST')",[number,device.rows[0]!.id]);
   await assert.rejects(assertSinOrdenServicioAbierta(device.rows[0]!.id,client),(error:unknown)=>error instanceof ConflictError&&error.message.includes("servicio técnico"));
  }finally{await client.query("ROLLBACK");client.release()}
 });

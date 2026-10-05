@@ -25,7 +25,7 @@ const mapTemporal=(r:EntregaTemporalRow)=>({id:r.id,ordenServicioId:r.orden_serv
 const mapCotizacionArchivo=(r:CotizacionArchivoRow|null):CotizacionArchivo|null=>r?({id:r.id,ordenServicioTecnicoId:r.orden_servicio_tecnico_id,dispositivoId:r.dispositivo_id,proveedor:r.proveedor,nombreOriginal:r.nombre_original,mimeType:r.mime_type,tamanioBytes:Number(r.tamanio_bytes),version:r.version,activo:r.activo,subidoPor:r.subido_por,creadoEn:toIsoDateTime(r.creado_en)}):null;
 
 const mapOrden=(r:OrdenServicioRow,temporales:EntregaTemporalRow[]=[])=>({
-  id:r.id,dispositivo:{id:r.dispositivo_id,codigoInventario:r.codigo_inventario,
+  id:r.id,numeroOt:Number(r.numero_ot),dispositivo:{id:r.dispositivo_id,codigoInventario:r.codigo_inventario,
     tipo:r.tipo_dispositivo,marca:r.marca,modelo:r.modelo,imei:r.imei,numeroSerie:r.numero_serie,valorComercial:Number(r.valor_comercial)},
   proveedor:r.proveedor,areaSolicitante:r.area_solicitante,contactoServicio:r.contacto_servicio,ticketProveedor:r.ticket_proveedor,observacionesCotizacion:r.observaciones_cotizacion,
   fechaEnvio:serviceDateInput(r.fecha_envio),fallaReportada:r.falla_reportada,observacionesEnvio:r.observaciones_envio,
@@ -73,6 +73,8 @@ const parseFechaRetorno = (value: string | null | undefined): string | null => {
 const serviceDateOnly = (value: Date | string): string =>
   (()=>{const [year,month,day]=serviceDateInput(value).split("-");return `${day}/${month}/${year}`;})();
 
+const technicalOrderNumber = (value:string|number):string => String(value).padStart(3,"0");
+
 const serviceDateInput = (value: Date | string): string => {
   if (typeof value === "string") return value.slice(0, 10);
   const parts=new Intl.DateTimeFormat("en-CA",{timeZone:"America/Santiago",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(value);
@@ -97,7 +99,10 @@ export const crearOrdenServicio=async(input:CrearOrdenServicioInput)=>{
   if(!input.proveedor?.trim())throw new ValidationError("Falta proveedor, técnico o destino.");
   if(!input.fallaReportada.trim())throw new ValidationError("Falta falla reportada.");
   if(!input.responsable.trim())throw new ValidationError("El responsable TI es obligatorio.");
-  const inserted=await client.query<{id:string}>("INSERT INTO itam.ordenes_servicio_tecnico(dispositivo_id,proveedor,fecha_envio,area_solicitante,contacto_servicio,tipo_servicio,falla_reportada,accesorios_entregados,observaciones_envio,responsable_envio,custodio_tipo_al_ingreso,colaborador_id_al_ingreso,departamento_id_al_ingreso,recibido_por_id_al_ingreso) VALUES($1,$2,COALESCE($3::date::timestamptz,NOW()),$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id",[device.dispositivo_id,input.proveedor??null,fechaEnvio,input.areaSolicitante??null,input.contactoServicio??null,input.tipoServicio,input.fallaReportada,input.accesoriosEntregados??null,input.observaciones??null,input.responsable,custodioTipo,device.colaborador_id,device.departamento_id,device.recibido_por_id]);
+  await client.query("SELECT pg_advisory_xact_lock(hashtext('itam.ordenes_servicio_tecnico.numero_ot'))");
+  const nextNumber=await client.query<{numero_ot:string}>("SELECT COALESCE(MAX(numero_ot),0)+1 AS numero_ot FROM itam.ordenes_servicio_tecnico");
+  const numeroOt=Number(nextNumber.rows[0]?.numero_ot??1);
+  const inserted=await client.query<{id:string}>("INSERT INTO itam.ordenes_servicio_tecnico(numero_ot,dispositivo_id,proveedor,fecha_envio,area_solicitante,contacto_servicio,tipo_servicio,falla_reportada,accesorios_entregados,observaciones_envio,responsable_envio,custodio_tipo_al_ingreso,colaborador_id_al_ingreso,departamento_id_al_ingreso,recibido_por_id_al_ingreso) VALUES($1,$2,$3,COALESCE($4::date::timestamptz,NOW()),$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING id",[numeroOt,device.dispositivo_id,input.proveedor??null,fechaEnvio,input.areaSolicitante??null,input.contactoServicio??null,input.tipoServicio,input.fallaReportada,input.accesoriosEntregados??null,input.observaciones??null,input.responsable,custodioTipo,device.colaborador_id,device.departamento_id,device.recibido_por_id]);
   await cambiarEstadoDispositivo(input.dispositivoCodigo,Number(state.id),client);
   await insertarHistorialDispositivo(device.dispositivo_id,"ENVIAR_SERVICIO_TECNICO",device.estado_id,state.id,
     input.responsable,input.fallaReportada,{ordenServicioId:inserted.rows[0]!.id,proveedor:input.proveedor??null},client);
@@ -137,7 +142,7 @@ export const editarOrdenServicio=async(id:number,input:EditarOrdenServicioInput)
 
 const generarEnvioServicioPdfLegacy=async(id:number,client?:PoolClient)=>{
  const row=await obtenerOrden(id,client);if(!row)throw new NotFoundError("Orden de servicio no encontrada.");
- const doc=new PDFDocument({size:"A4",margin:42,info:{Title:"Orden de Trabajo Servicio Técnico OT-"+row.id}});const chunks:Buffer[]=[];
+ const doc=new PDFDocument({size:"A4",margin:42,info:{Title:"Orden de Trabajo Servicio Técnico OT-"+technicalOrderNumber(row.numero_ot)}});const chunks:Buffer[]=[];
  doc.on("data",chunk=>chunks.push(Buffer.from(chunk)));const done=new Promise<Buffer>((resolve,reject)=>{doc.on("end",()=>resolve(Buffer.concat(chunks)));doc.on("error",reject)});
  const navy="#123B6D",line="#CBD5E1",gray="#475569";
  const section=(title:string)=>{doc.moveDown(.7).fillColor(navy).font("Helvetica-Bold").fontSize(10).text(title).moveDown(.25);};
@@ -147,7 +152,7 @@ const generarEnvioServicioPdfLegacy=async(id:number,client?:PoolClient)=>{
  const finalState=(value:string|null)=>["OPERATIVO","SIN_REPARACION","BAJA"].map(item=>`[${item===value?"x":" "}] ${item.replace("_"," ")}`).join("    ");
  const logoPath=resolve(__dirname,"../../../../frontend/public/assets/brand/itam-logo.png");const headerY=doc.y;const headerX=existsSync(logoPath)?doc.page.margins.left+58:doc.page.margins.left;if(existsSync(logoPath))doc.image(logoPath,doc.page.margins.left,headerY,{width:44});
  doc.fillColor(navy).font("Helvetica-Bold").fontSize(16).text("AGUAS SAN ISIDRO",headerX,headerY).fontSize(17).text("ORDEN DE TRABAJO",{align:"right"}).fontSize(10).text("ENVÍO DE EQUIPOS A SERVICIO TÉCNICO",{align:"right"}).moveDown(.25);rule();
- doc.fillColor(gray).font("Helvetica").fontSize(9).text("N° de orden: OT-"+row.id,{continued:true}).text("    Fecha: "+serviceDateOnly(row.fecha_envio),{align:"right"});
+ doc.fillColor(gray).font("Helvetica").fontSize(9).text("N° de orden: OT-"+technicalOrderNumber(row.numero_ot),{continued:true}).text("    Fecha: "+serviceDateOnly(row.fecha_envio),{align:"right"});
  section("1. ANTECEDENTES GENERALES");field("Área solicitante",row.area_solicitante??"Área TI — Aguas San Isidro");field("Responsable TI",row.responsable_envio);field("Tipo de servicio",serviceType(row.tipo_servicio));rule();
  section("2. SERVICIO TÉCNICO");field("Empresa",row.proveedor??"");field("Contacto",row.contacto_servicio??"");rule();
  section("3. IDENTIFICACIÓN DE LOS EQUIPOS");
@@ -160,12 +165,12 @@ const generarEnvioServicioPdfLegacy=async(id:number,client?:PoolClient)=>{
  section("5. RECEPCIÓN Y DEVOLUCIÓN");field("Fecha de recepción",serviceDateOnly(row.fecha_envio));field("N° OT / ticket proveedor","");field("Diagnóstico y plazo informado",[row.diagnostico,row.plazo_informado].filter(Boolean).join(" — "));field("Fecha de devolución",row.fecha_retorno?serviceDateOnly(row.fecha_retorno):"");field("Estado final",finalState(row.estado_final));field("Resultado / observaciones de retorno",[row.resultado,row.observaciones_retorno].filter(Boolean).join(" — "));rule();
  section("6. FIRMAS");doc.fillColor(gray).font("Helvetica").fontSize(8).text("RECEPCIÓN EN SERVICIO TÉCNICO",{continued:true}).text("RECEPCIÓN POST SERVICIO — ÁREA TI",{align:"right"}).moveDown(2).text("____________________________",{continued:true}).text("                         ____________________________",{align:"right"}).text("Firma / representante del servicio técnico                 Firma / Responsable TI — Aguas San Isidro").moveDown(.4).text("Nombre: ____________________________",{continued:true}).text("        Nombre: ____________________________",{align:"right"}).text("Fecha: ______________________________",{continued:true}).text("        Fecha: ______________________________",{align:"right"});
  doc.moveDown(2).fillColor(gray).fontSize(8).text("Área TI — Aguas San Isidro | Formulario TI-OT | v1.0",{align:"center"});
- doc.end();return{buffer:await done,filename:"ST-"+row.id+"-envio.pdf"};
+ doc.end();return{buffer:await done,filename:"ST-"+technicalOrderNumber(row.numero_ot)+"-envio.pdf"};
 };
 
 const generarEnvioServicioPdfLegacy2=async(id:number,client?:PoolClient)=>{
  const row=await obtenerOrden(id,client);if(!row)throw new NotFoundError("Orden de servicio no encontrada.");
- const doc=new PDFDocument({size:"A4",margin:36,info:{Title:"Orden de Trabajo Servicio Técnico OT-"+row.id}});const chunks:Buffer[]=[];
+ const doc=new PDFDocument({size:"A4",margin:36,info:{Title:"Orden de Trabajo Servicio Técnico OT-"+technicalOrderNumber(row.numero_ot)}});const chunks:Buffer[]=[];
  doc.on("data",chunk=>chunks.push(Buffer.from(chunk)));const done=new Promise<Buffer>((resolve,reject)=>{doc.on("end",()=>resolve(Buffer.concat(chunks)));doc.on("error",reject)});
  const navy="#123B6D",line="#CBD5E1",gray="#334155",muted="#64748B",pageWidth=doc.page.width-doc.page.margins.left-doc.page.margins.right;
  const textValue=(value:unknown,blank="____________________________")=>typeof value==="string"&&value.trim()?value.trim():blank;
@@ -180,14 +185,14 @@ const generarEnvioServicioPdfLegacy2=async(id:number,client?:PoolClient)=>{
  };
  const logoPath=resolve(__dirname,"../../../../frontend/public/assets/brand/itam-logo.png");const headerY=36;if(existsSync(logoPath))doc.image(logoPath,doc.page.margins.left,headerY,{width:42});
  doc.fillColor(navy).font("Helvetica-Bold").fontSize(15).text("AGUAS SAN ISIDRO",doc.page.margins.left+52,headerY+4);doc.fontSize(17).text("ORDEN DE TRABAJO",300,headerY+1,{width:doc.page.width-336,align:"right"});doc.fontSize(9).text("ENVÍO DE EQUIPOS A SERVICIO TÉCNICO",300,headerY+24,{width:doc.page.width-336,align:"right"});
- const headerBottom=headerY+52;doc.strokeColor("#38BDF8").lineWidth(2).moveTo(doc.page.margins.left,headerBottom).lineTo(doc.page.width-doc.page.margins.right,headerBottom).stroke();doc.y=headerBottom+8;doc.fillColor(gray).font("Helvetica").fontSize(8).text("N° de orden: OT-"+row.id,{continued:true}).text("Fecha: "+serviceDateOnly(row.fecha_envio),{align:"right"});
+ const headerBottom=headerY+52;doc.strokeColor("#38BDF8").lineWidth(2).moveTo(doc.page.margins.left,headerBottom).lineTo(doc.page.width-doc.page.margins.right,headerBottom).stroke();doc.y=headerBottom+8;doc.fillColor(gray).font("Helvetica").fontSize(8).text("N° de orden: OT-"+technicalOrderNumber(row.numero_ot),{continued:true}).text("Fecha: "+serviceDateOnly(row.fecha_envio),{align:"right"});
  section("1. ANTECEDENTES GENERALES");drawTable(["Campo","Detalle"],[["Área solicitante",textValue(row.area_solicitante,"Área TI - Aguas San Isidro")],["Responsable TI",textValue(row.responsable_envio)],["Tipo de servicio",serviceType(row.tipo_servicio)]],[128,pageWidth-128]);
  section("2. SERVICIO TÉCNICO");drawTable(["Campo","Detalle"],[["Empresa",textValue(row.proveedor)],["Contacto",textValue(row.contacto_servicio)]],[128,pageWidth-128]);
  section("3. IDENTIFICACIÓN DE LOS EQUIPOS");drawTable(["N°","Tipo de equipo","Marca","Modelo","IMEI o serie","Usuario asignado / Área"],[["1",textValue(row.tipo_dispositivo,"-"),textValue(row.marca,"-"),textValue(row.modelo,"-"),textValue(row.imei??row.numero_serie,"-"),textValue(row.colaborador_nombre_al_ingreso??row.departamento_nombre_al_ingreso??row.area_solicitante,"-")]], [25,84,82,96,110,pageWidth-397]);
  section("4. CONDICIONES DE ENTREGA POR EQUIPO");drawTable(["N°","Falla o problema reportado","Accesorios entregados","Observaciones"],[["1",textValue(row.falla_reportada,"-"),textValue(row.accesorios_entregados,"-"),textValue(row.observaciones_envio,"-")]], [25,220,128,pageWidth-373]);
  section("5. RECEPCIÓN Y DEVOLUCIÓN");const reviewFinalized=["CERRADA","BAJA","REPARACION_RECHAZADA"].includes(row.estado);const diagnostic=row.diagnostico&&row.plazo_informado?[row.diagnostico,row.plazo_informado].join(" - "):row.diagnostico??"";drawTable(["Campo","Detalle"],[["Fecha de recepción",serviceDateOnly(row.fecha_envio)],["N° OT / ticket proveedor",textValue(row.ticket_proveedor)],["Diagnóstico y plazo informado",reviewFinalized||row.diagnostico?textValue(diagnostic):"____________________________"],["Costo cotizado",row.monto_cotizacion===null?"____________________________":moneyValue(Number(row.monto_cotizacion))],["Observaciones de cotización",textValue(row.observaciones_cotizacion)],["Fecha de devolución",row.fecha_retorno?serviceDateOnly(row.fecha_retorno):"____________________________"],["Estado final",finalState(row.estado_final)],["Resultado / observaciones de retorno",reviewFinalized?textValue([row.resultado,row.observaciones_retorno].filter(Boolean).join(" - ")):"____________________________"]],[190,pageWidth-190]);
  section("6. FIRMAS");const signatureY=doc.y,signatureGap=24,signatureWidth=(pageWidth-signatureGap)/2;const signature=(x:number,title:string,role:string)=>{doc.fillColor(gray).font("Helvetica-Bold").fontSize(7.5).text(title,x,signatureY,{width:signatureWidth,align:"center"});doc.strokeColor(line).lineWidth(1).moveTo(x+12,signatureY+30).lineTo(x+signatureWidth-12,signatureY+30).stroke();doc.fillColor(muted).font("Helvetica").fontSize(7).text(role,x,signatureY+35,{width:signatureWidth,align:"center"});doc.text("Nombre: __________________________",x,signatureY+54,{width:signatureWidth,align:"center"});doc.text("Fecha: ___________________________",x,signatureY+70,{width:signatureWidth,align:"center"});};signature(doc.page.margins.left,"RECEPCIÓN EN SERVICIO TÉCNICO","Representante del servicio técnico");signature(doc.page.margins.left+signatureWidth+signatureGap,"RECEPCIÓN POST SERVICIO - ÁREA TI","Responsable TI - Aguas San Isidro");doc.y=signatureY+91;doc.fillColor(muted).font("Helvetica").fontSize(7).text("Área TI - Aguas San Isidro | Formulario TI-OT | v1.0",{align:"center"});
- doc.end();return{buffer:await done,filename:"ST-"+row.id+"-envio.pdf"};
+ doc.end();return{buffer:await done,filename:"ST-"+technicalOrderNumber(row.numero_ot)+"-envio.pdf"};
 };
 
 export const generarEnvioServicioPdf=async(id:number,client?:PoolClient)=>{
