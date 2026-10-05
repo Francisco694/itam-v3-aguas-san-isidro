@@ -25,6 +25,12 @@ import { formatRut } from '../../shared/utils/rut';
 
 type InventoryView = 'REAL' | 'HISTORICO';
 
+const normalizeInventorySearch = (value: unknown): string => String(value ?? '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .trim()
+  .toLocaleLowerCase();
+
 export const quickSearchMode = (query: string): 'DEVICE_CODE' | 'FILTER' | 'EMPTY' => {
   const normalized = query.trim();
   if (!normalized) return 'EMPTY';
@@ -438,8 +444,20 @@ export class DispositivosList implements OnInit {
     const requestSequence = ++this.listRequestSequence;
     const requestedView = this.viewMode;
     const requestedState = this.filters.estado;
+    const requestedQuery = normalizeInventorySearch(this.filters.q);
     this.loading.set(true); this.error.set('');
-    this.service.listar({ q: this.filters.q || undefined, tipoDispositivoId: this.filters.tipoDispositivoId ? Number(this.filters.tipoDispositivoId) : undefined, estado: this.filters.estado || undefined, departamentoId: this.filters.departamentoId ? Number(this.filters.departamentoId) : undefined, localidad: this.filters.localidad || undefined, origenRegistro: this.originFilter(), verificacion: this.filters.verificacion || this.verificationFilter() }).subscribe({ next: (items) => { if (requestSequence !== this.listRequestSequence || requestedView !== this.viewMode || requestedState !== this.filters.estado) return; const scopedItems = items.filter((item) => this.belongsToView(item, requestedView) && (!requestedState || item.estado.codigo === requestedState)); this.items.set(scopedItems); const visible = new Set(scopedItems.map((item) => item.id)); this.selectedIds.update((selected) => new Set([...selected].filter((id) => visible.has(id)))); this.loading.set(false); }, error: (error) => { if (requestSequence !== this.listRequestSequence || requestedView !== this.viewMode || requestedState !== this.filters.estado) return; this.error.set(errorMessage(error)); this.loading.set(false); } });
+    this.service.listar({ q: this.filters.q || undefined, tipoDispositivoId: this.filters.tipoDispositivoId ? Number(this.filters.tipoDispositivoId) : undefined, estado: this.filters.estado || undefined, departamentoId: this.filters.departamentoId ? Number(this.filters.departamentoId) : undefined, localidad: this.filters.localidad || undefined, origenRegistro: this.originFilter(), verificacion: this.filters.verificacion || this.verificationFilter() }).subscribe({ next: (items) => { if (requestSequence !== this.listRequestSequence || requestedView !== this.viewMode || requestedState !== this.filters.estado) return; const scopedItems = items.filter((item) => this.belongsToView(item, requestedView) && (!requestedState || item.estado.codigo === requestedState) && this.matchesGeneralSearch(item, requestedQuery)); this.items.set(scopedItems); const visible = new Set(scopedItems.map((item) => item.id)); this.selectedIds.update((selected) => new Set([...selected].filter((id) => visible.has(id)))); this.loading.set(false); }, error: (error) => { if (requestSequence !== this.listRequestSequence || requestedView !== this.viewMode || requestedState !== this.filters.estado) return; this.error.set(errorMessage(error)); this.loading.set(false); } });
+  }
+  private matchesGeneralSearch(item: Dispositivo, query: string): boolean {
+    if (!query) return true;
+    return [
+      item.codigoInventario,
+      item.numeroSerie,
+      item.imei,
+      item.marca,
+      item.modelo,
+      item.tipo.nombre
+    ].some((value) => normalizeInventorySearch(value).includes(query));
   }
   private loadViewItems(): void {
     const requestSequence = ++this.viewItemsRequestSequence;
