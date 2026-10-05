@@ -56,6 +56,8 @@ const logoPath = ():string|null => {
   const candidates = [
     process.env.ITAM_OT_LOGO_PATH,
     "E:\\portadada de aguas san isidro.jpg",
+    resolve(__dirname, "../../assets/aguas-san-isidro-oficial.jpg"),
+    resolve(__dirname, "../../../src/assets/aguas-san-isidro-oficial.jpg"),
     resolve(__dirname, "../../../../frontend/public/assets/brand/aguas-san-isidro-oficial.jpg")
   ].filter((candidate):candidate is string => Boolean(candidate));
   return candidates.find(candidate => existsSync(candidate)) ?? null;

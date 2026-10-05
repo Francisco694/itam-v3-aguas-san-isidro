@@ -6,7 +6,7 @@
   "scripts": {
     "test": "tsc && node --test --test-concurrency=1 dist/modules/*/*.test.js",
     "dev": "tsx watch src/server.ts",
-    "build": "tsc",
+    "build": "tsc && node scripts/copy-pdf-assets.cjs",
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
     "bootstrap:super-user": "tsx src/scripts/bootstrap-super-user.ts",
