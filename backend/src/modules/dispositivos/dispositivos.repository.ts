@@ -356,11 +356,13 @@ export const listarDispositivos = async (
   if (filters.verificacion !== undefined) {
     values.push(filters.verificacion);
     where.push(`(
-      (${origenRegistroSql}) = 'MANUAL' AND $${values.length} = 'VERIFICADO'
-    ) OR (
-      (${origenRegistroSql}) = 'IMPORTADO' AND (
-        ($${values.length} = 'VERIFICADO' AND verificacion.resultado = 'VERIFICADO')
-        OR ($${values.length} = 'PENDIENTE' AND COALESCE(verificacion.resultado, 'PENDIENTE') <> 'VERIFICADO')
+      (
+        (${origenRegistroSql}) = 'MANUAL' AND $${values.length} = 'VERIFICADO'
+      ) OR (
+        (${origenRegistroSql}) = 'IMPORTADO' AND (
+          ($${values.length} = 'VERIFICADO' AND verificacion.resultado = 'VERIFICADO')
+          OR ($${values.length} = 'PENDIENTE' AND COALESCE(verificacion.resultado, 'PENDIENTE') <> 'VERIFICADO')
+        )
       )
     )`);
   }
