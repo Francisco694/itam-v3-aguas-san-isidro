@@ -77,14 +77,39 @@ jobs:
         env:
           SSH_PRIVATE_KEY: ${{ secrets.AWS_SSH_PRIVATE_KEY }}
           SSH_KNOWN_HOSTS: ${{ secrets.AWS_KNOWN_HOSTS }}
+          AWS_HOST: ${{ secrets.AWS_HOST }}
+          AWS_USER: ${{ secrets.AWS_USER }}
         run: |
           set -euo pipefail
-          test -n "$SSH_PRIVATE_KEY"
-          test -n "$SSH_KNOWN_HOSTS"
+          if [[ -z "${SSH_PRIVATE_KEY:-}" ]]; then
+            echo "ERROR: Falta configurar AWS_SSH_PRIVATE_KEY." >&2
+            exit 1
+          fi
+          if [[ -z "${SSH_KNOWN_HOSTS:-}" ]]; then
+            echo "ERROR: Falta configurar AWS_KNOWN_HOSTS." >&2
+            exit 1
+          fi
+          if [[ -z "${AWS_HOST:-}" ]]; then
+            echo "ERROR: Falta configurar AWS_HOST." >&2
+            exit 1
+          fi
+          if [[ -z "${AWS_USER:-}" ]]; then
+            echo "ERROR: Falta configurar AWS_USER." >&2
+            exit 1
+          fi
           install -m 700 -d "$HOME/.ssh"
+          umask 077
           printf '%s\n' "$SSH_PRIVATE_KEY" > "$HOME/.ssh/itam_deploy_key"
           printf '%s\n' "$SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
           chmod 600 "$HOME/.ssh/itam_deploy_key" "$HOME/.ssh/known_hosts"
+          if ! ssh-keygen -y -f "$HOME/.ssh/itam_deploy_key" >/dev/null 2>&1; then
+            echo "ERROR: AWS_SSH_PRIVATE_KEY no contiene una clave privada SSH válida." >&2
+            exit 1
+          fi
+          if ! ssh-keygen -lf "$HOME/.ssh/known_hosts" >/dev/null 2>&1; then
+            echo "ERROR: AWS_KNOWN_HOSTS no contiene entradas known_hosts válidas." >&2
+            exit 1
+          fi
 
       - name: Transferir artefactos
         shell: bash
@@ -93,10 +118,18 @@ jobs:
           AWS_USER: ${{ secrets.AWS_USER }}
         run: |
           set -euo pipefail
-          test -n "$AWS_HOST"
-          test -n "$AWS_USER"
+          if [[ -z "${AWS_HOST:-}" ]]; then
+            echo "ERROR: Falta configurar AWS_HOST." >&2
+            exit 1
+          fi
+          if [[ -z "${AWS_USER:-}" ]]; then
+            echo "ERROR: Falta configurar AWS_USER." >&2
+            exit 1
+          fi
           release_id="${DEPLOY_SHA:0:7}"
-          scp -i "$HOME/.ssh/itam_deploy_key" \
+          scp -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+            -i "$HOME/.ssh/itam_deploy_key" \
             ".deploy/backend-${release_id}.tar.gz" \
             ".deploy/frontend-${release_id}.tar.gz" \
             "${AWS_USER}@${AWS_HOST}:/tmp/"
@@ -108,8 +141,18 @@ jobs:
           AWS_USER: ${{ secrets.AWS_USER }}
         run: |
           set -euo pipefail
+          if [[ -z "${AWS_HOST:-}" ]]; then
+            echo "ERROR: Falta configurar AWS_HOST." >&2
+            exit 1
+          fi
+          if [[ -z "${AWS_USER:-}" ]]; then
+            echo "ERROR: Falta configurar AWS_USER." >&2
+            exit 1
+          fi
           release_id="${DEPLOY_SHA:0:7}"
-          ssh -i "$HOME/.ssh/itam_deploy_key" "${AWS_USER}@${AWS_HOST}" \
+          ssh -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+            -i "$HOME/.ssh/itam_deploy_key" "${AWS_USER}@${AWS_HOST}" \
             "RELEASE_ID=${release_id} bash -s" <<'REMOTE_SCRIPT'
           set -Eeuo pipefail
 
