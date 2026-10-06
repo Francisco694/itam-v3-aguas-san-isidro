@@ -14,6 +14,11 @@ import type {
   ResumenInventarioActivoPorTipoRow,
   TipoIdentificadorDispositivo
 } from "./dispositivos.types";
+import {
+  buildHistoricalClassificationSql,
+  buildInventoryClassificationSql,
+  buildOrigenRegistroSql
+} from "./inventory-classification";
 
 type DbExecutor = Pool | PoolClient;
 
@@ -55,18 +60,7 @@ export const buscarDispositivoPorIdentificador = async (
   return result.rows[0] ?? null;
 };
 
-const origenRegistroSql = `CASE
-  WHEN ingreso_inventario.tipo_evento IN ('IMPORTAR_DISPOSITIVO','REGISTRO_IMPORTADO')
-    OR ingreso_inventario.detalle ? 'source'
-    OR ingreso_inventario.detalle ? 'importKey'
-    OR ingreso_inventario.detalle ? 'historicalCode'
-    OR COALESCE(ingreso_inventario.responsable,'') ILIKE 'Importador%'
-    OR COALESCE(ingreso_inventario.observaciones,'') ILIKE 'Origen:%'
-  THEN 'IMPORTADO'
-  WHEN ingreso_inventario.tipo_evento IN ('ALTA_DISPOSITIVO','EQUIPO_CREADO','DISPOSITIVO_CREADO','EQUIPO_INCORPORADO_AL_INVENTARIO')
-  THEN 'MANUAL'
-  ELSE 'DESCONOCIDO'
-END`;
+const origenRegistroSql = buildOrigenRegistroSql();
 
 const dispositivoSelect = `
   SELECT
@@ -351,6 +345,13 @@ export const listarDispositivos = async (
   if (filters.origenRegistro !== undefined) {
     values.push(filters.origenRegistro);
     where.push(`(${origenRegistroSql}) = $${values.length}`);
+  }
+
+  if (filters.clasificacion !== undefined) {
+    const classificationSql = filters.clasificacion === "INVENTARIO"
+      ? buildInventoryClassificationSql(origenRegistroSql, "verificacion.resultado")
+      : buildHistoricalClassificationSql(origenRegistroSql, "verificacion.resultado");
+    where.push(classificationSql);
   }
 
   if (filters.verificacion !== undefined) {
@@ -694,18 +695,7 @@ const dashboardScopeSql = `
   )
 `;
 
-const dashboardOriginSql = `CASE
-  WHEN ingreso.tipo_evento IN ('IMPORTAR_DISPOSITIVO','REGISTRO_IMPORTADO')
-    OR ingreso.detalle ? 'source'
-    OR ingreso.detalle ? 'importKey'
-    OR ingreso.detalle ? 'historicalCode'
-    OR COALESCE(ingreso.responsable,'') ILIKE 'Importador%'
-    OR COALESCE(ingreso.observaciones,'') ILIKE 'Origen:%'
-  THEN 'IMPORTADO'
-  WHEN ingreso.tipo_evento IN ('ALTA_DISPOSITIVO','EQUIPO_CREADO','DISPOSITIVO_CREADO','EQUIPO_INCORPORADO_AL_INVENTARIO')
-  THEN 'MANUAL'
-  ELSE 'DESCONOCIDO'
-END`;
+const dashboardOriginSql = buildOrigenRegistroSql("ingreso");
 
 const dashboardVerificationCte = `
   WITH dashboard_devices AS (
@@ -747,7 +737,7 @@ export const obtenerResumenInventarioActivoVerificadoPorTipo = async (): Promise
     SELECT tipo_nombre, COUNT(*) AS cantidad, COALESCE(SUM(valor_comercial), 0) AS valor_total
     FROM dashboard_devices
     WHERE ${dashboardScopeSql}
-      AND (origen_registro = 'MANUAL' OR verificacion_resultado = 'VERIFICADO')
+      AND ${buildInventoryClassificationSql("origen_registro", "verificacion_resultado")}
     GROUP BY tipo_nombre
     ORDER BY COUNT(*) DESC, tipo_nombre ASC
   `);
@@ -766,6 +756,15 @@ export const obtenerResumenHistoricoPorTipo = async (): Promise<ResumenInventari
     ORDER BY COUNT(*) DESC, tipo.nombre ASC
   `);
   return result.rows;
+};
+
+export const obtenerResumenLegacyPendiente = async (): Promise<{ cantidad: string | number; valor_total: string | number }> => {
+  const result = await pool.query<{ cantidad: string | number; valor_total: string | number }>(`${dashboardVerificationCte}
+    SELECT COUNT(*) AS cantidad, COALESCE(SUM(valor_comercial), 0) AS valor_total
+    FROM dashboard_devices
+    WHERE ${buildHistoricalClassificationSql("origen_registro", "verificacion_resultado")}
+  `);
+  return result.rows[0] ?? { cantidad: 0, valor_total: 0 };
 };
 
 export const asignarDispositivoAColaborador = async (

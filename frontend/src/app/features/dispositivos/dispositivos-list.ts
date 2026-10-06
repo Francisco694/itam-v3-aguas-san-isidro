@@ -5,7 +5,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { LucideCamera, LucideDownload, LucideEye, LucidePencil, LucidePrinter, LucidePlus, LucideScanBarcode, LucideSearch, LucideSlidersHorizontal, LucideTriangleAlert } from '@lucide/angular';
 import QRCode from 'qrcode';
 import { catchError, forkJoin, of } from 'rxjs';
-import { Departamento, Dispositivo, Estado, FiltroVerificacionDispositivo, ResultadoVerificacionFisica, TipoDispositivo } from '../../core/models/itam.models';
+import { Departamento, Dispositivo, DispositivoFilters, Estado, FiltroVerificacionDispositivo, ResultadoVerificacionFisica, TipoDispositivo } from '../../core/models/itam.models';
 import { DepartamentosService } from '../../core/services/departamentos.service';
 import { DispositivosService } from '../../core/services/dispositivos.service';
 import { AuthService } from '../../core/services/auth.service';
@@ -22,8 +22,7 @@ import type { ItamQrTarget } from '../../shared/utils/itam-qr';
 import { buildItamQrValue } from '../../shared/utils/itam-qr';
 import { errorMessage } from '../../shared/utils/error-message';
 import { formatRut } from '../../shared/utils/rut';
-
-type InventoryView = 'REAL' | 'HISTORICO';
+import { belongsToInventoryView, classificationForView, type InventoryView } from '../../shared/utils/inventory-classification';
 
 const normalizeInventorySearch = (value: unknown): string => String(value ?? '')
   .normalize('NFD')
@@ -216,7 +215,7 @@ const printableDocument = (
         <div class="field"><label for="department">Departamento</label><select id="department" name="department" [(ngModel)]="filters.departamentoId"><option value="">Todos</option>@for(d of departments(); track d.id){<option [value]="d.id">{{ d.nombre }}</option>}</select></div>
         <div class="field"><label for="location">Localidad</label><input id="location" name="location" [(ngModel)]="filters.localidad" /></div>
         @if (viewMode === 'HISTORICO') {
-          <div class="field"><label for="verification">Verificación física</label><select id="verification" name="verification" [(ngModel)]="filters.verificacion"><option value="">Todos</option><option value="PENDIENTE">No verificados</option><option value="VERIFICADO">Verificados</option></select></div>
+          <div class="field"><label for="verification">Verificación física</label><select id="verification" name="verification" [(ngModel)]="filters.verificacion"><option value="">Todos</option><option value="PENDIENTE">Pendientes o por revisar</option></select></div>
         }
         <div class="filter-panel__actions"><button class="btn btn--primary" type="submit">Aplicar</button><button class="btn btn--ghost" type="button" (click)="clear()">Limpiar</button></div>
       </form>
@@ -346,7 +345,7 @@ export class DispositivosList implements OnInit {
     this.filters.verificacion = '';
     this.filters.estado = '';
     this.selectedIds.set(new Set());
-    void this.router.navigate([], { relativeTo: this.route, queryParams: { vista: view === 'HISTORICO' ? 'historico' : null, estado: null }, queryParamsHandling: 'merge', replaceUrl: true });
+    void this.router.navigate([], { relativeTo: this.route, queryParams: { vista: view === 'HISTORICO' ? 'historico' : null, estado: null, verificacion: null }, queryParamsHandling: 'merge', replaceUrl: true });
     this.loadViewItems();
     this.load();
   }
@@ -355,38 +354,56 @@ export class DispositivosList implements OnInit {
     const qrCode = extractQuickSearchCode(query);
     if (qrCode !== null) {
       this.quickLoading.set(true);
-      this.service.buscarPorCodigoInventario(qrCode).subscribe({
-        next: (item) => {
-          this.quickLoading.set(false);
-          void this.router.navigate(['/dispositivos', item.codigoInventario]);
-        },
-        error: () => this.searchDevicesByQuickQuery(query)
-      });
+      this.openDeviceFromCurrentView(qrCode, query);
       return;
     }
     const mode = quickSearchMode(query);
     if (mode === 'EMPTY') return;
     this.quickLoading.set(true);
     if (mode === 'DEVICE_CODE') {
-      this.service.buscarPorCodigoInventario(Number(query)).subscribe({
-        next: (item) => {
-          this.quickLoading.set(false);
-          void this.router.navigate(['/dispositivos', item.codigoInventario]);
-        },
-        error: () => this.searchDevicesByQuickQuery(query)
-      });
+      this.openDeviceFromCurrentView(Number(query), query);
       return;
     }
     this.searchDevicesByQuickQuery(query);
   }
   private searchDevicesByQuickQuery(query: string): void {
-    this.service.listar({ q: query }).subscribe({
+    this.service.listar({ q: query, ...this.currentViewFilters() }).subscribe({
       next: (items) => {
         this.quickLoading.set(false);
         this.items.set(items);
         const visible = new Set(items.map((item) => item.id));
         this.selectedIds.update((selected) => new Set([...selected].filter((id) => visible.has(id))));
-        if (!items.length) this.toast.error('Activo no encontrado', quickSearchNotFoundMessage);
+        if (!items.length) this.notifyAssetOutsideCurrentView(query);
+      },
+      error: (error) => {
+        this.quickLoading.set(false);
+        this.toast.error('No se pudo buscar el activo', errorMessage(error));
+      }
+    });
+  }
+  private openDeviceFromCurrentView(codigo: number, query: string): void {
+    this.quickLoading.set(true);
+    this.service.buscarPorCodigoInventario(codigo, this.currentViewFilters()).subscribe({
+      next: (item) => {
+        this.quickLoading.set(false);
+        void this.router.navigate(['/dispositivos', item.codigoInventario]);
+      },
+      error: () => this.notifyAssetOutsideCurrentView(query)
+    });
+  }
+  private notifyAssetOutsideCurrentView(query: string): void {
+    this.service.listar({ q: query }).subscribe({
+      next: (items) => {
+        this.quickLoading.set(false);
+        const otherView: InventoryView = this.viewMode === 'REAL' ? 'HISTORICO' : 'REAL';
+        if (items.some((item) => belongsToInventoryView(item, otherView))) {
+          this.toast.error(
+            'Activo en otra vista',
+            `El resultado pertenece a ${otherView === 'REAL' ? 'Inventario' : 'Histórico'}. Cambie de pestaña para revisarlo.`
+          );
+          return;
+        }
+        this.toast.error('Activo no encontrado', quickSearchNotFoundMessage);
       },
       error: (error) => {
         this.quickLoading.set(false);
@@ -415,17 +432,11 @@ export class DispositivosList implements OnInit {
       return;
     }
     if (target.entity === 'DISPOSITIVO') {
-      this.service.buscarPorCodigoInventario(target.code).subscribe({
-        next: (item) => {
-          this.quickLoading.set(false);
-          void this.router.navigate(['/dispositivos', item.codigoInventario]);
-        },
-        error: notFound
-      });
+      this.openDeviceFromCurrentView(target.code, String(target.code));
       return;
     }
     forkJoin({
-      device: this.service.buscarPorCodigoInventario(target.code).pipe(catchError(() => of(null))),
+      device: this.service.buscarPorCodigoInventario(target.code, this.currentViewFilters()).pipe(catchError(() => of(null))),
       sim: this.simService.obtener(target.code).pipe(catchError(() => of(null)))
     }).subscribe(({ device, sim }) => {
       this.quickLoading.set(false);
@@ -446,7 +457,7 @@ export class DispositivosList implements OnInit {
     const requestedState = this.filters.estado;
     const requestedQuery = normalizeInventorySearch(this.filters.q);
     this.loading.set(true); this.error.set('');
-    this.service.listar({ q: this.filters.q || undefined, tipoDispositivoId: this.filters.tipoDispositivoId ? Number(this.filters.tipoDispositivoId) : undefined, estado: this.filters.estado || undefined, departamentoId: this.filters.departamentoId ? Number(this.filters.departamentoId) : undefined, localidad: this.filters.localidad || undefined, origenRegistro: this.originFilter(), verificacion: this.filters.verificacion || this.verificationFilter() }).subscribe({ next: (items) => { if (requestSequence !== this.listRequestSequence || requestedView !== this.viewMode || requestedState !== this.filters.estado) return; const scopedItems = items.filter((item) => this.belongsToView(item, requestedView) && (!requestedState || item.estado.codigo === requestedState) && this.matchesGeneralSearch(item, requestedQuery)); this.items.set(scopedItems); const visible = new Set(scopedItems.map((item) => item.id)); this.selectedIds.update((selected) => new Set([...selected].filter((id) => visible.has(id)))); this.loading.set(false); }, error: (error) => { if (requestSequence !== this.listRequestSequence || requestedView !== this.viewMode || requestedState !== this.filters.estado) return; this.error.set(errorMessage(error)); this.loading.set(false); } });
+    this.service.listar({ q: this.filters.q || undefined, tipoDispositivoId: this.filters.tipoDispositivoId ? Number(this.filters.tipoDispositivoId) : undefined, estado: this.filters.estado || undefined, departamentoId: this.filters.departamentoId ? Number(this.filters.departamentoId) : undefined, localidad: this.filters.localidad || undefined, ...this.currentViewFilters() }).subscribe({ next: (items) => { if (requestSequence !== this.listRequestSequence || requestedView !== this.viewMode || requestedState !== this.filters.estado) return; const scopedItems = items.filter((item) => this.belongsToView(item, requestedView) && (!requestedState || item.estado.codigo === requestedState) && this.matchesGeneralSearch(item, requestedQuery)); this.items.set(scopedItems); const visible = new Set(scopedItems.map((item) => item.id)); this.selectedIds.update((selected) => new Set([...selected].filter((id) => visible.has(id)))); this.loading.set(false); }, error: (error) => { if (requestSequence !== this.listRequestSequence || requestedView !== this.viewMode || requestedState !== this.filters.estado) return; this.error.set(errorMessage(error)); this.loading.set(false); } });
   }
   private matchesGeneralSearch(item: Dispositivo, query: string): boolean {
     if (!query) return true;
@@ -462,18 +473,18 @@ export class DispositivosList implements OnInit {
   private loadViewItems(): void {
     const requestSequence = ++this.viewItemsRequestSequence;
     const requestedView = this.viewMode;
-    this.service.listar({ origenRegistro: this.originFilter(), verificacion: this.verificationFilter() }).subscribe({ next: (items) => { if (requestSequence !== this.viewItemsRequestSequence || requestedView !== this.viewMode) return; this.allItems.set(items.filter((item) => this.belongsToView(item, requestedView))); } });
+    this.service.listar(this.currentViewFilters()).subscribe({ next: (items) => { if (requestSequence !== this.viewItemsRequestSequence || requestedView !== this.viewMode) return; this.allItems.set(items.filter((item) => this.belongsToView(item, requestedView))); } });
   }
   private belongsToView(item: Dispositivo, view: InventoryView): boolean {
-    return view === 'REAL'
-      ? item.origenRegistro === 'MANUAL' || item.verificacionFisica?.resultado === 'VERIFICADO'
-      : item.origenRegistro === 'IMPORTADO';
+    return belongsToInventoryView(item, view);
   }
-  private verificationFilter(): FiltroVerificacionDispositivo | undefined {
-    return this.viewMode === 'REAL' ? 'VERIFICADO' : undefined;
-  }
-  private originFilter(): 'MANUAL' | 'IMPORTADO' | undefined {
-    return this.viewMode === 'HISTORICO' ? 'IMPORTADO' : undefined;
+  private currentViewFilters(): Pick<DispositivoFilters, 'clasificacion' | 'verificacion'> {
+    return {
+      clasificacion: classificationForView(this.viewMode),
+      ...(this.viewMode === 'HISTORICO' && this.filters.verificacion
+        ? { verificacion: this.filters.verificacion }
+        : {})
+    };
   }
   protected selected(id: string): boolean { return this.selectedIds().has(id); }
   protected selectedCount(): number { return this.selectedIds().size; }

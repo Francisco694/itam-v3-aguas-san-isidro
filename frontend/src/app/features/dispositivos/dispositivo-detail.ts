@@ -723,6 +723,7 @@ export class DispositivoDetail implements OnInit {
   protected stateExists(code: string): boolean { return this.states().some((state) => state.codigo === code); }
   protected canVerifyManually(device: Dispositivo): boolean {
     return device.origenRegistro === 'IMPORTADO'
+      && device.estado.codigo !== 'EXTRAVIADO'
       && (device.verificacionFisica?.resultado || 'PENDIENTE') === 'PENDIENTE';
   }
   protected verificationStatusLabel(device: Dispositivo): string {

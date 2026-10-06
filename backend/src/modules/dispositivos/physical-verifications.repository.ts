@@ -7,6 +7,7 @@ import type {
   VerificacionFisicaInsert,
   VerificacionFisicaRow
 } from "./physical-verifications.types";
+import { buildOrigenRegistroSql } from "./inventory-classification";
 
 type DbExecutor = Pool | PoolClient;
 
@@ -19,18 +20,7 @@ export const obtenerDispositivoParaVerificacion = async (
     `SELECT d.id, d.estado_id, e.codigo AS estado_codigo,
             tipo.nombre AS tipo_nombre,
             d.numero_serie, d.imei, d.colaborador_id, d.departamento_id,
-            CASE
-              WHEN ingreso_inventario.tipo_evento IN ('IMPORTAR_DISPOSITIVO','REGISTRO_IMPORTADO')
-                OR ingreso_inventario.detalle ? 'source'
-                OR ingreso_inventario.detalle ? 'importKey'
-                OR ingreso_inventario.detalle ? 'historicalCode'
-                OR COALESCE(ingreso_inventario.responsable,'') ILIKE 'Importador%'
-                OR COALESCE(ingreso_inventario.observaciones,'') ILIKE 'Origen:%'
-              THEN 'IMPORTADO'
-              WHEN ingreso_inventario.tipo_evento IN ('ALTA_DISPOSITIVO','EQUIPO_CREADO','DISPOSITIVO_CREADO','EQUIPO_INCORPORADO_AL_INVENTARIO')
-              THEN 'MANUAL'
-              ELSE 'DESCONOCIDO'
-            END AS origen_registro
+             ${buildOrigenRegistroSql()} AS origen_registro
        FROM itam.dispositivos d
        JOIN itam.estados e ON e.id = d.estado_id
        JOIN itam.tipos_dispositivo tipo ON tipo.id = d.tipo_dispositivo_id

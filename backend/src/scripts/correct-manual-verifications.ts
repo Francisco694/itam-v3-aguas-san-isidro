@@ -1,10 +1,12 @@
 import type { PoolClient } from "pg";
 import { pool } from "../config/database";
 import { env } from "../config/env";
+import { buildOrigenRegistroSql } from "../modules/dispositivos/inventory-classification";
 
 const EVENT_TYPE = "EQUIPO_VERIFICADO_POR_REGISTRO_MANUAL";
 const CONFIRMATION = "VERIFICAR_INGRESOS_MANUALES";
 const DESCRIPTION = "Equipo verificado por registro manual en ITAM.";
+const origenRegistroSql = buildOrigenRegistroSql();
 
 interface ManualVerificationState {
   dispositivo_id: string;
@@ -59,18 +61,7 @@ const loadStates = async (client: PoolClient, codes: number[]): Promise<ManualVe
            LIMIT 1
         ) ingreso ON TRUE
         CROSS JOIN LATERAL (
-          SELECT CASE
-            WHEN ingreso.tipo_evento IN ('IMPORTAR_DISPOSITIVO','REGISTRO_IMPORTADO')
-              OR ingreso.detalle ? 'source'
-              OR ingreso.detalle ? 'importKey'
-              OR ingreso.detalle ? 'historicalCode'
-              OR COALESCE(ingreso.responsable, '') ILIKE 'Importador%'
-              OR COALESCE(ingreso.observaciones, '') ILIKE 'Origen:%'
-            THEN 'IMPORTADO'
-            WHEN ingreso.tipo_evento IN ('ALTA_DISPOSITIVO','EQUIPO_CREADO','DISPOSITIVO_CREADO','EQUIPO_INCORPORADO_AL_INVENTARIO')
-            THEN 'MANUAL'
-            ELSE 'DESCONOCIDO'
-          END AS origen_registro
+          SELECT ${origenRegistroSql} AS origen_registro
         ) origen
         LEFT JOIN LATERAL (
           SELECT v.id, v.resultado

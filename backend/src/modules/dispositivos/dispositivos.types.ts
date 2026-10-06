@@ -185,6 +185,7 @@ export interface DispositivoFilters {
   departamentoColaboradorId?: number;
   localidad?: string;
   origenRegistro?: "MANUAL" | "IMPORTADO";
+  clasificacion?: "INVENTARIO" | "HISTORICO";
   verificacion?: "PENDIENTE" | "VERIFICADO";
 }
 
@@ -311,6 +312,7 @@ export interface ResumenGerencial {
   inventarioActivoRealVerificadoPorTipo: ResumenGerencialVerificadoPorTipo[];
   verificadosPorTipo: ResumenGerencialVerificadoPorTipo[];
   historicoRegistradoPorTipo: ResumenGerencialHistoricoPorTipo[];
+  legacyPendiente: { cantidad: number; valorTotal: number };
   inventarioOperacional: { cantidad: number; valor: number };
   disponibles: { cantidad: number; valor: number };
   asignados: { cantidad: number; valor: number };

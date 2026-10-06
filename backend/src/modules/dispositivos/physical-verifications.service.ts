@@ -30,14 +30,13 @@ export const clasificarVerificacionFisica = (
   ) {
     if (
       dispositivo.estado_codigo === "EXTRAVIADO" ||
-      dispositivo.estado_codigo === "DADO_BAJA" ||
       (dispositivo.estado_codigo === "ASIGNADO" &&
         !dispositivo.colaborador_id &&
         !dispositivo.departamento_id)
     ) {
       return { resultado: "REVISAR", identificadorEsperado };
     }
-    return { resultado: "PENDIENTE", identificadorEsperado };
+    return { resultado: "VERIFICADO", identificadorEsperado };
   }
   return { resultado: "REVISAR", identificadorEsperado };
 };
@@ -104,6 +103,11 @@ export const registrarVerificacionManual = async (
     if (!dispositivo) throw new NotFoundError("Dispositivo no encontrado.");
     if (dispositivo.origen_registro !== "IMPORTADO") {
       throw new ConflictError("El equipo ya está verificado por su registro manual.");
+    }
+    if (dispositivo.estado_codigo === "EXTRAVIADO") {
+      throw new ConflictError(
+        "Un equipo extraviado encontrado físicamente debe quedar en revisión y requiere una resolución explícita."
+      );
     }
     const ultima = await obtenerUltimaVerificacionFisica(dispositivo.id, client);
     if (ultima && ultima !== "PENDIENTE") {

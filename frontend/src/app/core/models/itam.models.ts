@@ -74,6 +74,7 @@ export interface ValidacionIdentificadorDispositivo {
 
 export type ResultadoVerificacionFisica = 'PENDIENTE' | 'VERIFICADO' | 'REVISAR';
 export type FiltroVerificacionDispositivo = 'PENDIENTE' | 'VERIFICADO';
+export type ClasificacionInventario = 'INVENTARIO' | 'HISTORICO';
 export interface VerificacionFisicaResumen {
   resultado: ResultadoVerificacionFisica;
   fechaVerificacion: string;
@@ -90,7 +91,7 @@ export interface VerificacionFisica {
   usuario: { id: string; nombre: string; email: string } | null;
   fechaVerificacion: string;
 }
-export interface DispositivoFilters { q?: string; tipo?: string; tipoDispositivoId?: number; familiaCodigoInventarioId?: number; estado?: string; colaboradorId?: number; departamentoId?: number; localidad?: string; origenRegistro?: 'MANUAL'|'IMPORTADO'; verificacion?: FiltroVerificacionDispositivo; }
+export interface DispositivoFilters { q?: string; tipo?: string; tipoDispositivoId?: number; familiaCodigoInventarioId?: number; estado?: string; colaboradorId?: number; departamentoId?: number; localidad?: string; origenRegistro?: 'MANUAL'|'IMPORTADO'; clasificacion?: ClasificacionInventario; verificacion?: FiltroVerificacionDispositivo; }
 export interface IndicadorEconomico { cantidad:number;valor:number; }
 export interface ResumenInventarioActivoPorTipo { tipo: string; cantidad: number; valorTotal: number; porcentajeCantidad: number; }
 export interface ResumenInventarioActivoRealVerificadoPorTipo extends ResumenInventarioActivoPorTipo { porcentajeValor: number; }
@@ -115,6 +116,7 @@ export interface ResumenGerencial {
   inventarioActivoRealVerificadoPorTipo: ResumenInventarioActivoRealVerificadoPorTipo[];
   verificadosPorTipo: ResumenInventarioActivoRealVerificadoPorTipo[];
   historicoRegistradoPorTipo: ResumenHistoricoRegistradoPorTipo[];
+  legacyPendiente: { cantidad: number; valorTotal: number };
   inventarioOperacional:IndicadorEconomico;
   disponibles:IndicadorEconomico;
   asignados:IndicadorEconomico;

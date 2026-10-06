@@ -38,6 +38,7 @@ import { PageHeader } from '../../shared/components/page-header/page-header';
 import { ViewState } from '../../shared/components/view-state/view-state';
 import { formatClp } from '../../shared/utils/currency';
 import { errorMessage } from '../../shared/utils/error-message';
+import { isHistoricalPending, isInventoryValidated } from '../../shared/utils/inventory-classification';
 import type {
   Departamento,
   Dispositivo,
@@ -835,8 +836,14 @@ export class Dashboard implements OnInit {
           r.summary.inventarioActivoRealVerificadoPorTipo,
         );
         const historicalSummary = firstNonEmptyArray(r.summary.historicoRegistradoPorTipo);
+        const legacyPending = r.summary.legacyPendiente ?? {
+          cantidad: r.devices.filter((device) => isHistoricalPending(device)).length,
+          valorTotal: r.devices
+            .filter((device) => isHistoricalPending(device))
+            .reduce((total, device) => total + (device.valorComercial ?? 0), 0),
+        };
         const fallbackVerified = inventoryScope.operational.filter(
-          (device) => device.origenRegistro === 'MANUAL' || device.verificacionFisica?.resultado === 'VERIFICADO',
+          (device) => isInventoryValidated(device),
         );
         const verified = r.summary.dispositivosVerificados ?? {
           cantidad: fallbackVerified.length,
@@ -879,6 +886,14 @@ export class Dashboard implements OnInit {
             label: 'Inventario registrado histórico',
             value: historicalTotal,
             meta: 'Total de registros, incluidas bajas y extravíos',
+            tone: 'slate',
+            icon: LucidePackage,
+          },
+          {
+            label: 'Legacy pendiente de validación',
+            value: legacyPending.cantidad,
+            meta: 'Importados sin verificación física confirmada',
+            details: [`Valor pendiente: ${formatClp(legacyPending.valorTotal)}`],
             tone: 'slate',
             icon: LucidePackage,
           },

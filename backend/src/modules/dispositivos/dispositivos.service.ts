@@ -59,6 +59,7 @@ import {
   obtenerResumenGerencial,
   obtenerResumenConciliacionInventario,
   obtenerResumenHistoricoPorTipo,
+  obtenerResumenLegacyPendiente,
   obtenerResumenInventarioActivoPorTipo,
   obtenerResumenInventarioActivoVerificadoPorTipo,
   registrarBajaDispositivo
@@ -95,12 +96,13 @@ import type {
 import { insertarVerificacionFisica } from "./physical-verifications.repository";
 
 export const obtenerIndicadoresGerenciales = async (): Promise<ResumenGerencial> => {
-  const [row, porTipo, verificadoPorTipo, historicoPorTipo, conciliacionRows] = await Promise.all([
+  const [row, porTipo, verificadoPorTipo, historicoPorTipo, conciliacionRows, legacyPendienteRow] = await Promise.all([
     obtenerResumenGerencial(),
     obtenerResumenInventarioActivoPorTipo(),
     obtenerResumenInventarioActivoVerificadoPorTipo(),
     obtenerResumenHistoricoPorTipo(),
-    obtenerResumenConciliacionInventario()
+    obtenerResumenConciliacionInventario(),
+    obtenerResumenLegacyPendiente()
   ]);
   const metric = (cantidad: string | number, valor: string | number) => ({
     cantidad: Number(cantidad) || 0,
@@ -205,6 +207,10 @@ export const obtenerIndicadoresGerenciales = async (): Promise<ResumenGerencial>
       porcentajeCantidad: porcentaje(Number(item.cantidad) || 0, historicoTotal),
       valorHistorico: Number(item.valor_total) || 0
     })),
+    legacyPendiente: {
+      cantidad: Number(legacyPendienteRow.cantidad) || 0,
+      valorTotal: Number(legacyPendienteRow.valor_total) || 0
+    },
     inventarioOperacional: metric(
       row.inventario_operacional_cantidad,
       row.inventario_operacional_valor

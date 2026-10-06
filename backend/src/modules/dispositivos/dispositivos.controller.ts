@@ -193,6 +193,12 @@ export const listarDispositivosController = asyncHandler(
           "origenRegistro",
           ["MANUAL", "IMPORTADO"] as const
         ) ?? undefined,
+      clasificacion:
+        parseOptionalEnum(
+          req.query.clasificacion,
+          "clasificacion",
+          ["INVENTARIO", "HISTORICO"] as const
+        ) ?? undefined,
       verificacion:
         parseOptionalEnum(
           req.query.verificacion,

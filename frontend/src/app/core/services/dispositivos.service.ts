@@ -59,8 +59,8 @@ export class DispositivosService {
   }
   resumenGerencial(){return this.http.get<ApiItemResponse<ResumenGerencial>>(`${this.url}/resumen-gerencial`).pipe(map(normalizeDashboardSummary));}
   obtener(codigo: string | number) { return this.item(this.http.get<ApiItemResponse<Dispositivo>>(`${this.url}/${codigo}`)); }
-  buscarPorCodigoInventario(codigo: number, verificacion?: FiltroVerificacionDispositivo, origenRegistro?: 'MANUAL' | 'IMPORTADO') {
-    return this.listar({ q: String(codigo), verificacion, origenRegistro }).pipe(map((items) => {
+  buscarPorCodigoInventario(codigo: number, filters: Pick<DispositivoFilters, 'verificacion' | 'origenRegistro' | 'clasificacion'> = {}) {
+    return this.listar({ q: String(codigo), ...filters }).pipe(map((items) => {
       const item = items.find((candidate) => candidate.codigoInventario === codigo);
       if (!item) throw new Error('Dispositivo no encontrado.');
       return item;

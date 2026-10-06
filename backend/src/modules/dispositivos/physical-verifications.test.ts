@@ -19,8 +19,8 @@ test("verificación física: equipo no localizado requiere revisión", () => {
   assert.equal(clasificarVerificacionFisica(dispositivo(), false, null).resultado, "REVISAR");
 });
 
-test("verificación física: identificador exacto permanece pendiente de confirmación manual", () => {
-  assert.equal(clasificarVerificacionFisica(dispositivo(), true, "SER-001").resultado, "PENDIENTE");
+test("verificación física: identificador exacto queda verificado", () => {
+  assert.equal(clasificarVerificacionFisica(dispositivo(), true, "SER-001").resultado, "VERIFICADO");
 });
 
 test("verificación física: identificador vacío o distinto requiere revisar datos", () => {
@@ -28,9 +28,9 @@ test("verificación física: identificador vacío o distinto requiere revisar da
   assert.equal(clasificarVerificacionFisica(dispositivo(), true, "OTRO").resultado, "REVISAR");
 });
 
-test("verificación física: smartphone compara exclusivamente el IMEI y permanece pendiente", () => {
+test("verificación física: smartphone compara exclusivamente el IMEI", () => {
   const smartphone = { ...dispositivo(), tipo_nombre: "Smartphone", imei: "359158762297938" };
-  assert.equal(clasificarVerificacionFisica(smartphone, true, "359158762297938").resultado, "PENDIENTE");
+  assert.equal(clasificarVerificacionFisica(smartphone, true, "359158762297938").resultado, "VERIFICADO");
   assert.equal(clasificarVerificacionFisica(smartphone, true, "SER-001").resultado, "REVISAR");
 });
 
@@ -38,6 +38,13 @@ test("verificación física: extraviado queda para revisión", () => {
   assert.equal(
     clasificarVerificacionFisica(dispositivo("EXTRAVIADO"), true, "SER-001").resultado,
     "REVISAR"
+  );
+});
+
+test("verificación física: dado de baja identificado queda verificado sin reactivarse", () => {
+  assert.equal(
+    clasificarVerificacionFisica(dispositivo("DADO_BAJA"), true, "SER-001").resultado,
+    "VERIFICADO"
   );
 });
 
