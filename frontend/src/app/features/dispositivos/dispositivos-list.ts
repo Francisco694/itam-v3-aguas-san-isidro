@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { LucideCamera, LucideDownload, LucideEye, LucidePencil, LucidePrinter, LucidePlus, LucideScanBarcode, LucideSearch, LucideSlidersHorizontal, LucideTriangleAlert } from '@lucide/angular';
 import QRCode from 'qrcode';
-import { catchError, forkJoin, of } from 'rxjs';
+import { catchError, forkJoin, map, of } from 'rxjs';
 import { Departamento, Dispositivo, DispositivoFilters, Estado, FiltroVerificacionDispositivo, ResultadoVerificacionFisica, TipoDispositivo } from '../../core/models/itam.models';
 import { DepartamentosService } from '../../core/services/departamentos.service';
 import { DispositivosService } from '../../core/services/dispositivos.service';
@@ -22,7 +22,7 @@ import type { ItamQrTarget } from '../../shared/utils/itam-qr';
 import { buildItamQrValue } from '../../shared/utils/itam-qr';
 import { errorMessage } from '../../shared/utils/error-message';
 import { formatRut } from '../../shared/utils/rut';
-import { belongsToInventoryView, classificationForView, type InventoryView } from '../../shared/utils/inventory-classification';
+import { belongsToInventoryView, classificationForView, type InventoryClassification, type InventoryView } from '../../shared/utils/inventory-classification';
 
 const normalizeInventorySearch = (value: unknown): string => String(value ?? '')
   .normalize('NFD')
@@ -42,6 +42,36 @@ export const quickSearchNotFoundMessage =
 export const extractQuickSearchCode = (query: string): number | null => {
   const match = query.trim().match(/^\/q\/(\d+)\/?$/i);
   return match ? Number(match[1]) : null;
+};
+
+export interface UniversalDeviceSearchResult {
+  dispositivo: Dispositivo;
+  clasificacion: InventoryClassification;
+}
+
+const quickSearchCode = (query: string): number | null => {
+  const normalized = normalizeInventorySearch(query).replace(/^itam\s*#?/, '').trim();
+  return /^\d+$/.test(normalized) ? Number(normalized) : null;
+};
+
+export const findUniversalDevice = (
+  items: readonly Dispositivo[],
+  query: string,
+): UniversalDeviceSearchResult | null => {
+  const normalized = normalizeInventorySearch(query);
+  if (!normalized) return null;
+  const code = quickSearchCode(query);
+  const exact = code !== null
+    ? items.find((item) => item.codigoInventario === code)
+    : items.find((item) => [item.imei, item.numeroSerie]
+      .some((value) => normalizeInventorySearch(value) === normalized));
+  const fallback = exact ?? items.find((item) => [item.codigoInventario, item.imei, item.numeroSerie, item.marca, item.modelo, item.tipo.nombre]
+    .some((value) => normalizeInventorySearch(value).includes(normalized)));
+  if (!fallback) return null;
+  const clasificacion: InventoryClassification = belongsToInventoryView(fallback, 'REAL')
+    ? 'INVENTARIO'
+    : 'HISTORICO';
+  return { dispositivo: fallback, clasificacion };
 };
 
 export const inventoryStateCount = (
@@ -351,29 +381,22 @@ export class DispositivosList implements OnInit {
   }
   protected quickSearch(): void {
     const query = this.quickQuery.trim();
-    const qrCode = extractQuickSearchCode(query);
-    if (qrCode !== null) {
-      this.quickLoading.set(true);
-      this.openDeviceFromCurrentView(qrCode, query);
-      return;
-    }
-    const mode = quickSearchMode(query);
-    if (mode === 'EMPTY') return;
+    if (!query) return;
     this.quickLoading.set(true);
-    if (mode === 'DEVICE_CODE') {
-      this.openDeviceFromCurrentView(Number(query), query);
-      return;
-    }
-    this.searchDevicesByQuickQuery(query);
+    const qrCode = extractQuickSearchCode(query);
+    this.searchUniversalDevice(qrCode === null ? query : String(qrCode));
   }
-  private searchDevicesByQuickQuery(query: string): void {
-    this.service.listar({ q: query, ...this.currentViewFilters() }).subscribe({
+  private searchUniversalDevice(query: string): void {
+    const apiQuery = quickSearchCode(query);
+    this.service.listar({ q: apiQuery === null ? query : String(apiQuery) }).subscribe({
       next: (items) => {
-        this.quickLoading.set(false);
-        this.items.set(items);
-        const visible = new Set(items.map((item) => item.id));
-        this.selectedIds.update((selected) => new Set([...selected].filter((id) => visible.has(id))));
-        if (!items.length) this.notifyAssetOutsideCurrentView(query);
+        const result = findUniversalDevice(items, query);
+        if (!result) {
+          this.quickLoading.set(false);
+          this.toast.error('Activo no encontrado', quickSearchNotFoundMessage);
+          return;
+        }
+        this.applyUniversalSearchResult(result);
       },
       error: (error) => {
         this.quickLoading.set(false);
@@ -411,6 +434,34 @@ export class DispositivosList implements OnInit {
       }
     });
   }
+  private applyUniversalSearchResult(result: UniversalDeviceSearchResult): void {
+    const view: InventoryView = result.clasificacion === 'INVENTARIO' ? 'REAL' : 'HISTORICO';
+    this.viewMode = view;
+    this.filters = { q: '', tipoDispositivoId: '', estado: '', departamentoId: '', localidad: '', verificacion: '' };
+    this.selectedIds.set(new Set());
+    this.items.set([result.dispositivo]);
+    this.quickLoading.set(false);
+    this.loadViewItems();
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: {
+        vista: view === 'HISTORICO' ? 'historico' : null,
+        q: null,
+        tipoDispositivoId: null,
+        estado: null,
+        departamentoId: null,
+        localidad: null,
+        verificacion: null
+      },
+      queryParamsHandling: 'merge',
+      replaceUrl: true
+    });
+    this.toast.success(
+      `Activo encontrado en ${view === 'REAL' ? 'Inventario' : 'Histórico'}`,
+      `ITAM ${result.dispositivo.codigoInventario} quedó seleccionado para revisión.`
+    );
+  }
+
   protected openScannedAsset(target: ItamQrTarget): void {
     this.scannerOpen.set(false);
     this.quickLoading.set(true);
@@ -432,16 +483,20 @@ export class DispositivosList implements OnInit {
       return;
     }
     if (target.entity === 'DISPOSITIVO') {
-      this.openDeviceFromCurrentView(target.code, String(target.code));
+      this.searchUniversalDevice(String(target.code));
       return;
     }
     forkJoin({
-      device: this.service.buscarPorCodigoInventario(target.code, this.currentViewFilters()).pipe(catchError(() => of(null))),
+      device: this.service.listar({ q: String(target.code) }).pipe(
+        map((items) => findUniversalDevice(items, String(target.code))?.dispositivo ?? null),
+        catchError(() => of(null)),
+      ),
       sim: this.simService.obtener(target.code).pipe(catchError(() => of(null)))
     }).subscribe(({ device, sim }) => {
       this.quickLoading.set(false);
       if (device && !sim) {
-        void this.router.navigate(['/dispositivos', device.codigoInventario]);
+        const result = findUniversalDevice([device], String(target.code));
+        if (result) this.applyUniversalSearchResult(result);
         return;
       }
       if (sim && !device) {
