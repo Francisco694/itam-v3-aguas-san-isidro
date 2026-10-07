@@ -88,6 +88,7 @@ const mapProcess = (row: OffboardingProcessRow): OffboardingProcessSummary => {
     creadoEn: toIsoDateTime(row.creado_en),
     actualizadoEn: toIsoDateTime(row.actualizado_en),
     equiposPendientes: Number(row.equipos_pendientes) || 0,
+    simsPendientes: Number(row.sims_pendientes) || 0,
     valorPendiente,
     valorRecuperado,
     valorTotal: valorPendiente + valorRecuperado
@@ -195,6 +196,11 @@ export const closeOffboardingProcess = async (
     if (Number(current.equipos_pendientes) > 0) {
       throw new ConflictError(
         "No puede completar el proceso mientras existan equipos por recuperar."
+      );
+    }
+    if (Number(current.sims_pendientes) > 0) {
+      throw new ConflictError(
+        "No puede completar el proceso mientras existan SIM asignadas por recuperar."
       );
     }
     await completeProcess(input.procesoId, input.usuarioId, client);

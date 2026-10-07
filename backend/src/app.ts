@@ -24,6 +24,8 @@ import authRoutes from "./modules/auth/auth.routes";
 import usuariosRoutes from "./modules/usuarios/usuarios.routes";
 import offboardingRoutes from "./modules/offboarding/offboarding.routes";
 import stockAlertsRoutes from "./modules/stock-alerts/stock-alerts.routes";
+import reemplazosDispositivoRoutes from "./modules/reemplazos-dispositivo/reemplazos-dispositivo.routes";
+import lineasMovilesRoutes from "./modules/lineas-moviles/lineas-moviles.routes";
 import {
   auditMutations,
   rejectReadOnlyMutations,
@@ -80,6 +82,8 @@ app.use("/api/v1/facturas-adquisicion",facturasAdquisicionRoutes);
 app.use("/api/v1/usuarios",usuariosRoutes);
 app.use("/api/v1/offboarding",offboardingRoutes);
 app.use("/api/v1/alertas-stock",stockAlertsRoutes);
+app.use("/api/v1/reemplazos-dispositivo", reemplazosDispositivoRoutes);
+app.use("/api/v1/lineas-moviles", lineasMovilesRoutes);
 
 
 // ============================================================

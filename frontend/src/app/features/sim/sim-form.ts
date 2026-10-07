@@ -40,15 +40,16 @@ import { errorMessage } from '../../shared/utils/error-message';
               id="iccid"
               maxlength="32"
               formControlName="iccidCodigoFabrica"
+              (blur)="checkIccid()"
               [class.invalid]="invalid('iccidCodigoFabrica')"
             />
             @if (invalid('iccidCodigoFabrica')) {
               <p class="field-error">El ICCID es obligatorio (máximo 32 caracteres).</p>
             }
-          </div>
-          <div class="field">
-            <label for="number">Número asociado</label
-            ><input id="number" maxlength="30" formControlName="numeroAsociado" />
+            @if (iccidStatus() === 'available') { <p class="field-success">✓ ICCID disponible para registrar.</p> }
+            @if (iccidStatus() === 'duplicate' && existingIccid(); as existing) {
+              <p class="field-error">Esta SIM ya estÃ¡ registrada como ITAM {{ existing.codigoInventario }}. ICCID {{ existing.iccidCodigoFabrica }}.</p>
+            }
           </div>
           <div class="field">
             <label for="company">Compañía</label
@@ -77,7 +78,7 @@ import { errorMessage } from '../../shared/utils/error-message';
         <div class="form-actions">
           <a class="btn btn--secondary" [routerLink]="codigo ? ['/sim', codigo] : ['/sim']"
             >Cancelar</a
-          ><button class="btn btn--primary" type="submit" [disabled]="submitting()">
+          ><button class="btn btn--primary" type="submit" [disabled]="submitting() || iccidStatus() === 'checking' || iccidStatus() === 'duplicate'">
             {{ submitting() ? 'Guardando…' : 'Guardar SIM' }}
           </button>
         </div>
@@ -113,10 +114,11 @@ export class SimForm implements OnInit {
   protected readonly loading = signal(false);
   protected readonly submitting = signal(false);
   protected readonly apiError = signal('');
+  protected readonly iccidStatus = signal<'idle' | 'checking' | 'available' | 'duplicate'>('idle');
+  protected readonly existingIccid = signal<Sim | null>(null);
   protected readonly created = signal<Sim | null>(null);
   protected readonly form = this.fb.nonNullable.group({
     iccidCodigoFabrica: ['', [Validators.required, Validators.maxLength(32)]],
-    numeroAsociado: ['', [Validators.maxLength(30)]],
     compania: ['', [Validators.maxLength(100)]],
     observaciones: [''],
     responsable: ['', [Validators.required, Validators.maxLength(150)]],
@@ -131,7 +133,6 @@ export class SimForm implements OnInit {
         next: (i) => {
           this.form.patchValue({
             iccidCodigoFabrica: i.iccidCodigoFabrica ?? '',
-            numeroAsociado: i.numeroAsociado || '',
             compania: i.compania || '',
             observaciones: i.observaciones || '',
           });
@@ -148,16 +149,40 @@ export class SimForm implements OnInit {
     const c = this.form.controls[name];
     return c.invalid && (c.dirty || c.touched);
   }
+  protected checkIccid() {
+    const value = this.form.controls.iccidCodigoFabrica.value.trim();
+    if (!value || this.form.controls.iccidCodigoFabrica.invalid) {
+      this.iccidStatus.set('idle');
+      this.existingIccid.set(null);
+      return;
+    }
+    this.iccidStatus.set('checking');
+    this.service.buscarPorIccid(value).subscribe({
+      next: (existing) => {
+        if (this.codigo && existing.codigoInventario === this.codigo) {
+          this.iccidStatus.set('available');
+          this.existingIccid.set(null);
+        } else {
+          this.iccidStatus.set('duplicate');
+          this.existingIccid.set(existing);
+        }
+      },
+      error: (error) => {
+        if (error?.status === 404) this.iccidStatus.set('available');
+        else this.iccidStatus.set('idle');
+      },
+    });
+  }
   protected submit() {
     if (this.form.invalid) {
       this.form.markAllAsTouched();
       return;
     }
+    if (this.iccidStatus() === 'duplicate') return;
     this.submitting.set(true);
     const v = this.form.getRawValue();
     const base = {
       iccidCodigoFabrica: v.iccidCodigoFabrica.trim(),
-      numeroAsociado: v.numeroAsociado.trim() || null,
       compania: v.compania.trim() || null,
       observaciones: v.observaciones.trim() || null,
     };

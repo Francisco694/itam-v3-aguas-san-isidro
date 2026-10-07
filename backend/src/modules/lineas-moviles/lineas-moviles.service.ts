@@ -11,11 +11,13 @@ import {
   guardarLineaMovilDeDispositivo,
   insertarHistorialLineaMovil,
   liberarLineaActualDeSim,
-  liberarLineaDeSimAnterior,
   obtenerLineaPorDispositivo,
   obtenerLineaPorNumero,
+  obtenerLineaPorNumeroConContexto,
   obtenerLineaPorSim,
-  vincularLineaEnSim
+  sincronizarVinculoLineaSim,
+  desasociarVinculoLineaSim,
+  listarHistorialLineaSimPorSim
 } from "./lineas-moviles.repository";
 import type {
   AccionLineaExtravio,
@@ -42,6 +44,39 @@ export const esReposicionLineaMovil = (
   && ["PENDIENTE_REPOSICION", "BLOQUEADA", "SUSPENDIDA"].includes(linea.estado)
   && linea.sim_id !== simObjetivoId;
 
+export const buscarLineaMovilPorNumero = async (numeroTelefonico: string) => {
+  const numero = normalizarNumeroTelefonicoChileno(numeroTelefonico);
+  const row = await obtenerLineaPorNumeroConContexto(numero);
+  if (!row) return null;
+  return {
+    id: row.linea_id,
+    numeroTelefonico: row.numero_telefonico,
+    estado: row.linea_estado,
+    sim: row.sim_id ? {
+      id: row.sim_id,
+      codigoInventario: row.sim_codigo_inventario,
+      iccid: row.sim_iccid,
+      compania: row.sim_compania,
+      estado: row.sim_estado_codigo && row.sim_estado_nombre
+        ? { codigo: row.sim_estado_codigo, nombre: row.sim_estado_nombre }
+        : null
+    } : null,
+    dispositivo: row.dispositivo_id ? {
+      id: row.dispositivo_id,
+      codigoInventario: row.dispositivo_codigo_inventario,
+      tipo: row.dispositivo_tipo
+    } : null,
+    colaborador: row.colaborador_id ? {
+      id: row.colaborador_id,
+      nombre: row.colaborador_nombre
+    } : null,
+    departamento: row.departamento_id ? {
+      id: row.departamento_id,
+      nombre: row.departamento_nombre
+    } : null
+  };
+};
+
 export const vincularLineaMovil = async (
   input: VincularLineaInput,
   client: PoolClient
@@ -56,6 +91,7 @@ export const vincularLineaMovil = async (
     throw new ConflictError("El número telefónico ya existe en otra línea móvil.");
   }
   if (lineaActualDelDispositivo) linea = lineaActualDelDispositivo;
+  if (!linea && lineaActualDeSim) linea = lineaActualDeSim;
   const creada = !linea;
   const simAnteriorId = linea?.sim_id ?? null;
   const numeroAnterior = linea?.numero_telefonico ?? null;
@@ -73,9 +109,6 @@ export const vincularLineaMovil = async (
     && !["PENDIENTE_REPOSICION", "BLOQUEADA", "SUSPENDIDA"].includes(linea.estado)
   ) {
     throw new ConflictError("El número telefónico ya está asociado a otra SIM activa.");
-  }
-  if (linea?.sim_id && linea.sim_id !== input.sim.sim_id) {
-    await liberarLineaDeSimAnterior(linea.sim_id, client);
   }
   if (lineaActualDeSim && lineaActualDeSim.id !== linea?.id) {
     const liberada = await liberarLineaActualDeSim(lineaActualDeSim.id, client);
@@ -109,7 +142,13 @@ export const vincularLineaMovil = async (
         input.sim.sim_id,
         client
       );
-  await vincularLineaEnSim(input.sim.sim_id, linea.id, numero, client);
+  await sincronizarVinculoLineaSim(
+    linea.id,
+    input.sim.sim_id,
+    "ASOCIACION_LINEA_SIM",
+    client,
+    simAnteriorId
+  );
 
   if (numeroAnterior && numeroAnterior !== numero) {
     await insertarHistorialLineaMovil(
@@ -195,9 +234,7 @@ export const vincularLineaMovilADispositivo = async (
         client
       );
     }
-    if (lineaDelDispositivo.sim_id && lineaDelDispositivo.sim_id !== simId) {
-      await liberarLineaDeSimAnterior(lineaDelDispositivo.sim_id, client);
-    }
+    const simAnteriorId = lineaDelDispositivo.sim_id;
     const numeroAnterior = lineaDelDispositivo.numero_telefonico;
     const numeroActualizado = numeroAnterior !== numero;
     const { linea: actualizada, operacion } = await guardarLineaMovilDeDispositivo(
@@ -209,7 +246,13 @@ export const vincularLineaMovilADispositivo = async (
       simId
     );
     if (!actualizada) throw new AppError(500, "LINEA_MOVIL_SAVE_UNCONFIRMED", "No se pudo confirmar el guardado de la línea móvil.");
-    if (simId) await vincularLineaEnSim(simId, actualizada.id, numero, client);
+    await sincronizarVinculoLineaSim(
+      actualizada.id,
+      simId,
+      "ASOCIACION_LINEA_DISPOSITIVO",
+      client,
+      simAnteriorId
+    );
     console.log("[asociar-linea] insert/update resultado", {
       operacion,
       lineaId: actualizada.id,
@@ -263,6 +306,7 @@ export const vincularLineaMovilADispositivo = async (
     );
   }
 
+  const simAnteriorId = linea?.sim_id ?? null;
   const { linea: actualizada, operacion } = await guardarLineaMovilDeDispositivo(
     numero,
     dispositivoId,
@@ -272,7 +316,13 @@ export const vincularLineaMovilADispositivo = async (
     simId
   );
   if (!actualizada) throw new AppError(500, "LINEA_MOVIL_SAVE_UNCONFIRMED", "No se pudo confirmar el guardado de la línea móvil.");
-  if (simId) await vincularLineaEnSim(simId, actualizada.id, numero, client);
+  await sincronizarVinculoLineaSim(
+    actualizada.id,
+    simId,
+    "ASOCIACION_LINEA_DISPOSITIVO",
+    client,
+    simAnteriorId
+  );
   console.log("[asociar-linea] insert/update resultado", {
     operacion,
     lineaId: actualizada.id,
@@ -358,6 +408,9 @@ export const gestionarLineaPorExtravio = async (
     throw new ValidationError("La SIM no tiene una línea móvil registrada para conservar.");
   }
 
+  if (linea) {
+    await desasociarVinculoLineaSim(linea.id, input.sim.sim_id, client);
+  }
   await desvincularSimPorExtravio(input.sim.sim_id, estadoSim.id, client);
   await insertarHistorialSim(
     input.sim.sim_id,
@@ -371,7 +424,7 @@ export const gestionarLineaPorExtravio = async (
     input.responsable,
     input.observaciones,
     {
-      numeroTelefonico: linea?.numero_telefonico ?? input.sim.numero_asociado,
+      numeroTelefonico: linea?.numero_telefonico ?? input.sim.linea_numero_telefonico,
       descripcion: input.accion === "CONSERVAR_BLOQUEAR"
         ? "SIM bloqueada por extravío del Smartphone; la línea se conserva."
         : "SIM desvinculada por extravío del Smartphone."

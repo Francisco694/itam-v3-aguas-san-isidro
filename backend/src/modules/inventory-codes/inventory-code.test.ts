@@ -18,11 +18,18 @@ test("genera la primera serie SIM y cruza de bloque", () => {
 });
 
 test("la estrategia REPEAT_PREFIX es genérica para las familias 1 a 6", () => {
-  for (const prefix of ["1", "2", "3", "4", "5", "6"]) {
+  for (const prefix of ["1", "2", "3", "4", "5", "6", "7", "8", "9"]) {
     assert.equal(formatInventoryCode(prefix, 1), Number(`${prefix}001`));
     assert.equal(formatInventoryCode(prefix, 999), Number(`${prefix}999`));
     assert.equal(formatInventoryCode(prefix, 1000), Number(`${prefix}${prefix}001`));
   }
+});
+
+test("la continuidad de bloques repite el prefijo al superar 999 ordinales", () => {
+  assert.equal(formatInventoryCode("9", 999), 9999);
+  assert.equal(formatInventoryCode("9", 1000), 99001);
+  assert.equal(formatInventoryCode("9", 1998), 99999);
+  assert.equal(formatInventoryCode("9", 1999), 999001);
 });
 
 test("rechaza prefijos y ordinales inválidos", () => {

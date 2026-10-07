@@ -45,6 +45,7 @@ export interface OffboardingProcessRow {
   creado_en: Date | string;
   actualizado_en: Date | string;
   equipos_pendientes: string;
+  sims_pendientes?: string | number;
   valor_pendiente: string;
   valor_recuperado: string;
 }
@@ -93,6 +94,7 @@ export interface OffboardingProcessSummary {
   creadoEn: string;
   actualizadoEn: string;
   equiposPendientes: number;
+  simsPendientes: number;
   valorPendiente: number;
   valorRecuperado: number;
   valorTotal: number;

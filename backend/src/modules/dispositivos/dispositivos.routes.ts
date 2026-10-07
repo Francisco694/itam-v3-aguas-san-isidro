@@ -8,6 +8,8 @@ import {
   crearDispositivoController,
   devolverDispositivoController,
   darBajaDispositivoController,
+  gestionarLineaSimController,
+  registrarSimNuevaController,
   historialDispositivoController,
   listarVerificacionesFisicasController,
   listarDispositivosController,
@@ -26,6 +28,8 @@ router.get("/", listarDispositivosController);
 router.get("/resumen-gerencial", resumenGerencialController);
 router.get("/validar-identificador", validarIdentificadorController);
 router.post("/:codigo/asociar-linea", asociarLineaController);
+router.post("/:codigo/gestionar-linea-sim", gestionarLineaSimController);
+router.post("/:codigo/registrar-sim", registrarSimNuevaController);
 router.get("/:codigo/historial", historialDispositivoController);
 router.get("/:codigo/trazabilidad", trazabilidadDispositivoController);
 router.get("/:codigo/verificaciones-fisicas", listarVerificacionesFisicasController);

@@ -13,6 +13,7 @@ import {
 } from "../../shared/validation";
 import {
   actualizarSimExistente,
+  asociarLineaASim,
   asociarDispositivo,
   asignarColaboradorSim,
   cambiarEstadoSimExistente,
@@ -20,8 +21,11 @@ import {
   desasignarColaboradorSim,
   desasociarDispositivo,
   obtenerHistorialSim,
+  obtenerHistorialLineaSim,
+  obtenerSimPorIccidPublica,
   obtenerSim,
-  obtenerSims
+  obtenerSims,
+  desasociarLineaDeSim
 } from "./sim.service";
 import type {
   ActualizarSimInput,
@@ -83,6 +87,13 @@ export const obtenerSimController = asyncHandler(
     const sim = await obtenerSim(codigo);
 
     sendItem(res, sim);
+  }
+);
+
+export const obtenerSimPorIccidController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const iccid = parseRequiredString(req.params.iccid, "iccid", 32);
+    sendItem(res, await obtenerSimPorIccidPublica(iccid));
   }
 );
 
@@ -253,5 +264,32 @@ export const historialSimController = asyncHandler(
     const historial = await obtenerHistorialSim(codigo);
 
     sendCollection(res, historial);
+  }
+);
+
+export const historialLineaSimController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const codigo = parsePositiveInteger(req.params.codigo, "codigo");
+    sendCollection(res, await obtenerHistorialLineaSim(codigo));
+  }
+);
+
+export const asociarLineaController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const codigo = parsePositiveInteger(req.params.codigo, "codigo");
+    const body = parseBodyObject(req.body);
+    sendItem(res, await asociarLineaASim(codigo, {
+      lineaMovilId: parsePositiveInteger(body.lineaMovilId, "lineaMovilId"),
+      motivo: parseOptionalString(body.motivo, "motivo", 100) ?? undefined,
+      ...parseResponsableInput(req, body)
+    }));
+  }
+);
+
+export const desasociarLineaController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const codigo = parsePositiveInteger(req.params.codigo, "codigo");
+    const body = parseBodyObject(req.body);
+    sendItem(res, await desasociarLineaDeSim(codigo, parseResponsableInput(req, body)));
   }
 );

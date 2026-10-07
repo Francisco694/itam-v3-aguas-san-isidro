@@ -58,7 +58,7 @@ export const assetFieldVisibility = (type: TipoDispositivo | null) => ({
   marca: type?.configuracionFormulario.mostrarMarca ?? false,
   modelo: type?.configuracionFormulario.mostrarModelo ?? false,
   numeroSerie: type?.configuracionFormulario.mostrarNumeroSerie ?? false,
-  imei: requiresImei(type),
+  imei: type?.configuracionFormulario.mostrarImei ?? requiresImei(type),
   camposEspecificos: type?.configuracionFormulario.camposEspecificos ?? []
 });
 
@@ -210,7 +210,7 @@ export class DispositivoForm implements OnInit, OnDestroy {
     serie: signal<IdentifierValidationState>({ status: 'idle' }),
     imei: signal<IdentifierValidationState>({ status: 'idle' })
   };
-  protected readonly attributesForm = this.fb.group({ partNumber: [''], tipoCable: [''], longitud: [''], potencia: [''], tipoAdaptador: [''], cantidadPuertos: [''], nombrePeriferico: [''] });
+  protected readonly attributesForm = this.fb.group({ partNumber: [''], tipoCable: [''], longitud: [''], potencia: [''], tipoAdaptador: [''], cantidadPuertos: [''], nombrePeriferico: [''], tamanoPulgadas: [''], hostname: [''], hostnameIp: [''], mac: [''], ip: [''] });
   protected readonly form = this.fb.nonNullable.group({
     tipoPrincipal: ['', Validators.required], tipoDispositivoId: [''], marca: ['', Validators.maxLength(100)], modelo: ['', Validators.maxLength(150)],
     numeroSerie: ['', Validators.maxLength(150)], imei: ['', Validators.maxLength(30)], valorComercial: [0, [Validators.required,Validators.min(0),Validators.pattern(COMMERCIAL_VALUE_PATTERN)]], localidad: ['', Validators.maxLength(120)], ubicacionDetalle: ['', Validators.maxLength(250)],

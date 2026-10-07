@@ -3,7 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { map, Observable, tap } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { ApiCollectionResponse, ApiItemResponse } from '../models/api.models';
-import { AsociarLineaDispositivoInput, AsignarDispositivoColaboradorInput, AsignarDispositivoDepartamentoInput, CambiarEstadoInput, DarBajaInput, DevolverDispositivoInput, Dispositivo, DispositivoFilters, DispositivoInput, FiltroVerificacionDispositivo, HistorialEvento, LineaMovilResumen, ResultadoDevolucion, ResultadoOffboardingInput, ResumenGerencial, TipoIdentificadorDispositivo, TrazabilidadDispositivo, ValidacionIdentificadorDispositivo, VerificacionFisica, VerificacionFisicaResumen } from '../models/itam.models';
+import { AsociarLineaDispositivoInput, AsignarDispositivoColaboradorInput, AsignarDispositivoDepartamentoInput, CambiarEstadoInput, DarBajaInput, DevolverDispositivoInput, Dispositivo, DispositivoFilters, DispositivoInput, FiltroVerificacionDispositivo, GestionarLineaSimInput, GestionarLineaSimResult, HistorialEvento, LineaMovilResumen, RegistrarSimNuevaInput, RegistrarSimNuevaResult, ResultadoDevolucion, ResultadoOffboardingInput, ResumenGerencial, TipoIdentificadorDispositivo, TrazabilidadDispositivo, ValidacionIdentificadorDispositivo, VerificacionFisica, VerificacionFisicaResumen } from '../models/itam.models';
 
 interface LineaMovilApiRow {
   id: string | number;
@@ -93,6 +93,12 @@ export class DispositivosService {
         colaboradorId: response.data.colaboradorId ?? response.data.colaborador_id ?? null
       }))
     );
+  }
+  gestionarLineaSim(codigo: number, input: GestionarLineaSimInput) {
+    return this.item(this.http.post<ApiItemResponse<GestionarLineaSimResult>>(`${this.url}/${codigo}/gestionar-linea-sim`, input));
+  }
+  registrarSimNueva(codigo: number, input: RegistrarSimNuevaInput) {
+    return this.item(this.http.post<ApiItemResponse<RegistrarSimNuevaResult>>(`${this.url}/${codigo}/registrar-sim`, input));
   }
   asignarColaborador(codigo: number, input: AsignarDispositivoColaboradorInput) { return this.item(this.http.post<ApiItemResponse<Dispositivo>>(`${this.url}/${codigo}/asignar-colaborador`, input)); }
   asignarDepartamento(codigo: number, input: AsignarDispositivoDepartamentoInput) { return this.item(this.http.post<ApiItemResponse<Dispositivo>>(`${this.url}/${codigo}/asignar-departamento`, input)); }

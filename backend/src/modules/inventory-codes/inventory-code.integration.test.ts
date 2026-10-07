@@ -49,6 +49,21 @@ test("el generador salta un código legacy existente", async () => {
   }
 });
 
+test("el generador por nombre resuelve tipos nuevos dentro de familias compartidas", async () => {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const family = await client.query<{ prefijo: string; ultimo_ordinal: number }>(
+      "SELECT prefijo,ultimo_ordinal FROM itam.familias_codigo_inventario WHERE prefijo='4' LIMIT 1"
+    );
+    const code = await generateInventoryCode("DISPOSITIVO", "Smart TV", client);
+    assert.equal(code, formatInventoryCode(family.rows[0]!.prefijo, family.rows[0]!.ultimo_ordinal + 1));
+  } finally {
+    await client.query("ROLLBACK");
+    client.release();
+  }
+});
+
 test("PostgreSQL impide cambiar el código de un activo", async () => {
   const client = await pool.connect();
   try {

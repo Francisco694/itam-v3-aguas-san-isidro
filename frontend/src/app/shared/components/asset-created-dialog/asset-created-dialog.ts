@@ -18,9 +18,9 @@ export class AssetCreatedDialog{
   readonly canAssign=input(false);
   readonly close=output<void>();
   protected identifierLabel(): string {
-    return this.assetType().trim().toUpperCase().includes('SMARTPHONE') ? 'IMEI' : 'N° serie';
+    return this.imei().trim() ? 'IMEI' : 'N° serie';
   }
   protected identifier(): string {
-    return this.assetType().trim().toUpperCase().includes('SMARTPHONE') ? this.imei() : this.numeroSerie();
+    return this.imei().trim() || this.numeroSerie();
   }
 }

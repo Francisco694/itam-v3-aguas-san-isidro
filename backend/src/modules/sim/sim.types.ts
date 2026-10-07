@@ -70,6 +70,27 @@ export interface CrearSimInput {
   responsable: string;
 }
 
+export interface AsociarLineaInput {
+  lineaMovilId: number;
+  motivo?: string;
+  observaciones?: string | null;
+  responsable: string;
+}
+
+export interface CrearSimTransaccionalOptions {
+  estadoCodigo: "DISPONIBLE" | "ASIGNADA";
+  dispositivoId?: string | null;
+  colaboradorId?: string | number | null;
+  lineaMovilId?: string | null;
+  detalle?: Record<string, unknown>;
+}
+
+export interface DesasociarLineaInput {
+  motivo?: string;
+  observaciones?: string | null;
+  responsable: string;
+}
+
 export interface ActualizarSimInput {
   iccidCodigoFabrica?: string;
   numeroAsociado?: string | null;

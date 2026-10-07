@@ -93,7 +93,12 @@ import type {
   TipoIdentificadorDispositivo,
   UltimoResponsableTrazabilidad
 } from "./dispositivos.types";
+import { assertDispositivoSinSimParaBaja } from "./dispositivo-baja-rules";
 import { insertarVerificacionFisica } from "./physical-verifications.repository";
+import {
+  buscarReemplazoPendientePorDispositivo,
+  recibirReemplazoPendiente
+} from "../reemplazos-dispositivo/reemplazos-dispositivo.service";
 
 export const obtenerIndicadoresGerenciales = async (): Promise<ResumenGerencial> => {
   const [row, porTipo, verificadoPorTipo, historicoPorTipo, conciliacionRows, legacyPendienteRow] = await Promise.all([
@@ -379,7 +384,7 @@ const mapSimAsociada = (
     id: row.sim_id,
     codigoInventario: row.sim_codigo_inventario,
     iccidCodigoFabrica: row.iccid_codigo_fabrica,
-    numeroAsociado: row.sim_linea_numero_telefonico ?? row.numero_asociado,
+    numeroAsociado: row.sim_linea_numero_telefonico,
     lineaMovil: row.sim_linea_movil_id && row.sim_linea_numero_telefonico && row.sim_linea_estado
       ? {
           id: row.sim_linea_movil_id,
@@ -481,7 +486,7 @@ const mapDispositivo = (
         estado: row.linea_estado
       }
     : null,
-  numeroTelefonico: row.linea_numero_telefonico ?? row.numero_asociado,
+  numeroTelefonico: row.linea_numero_telefonico,
   tipoCustodia: row.colaborador_id
     ? "COLABORADOR"
     : row.departamento_id
@@ -665,8 +670,7 @@ export const asociarLineaADispositivo = async (
       const asociada = await asociarSimADispositivo(
         sim.sim_codigo_inventario,
         dispositivo.dispositivo_id,
-        client,
-        vinculacion.linea.numero_telefonico
+        client
       );
       if (!asociada) throw new NotFoundError("SIM no encontrada.");
       if (dispositivo.colaborador_id) {
@@ -1175,7 +1179,7 @@ export const asignarAColaborador = async (
       if (!sim) throw new NotFoundError("SIM no encontrada.");
       assertSimDisponibleParaEntrega(sim);
       const numeroIngresado = input.numeroTelefonico?.trim()
-        || sim.numero_asociado?.trim()
+        || sim.linea_numero_telefonico?.trim()
         || null;
       if (!numeroIngresado) {
         throw new ValidationError(
@@ -1242,8 +1246,7 @@ export const asignarAColaborador = async (
       const asociada = await asociarSimADispositivo(
         sim.sim_codigo_inventario,
         actualizado.dispositivo_id,
-        client,
-        numeroSimNormalizado
+        client
       );
       if (!asociada) throw new NotFoundError("SIM no encontrada.");
 
@@ -1297,7 +1300,7 @@ export const asignarAColaborador = async (
         input.responsable,
         input.observaciones,
         {
-          numeroAnterior: sim.numero_asociado,
+          numeroAnterior: sim.linea_numero_telefonico,
           lineaMovilId: vinculacionLinea.linea.id,
           numeroTelefonico: vinculacionLinea.linea.numero_telefonico,
           entregaConjunta: true,
@@ -1444,8 +1447,32 @@ export const asignarADepartamento = async (
 export const devolverDispositivoExistente = async (
   codigoInventario: number,
   input: DevolverDispositivoInput
-): Promise<ResultadoDevolucion> =>
-  registrarDevolucionCentral(codigoInventario, input, "INVENTARIO");
+): Promise<ResultadoDevolucion> => {
+  const replacement = await buscarReemplazoPendientePorDispositivo(codigoInventario);
+  if (replacement) {
+    const closed = await recibirReemplazoPendiente(replacement.id, {
+      destinoDispositivoAnterior: "RETENIDO_REVISION",
+      condicion: input.condicion,
+      resultado: input.resultado,
+      observaciones: input.observaciones,
+      responsable: input.responsable
+    });
+    const dispositivo = await obtenerDispositivoPorCodigo(codigoInventario);
+    if (!dispositivo || !closed.comprobante) {
+      throw new ConflictError("La devolución vinculada al reemplazo se cerró sin comprobante.");
+    }
+    return {
+      dispositivo: mapDispositivo(dispositivo),
+      comprobante: {
+        id: closed.comprobante.id,
+        numeroComprobante: closed.comprobante.numeroComprobante,
+        fecha: closed.comprobante.fecha,
+        resultado: closed.comprobante.resultado
+      }
+    };
+  }
+  return registrarDevolucionCentral(codigoInventario, input, "INVENTARIO");
+};
 
 const registrarDevolucionCentral = async (
   codigoInventario: number,
@@ -1783,11 +1810,7 @@ export const darDeBajaDispositivo = async (
     if (anterior.estado_codigo === "DADO_BAJA") {
       throw new ConflictError("El dispositivo ya se encuentra dado de baja.");
     }
-    if (anterior.sim_id) {
-      throw new ConflictError(
-        "El dispositivo tiene una SIM asociada. Desasocie la SIM antes de darlo de baja."
-      );
-    }
+    assertDispositivoSinSimParaBaja(anterior);
     const bajaActiva = await client.query<{ id: string }>(
       `SELECT id FROM itam.bajas_dispositivo
        WHERE dispositivo_id=$1 AND anulada=FALSE

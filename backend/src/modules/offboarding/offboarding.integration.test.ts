@@ -55,6 +55,45 @@ test("tener equipos asignados sin proceso no incorpora a la persona", async () =
   }
 });
 
+test("una SIM asignada sin dispositivo también bloquea el cierre de offboarding", async () => {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const user = await client.query<{ id: string }>(
+      "SELECT id FROM itam.usuarios WHERE activo = TRUE ORDER BY id LIMIT 1"
+    );
+    const candidate = await client.query<{ id: string }>(
+      `SELECT c.id
+         FROM itam.colaboradores c
+        WHERE NOT EXISTS (SELECT 1 FROM itam.dispositivos d WHERE d.colaborador_id = c.id)
+          AND NOT EXISTS (SELECT 1 FROM itam.procesos_offboarding p WHERE p.colaborador_id = c.id AND p.estado = 'ABIERTO')
+        LIMIT 1`
+    );
+    const simState = await client.query<{ id: string }>(
+      "SELECT id FROM itam.estados WHERE tipo_entidad = 'SIM' AND codigo = 'ASIGNADA' LIMIT 1"
+    );
+    assert.ok(user.rows[0] && candidate.rows[0] && simState.rows[0]);
+    await client.query(
+      `INSERT INTO itam.sim(codigo_inventario, iccid_codigo_fabrica, estado_id, colaborador_id)
+       VALUES (990001, '8956000000000990001', $1, $2)`,
+      [simState.rows[0]!.id, candidate.rows[0]!.id]
+    );
+    const started = await startOffboardingProcess({
+      colaboradorId: Number(candidate.rows[0]!.id),
+      usuarioId: user.rows[0]!.id
+    }, client);
+    assert.equal(started.equiposPendientes, 0);
+    assert.equal(started.simsPendientes, 1);
+    await assert.rejects(
+      closeOffboardingProcess({ procesoId: Number(started.id), usuarioId: user.rows[0]!.id }, client),
+      (error: unknown) => error instanceof ConflictError && error.message.includes("SIM asignadas")
+    );
+  } finally {
+    await client.query("ROLLBACK");
+    client.release();
+  }
+});
+
 test("inicio, equipos dinamicos, bloqueo de cierre y cierre completo", async () => {
   const client = await pool.connect();
   try {
@@ -71,6 +110,13 @@ test("inicio, equipos dinamicos, bloqueo de cierre y cierre completo", async () 
           AND NOT EXISTS (
             SELECT 1 FROM itam.procesos_offboarding p
              WHERE p.colaborador_id = c.id AND p.estado = 'ABIERTO'
+          )
+          AND NOT EXISTS (
+            SELECT 1
+              FROM itam.sim s
+              JOIN itam.estados se ON se.id = s.estado_id
+             WHERE s.colaborador_id = c.id
+               AND se.codigo NOT IN ('DADA_BAJA', 'EXTRAVIADA')
           )
         ORDER BY c.id
         LIMIT 1`

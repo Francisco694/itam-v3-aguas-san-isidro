@@ -1,5 +1,5 @@
 export type ResultadoRecepcion = "DEVUELTO" | "DANADO";
-export type OrigenDevolucion = "INVENTARIO" | "OFFBOARDING";
+export type OrigenDevolucion = "INVENTARIO" | "OFFBOARDING" | "REEMPLAZO";
 
 export interface CrearComprobanteInput {
   dispositivoId: string;
@@ -43,4 +43,3 @@ export interface ComprobanteDevolucionRow {
   origen: OrigenDevolucion;
   creado_en: Date | string;
 }
-

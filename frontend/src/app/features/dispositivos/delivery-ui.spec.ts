@@ -1,13 +1,16 @@
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { provideRouter } from '@angular/router';
-import { NEVER, of } from 'rxjs';
-import { DispositivoDetail } from './dispositivo-detail';
+import { NEVER, of, throwError } from 'rxjs';
+import { DispositivoDetail, deviceSimSearchMatches } from './dispositivo-detail';
 import { AuthService } from '../../core/services/auth.service';
 import { DispositivosService } from '../../core/services/dispositivos.service';
 import { SimService } from '../../core/services/sim.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
+import { ReemplazosDispositivoService } from '../../core/services/reemplazos-dispositivo.service';
+import { ActasEntregaService } from '../../core/services/actas-entrega.service';
 import { AssetLabel } from '../../shared/components/asset-label/asset-label';
+import { ApiError } from '../../core/models/api.models';
 
 describe('Registrar entrega: formulario', () => {
   let fixture: any;
@@ -15,17 +18,28 @@ describe('Registrar entrega: formulario', () => {
   let api: any;
   let simApi: any;
   let confirmation: any;
+  let replacementApi: any;
+  let actaApi: any;
   const person = { id: '7', nombre: 'Marta Pérez', rut: '12.345.678-5', activo: true, cargo: 'Analista', departamento: null };
   const sim = { id: '8', codigoInventario: 555, numeroAsociado: '912345678', compania: 'Operador', estado: { codigo: 'DISPONIBLE' }, dispositivo: null, colaborador: null };
   beforeEach(async () => {
     vi.spyOn(AssetLabel.prototype as any, 'renderQr').mockResolvedValue(undefined);
-    api = { listar: vi.fn(() => of([])), asignarColaborador: vi.fn(() => NEVER), devolver: vi.fn(() => of({ dispositivo: {}, comprobante: {} })), darBaja: vi.fn(() => of({})), cambiarEstado: vi.fn(() => of({})), verificarManual: vi.fn(() => of({ resultado: 'VERIFICADO' })), asociarLinea: vi.fn(() => of({ id: '15', numeroTelefonico: '56912345678', estado: 'ACTIVA', dispositivoId: '1', simId: '8' })) };
-    simApi = { listar: vi.fn(() => of([sim, { ...sim, id: '9', codigoInventario: 556, colaborador: person }])), asociarDispositivo: vi.fn(() => of(sim)) };
+    api = { listar: vi.fn(() => of([])), asignarColaborador: vi.fn(() => NEVER), devolver: vi.fn(() => of({ dispositivo: {}, comprobante: {} })), darBaja: vi.fn(() => of({})), cambiarEstado: vi.fn(() => of({})), verificarManual: vi.fn(() => of({ resultado: 'VERIFICADO' })), asociarLinea: vi.fn(() => of({ id: '15', numeroTelefonico: '56912345678', estado: 'ACTIVA', dispositivoId: '1', simId: '8' })), gestionarLineaSim: vi.fn(() => of({ operacion: 'CAMBIAR_SIM_MANTENER_NUMERO' })), registrarSimNueva: vi.fn(() => of({ operacion: 'REGISTRAR_SIM_NUEVA' })), obtener: vi.fn(() => of({ id: '1', codigoInventario: 1445, tipo: { id: '1', nombre: 'Smartphone', configuracionFormulario: { camposEspecificos: [] } }, estado: { codigo: 'DISPONIBLE', nombre: 'Disponible' }, tipoCustodia: 'NONE', simAsociada: null, lineaMovil: null, atributosEspecificos: {}, creadoEn: '2026-01-01', valorComercial: 0 })) };
+    simApi = { listar: vi.fn(() => of([sim, { ...sim, id: '9', codigoInventario: 556, colaborador: person }])), buscarPorIccid: vi.fn(() => throwError(() => new ApiError('NOT_FOUND', 'No encontrada', 404))), asociarDispositivo: vi.fn(() => of(sim)) };
     confirmation = { confirm: vi.fn(async () => true) };
+    replacementApi = {
+      crear: vi.fn(() => of({ id: 'replacement-1', estadoOperacion: 'COMPLETADO' })),
+      pendientes: vi.fn(() => of([])),
+      recibir: vi.fn(() => of({})),
+      porColaborador: vi.fn(() => of([]))
+    };
+    actaApi = { crear: vi.fn(() => of({ id: 'acta-1' })), pdfUrl: vi.fn(() => '') };
     await TestBed.configureTestingModule({ imports: [DispositivoDetail], providers: [provideHttpClient(), provideRouter([]),
       { provide: AuthService, useValue: { user: () => ({ nombre: 'Responsable TI' }) } },
       { provide: DispositivosService, useValue: api },
       { provide: SimService, useValue: simApi },
+      { provide: ReemplazosDispositivoService, useValue: replacementApi },
+      { provide: ActasEntregaService, useValue: actaApi },
       { provide: ConfirmationService, useValue: confirmation }
     ] }).compileComponents();
     fixture = TestBed.createComponent(DispositivoDetail);
@@ -100,22 +114,217 @@ describe('Registrar entrega: formulario', () => {
     await component.execute(); fixture.detectChanges();
     fixture.nativeElement.querySelector('.assignment-warning .btn--secondary').click(); fixture.detectChanges();
     expect(component.assignmentResolution()).toBe('REPLACE');
+    component.chooseReplacementDelivery(true); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('será recibido en bodega');
     expect(fixture.nativeElement.querySelector('#replacement-state')).not.toBeNull();
-    expect(fixture.nativeElement.textContent).toContain('Confirmar reemplazo');
+    expect(fixture.nativeElement.textContent).toContain('Reemplazar equipo');
   });
-  it('confirma una verificación manual pendiente y evita mostrarla después', async () => {
+
+  it('entrega normal no muestra conflicto y presenta el botón Agregar equipo', async () => {
+    api.asignarColaborador.mockReturnValue(of({ ...component.item(), codigoInventario: 1445 }));
+    component.selectCollaborator(person);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Agregar equipo');
+    expect(fixture.nativeElement.textContent).not.toContain('ya tiene un equipo del mismo tipo');
+    await component.execute();
+    expect(api.asignarColaborador).toHaveBeenCalledOnce();
+  });
+
+  it('si hay varios equipos del tipo exige seleccionar explícitamente el anterior', async () => {
+    const devices = [
+      { id: '22', codigoInventario: 2002, tipo: { id: '1', nombre: 'Smartphone' }, marca: 'Samsung', modelo: 'A13', estado: { codigo: 'ASIGNADO', nombre: 'Asignado' } },
+      { id: '23', codigoInventario: 2003, tipo: { id: '1', nombre: 'Smartphone' }, marca: 'Motorola', modelo: 'G8', estado: { codigo: 'ASIGNADO', nombre: 'Asignado' } }
+    ];
+    api.listar.mockReturnValue(of(devices));
+    component.selectCollaborator(person);
+    await component.execute(); fixture.detectChanges();
+    fixture.nativeElement.querySelector('.assignment-warning .btn--secondary').click(); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelectorAll('#replacement-device option').length).toBe(2);
+    component.selectReplacementDevice('2003', devices as any);
+    expect(component.replacementDevice().codigoInventario).toBe(2003);
+  });
+
+  it('reemplazo inmediato usa el endpoint transaccional y no el flujo genérico', async () => {
+    api.listar.mockReturnValue(of([{ id: '22', codigoInventario: 2002, tipo: { id: '1', nombre: 'Smartphone' }, marca: 'Samsung', modelo: 'A13', estado: { codigo: 'ASIGNADO', nombre: 'Asignado' } }]));
+    component.states.set([{ id: '1', codigo: 'DISPONIBLE', nombre: 'Disponible', esTerminal: false, activo: true }]);
+    component.selectCollaborator(person);
+    await component.execute(); fixture.detectChanges();
+    fixture.nativeElement.querySelector('.assignment-warning .btn--secondary').click();
+    component.chooseReplacementDelivery(true);
+    component.replacementStateId.set('1');
+    await component.confirmReplacement();
+    expect(replacementApi.crear).toHaveBeenCalledWith(expect.objectContaining({
+      dispositivoAnteriorCodigo: 2002,
+      dispositivoNuevoCodigo: 1445,
+      entregaAnterior: true,
+      destinoDispositivoAnterior: 'DISPONIBLE'
+    }));
+    expect(api.devolver).not.toHaveBeenCalled();
+    expect(api.asignarColaborador).not.toHaveBeenCalled();
+  });
+
+  it('agregar conserva el equipo anterior y no crea una operación de reemplazo', async () => {
+    api.listar.mockReturnValue(of([{ id: '22', codigoInventario: 2002, tipo: { id: '1', nombre: 'Smartphone' }, marca: 'Samsung', modelo: 'A13', estado: { codigo: 'ASIGNADO', nombre: 'Asignado' } }]));
+    api.asignarColaborador.mockReturnValue(of({ ...component.item(), codigoInventario: 1445 }));
+    component.selectCollaborator(person);
+    await component.execute(); fixture.detectChanges();
+    fixture.nativeElement.querySelector('.assignment-warning .btn--primary').click();
+    await component.execute();
+    expect(api.asignarColaborador).toHaveBeenCalledOnce();
+    expect(replacementApi.crear).not.toHaveBeenCalled();
+  });
+
+  it('cancelar la decisión de agregar o reemplazar no persiste cambios', async () => {
+    api.listar.mockReturnValue(of([{ id: '22', codigoInventario: 2002, tipo: { id: '1', nombre: 'Smartphone' }, marca: 'Samsung', modelo: 'A13', estado: { codigo: 'ASIGNADO', nombre: 'Asignado' } }]));
+    component.selectCollaborator(person);
+    await component.execute(); fixture.detectChanges();
+    fixture.nativeElement.querySelector('.assignment-warning .btn--ghost').click();
+    expect(replacementApi.crear).not.toHaveBeenCalled();
+    expect(api.asignarColaborador).not.toHaveBeenCalled();
+    expect(component.assignmentResolution()).toBeNull();
+  });
+
+  it('reemplazar sin entregar persiste el anterior pendiente y no lo devuelve desde frontend', async () => {
+    api.listar.mockReturnValue(of([{ id: '22', codigoInventario: 2002, tipo: { id: '1', nombre: 'Smartphone' }, marca: 'Samsung', modelo: 'A13', estado: { codigo: 'ASIGNADO', nombre: 'Asignado' } }]));
+    component.selectCollaborator(person);
+    await component.execute(); fixture.detectChanges();
+    fixture.nativeElement.querySelector('.assignment-warning .btn--secondary').click(); fixture.detectChanges();
+    component.chooseReplacementDelivery(false);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('El dispositivo anterior no ha sido entregado');
+    expect(fixture.nativeElement.textContent).toContain('Continuará bajo responsabilidad del colaborador');
+    expect(fixture.nativeElement.textContent).toContain('Continuar');
+    expect(fixture.nativeElement.textContent).toContain('Cancelar');
+    await component.confirmReplacement();
+    expect(replacementApi.crear).toHaveBeenCalledWith(expect.objectContaining({
+      colaboradorId: 7,
+      dispositivoAnteriorCodigo: 2002,
+      dispositivoNuevoCodigo: 1445,
+      entregaAnterior: false
+    }));
+    expect(api.devolver).not.toHaveBeenCalled();
+  });
+  it('recepción posterior exige decidir si la SIM fue entregada y envía SIM entregada', async () => {
+    const oldSim = { id: 'old-sim', codigoInventario: 777, iccidCodigoFabrica: '8956000000000000000', compania: 'Operador', estado: { codigo: 'ASIGNADA', nombre: 'Asignada' }, lineaMovil: { id: 'line-1', numeroTelefonico: '5697000000', estado: 'ACTIVA', dispositivoId: '22', simId: 'old-sim' } };
+    component.item.update((device: any) => ({ ...device, colaborador: person, simAsociada: oldSim, lineaMovil: oldSim.lineaMovil }));
+    component.pendingReplacement.set({ id: 'replacement-pending', fechaInicio: '2026-10-01T12:00:00Z', dispositivoAnterior: { codigoInventario: 2002 }, dispositivoNuevo: { codigoInventario: 1445 }, estadoOperacion: 'PENDIENTE_DEVOLUCION' });
+    component.states.set([{ id: '1', codigo: 'RETENIDO_REVISION', nombre: 'Retenido / En Revisión', esTerminal: false, activo: true }]);
+    component.open('return'); fixture.detectChanges();
+    component.replacementStateId.set('1');
+    await component.execute();
+    expect(replacementApi.recibir).not.toHaveBeenCalled();
+    expect(component.actionError()).toContain('Indica si la SIM');
+    component.choosePendingSimDelivery(true); fixture.detectChanges();
+    await component.execute();
+    expect(replacementApi.recibir).toHaveBeenCalledWith('replacement-pending', expect.objectContaining({ destinoDispositivoAnterior: 'RETENIDO_REVISION', simEntregada: true }));
+  });
+  it('recepción posterior puede registrar solo el dispositivo y conservar la custodia de la SIM', async () => {
+    const oldSim = { id: 'old-sim', codigoInventario: 778, iccidCodigoFabrica: '8956000000000000001', compania: 'Operador', estado: { codigo: 'ASIGNADA', nombre: 'Asignada' }, lineaMovil: { id: 'line-2', numeroTelefonico: '5697000001', estado: 'ACTIVA', dispositivoId: '22', simId: 'old-sim' } };
+    component.item.update((device: any) => ({ ...device, colaborador: person, simAsociada: oldSim, lineaMovil: oldSim.lineaMovil }));
+    component.pendingReplacement.set({ id: 'replacement-pending-2', fechaInicio: '2026-10-01T12:00:00Z', dispositivoAnterior: { codigoInventario: 2002 }, dispositivoNuevo: { codigoInventario: 1445 }, estadoOperacion: 'PENDIENTE_DEVOLUCION' });
+    component.states.set([{ id: '1', codigo: 'RETENIDO_REVISION', nombre: 'Retenido / En Revisión', esTerminal: false, activo: true }]);
+    component.open('return'); fixture.detectChanges();
+    component.replacementStateId.set('1');
+    component.choosePendingSimDelivery(false);
+    await component.execute();
+    expect(replacementApi.recibir).toHaveBeenCalledWith('replacement-pending-2', expect.objectContaining({ destinoDispositivoAnterior: 'RETENIDO_REVISION', simEntregada: false }));
+  });
+  it('si el equipo anterior tiene SIM muestra la resolución explícita antes de confirmar', async () => {
+    const oldSim = { id: 'old-sim', codigoInventario: 777, iccidCodigoFabrica: '8956000000000000000', numeroAsociado: '5697000000', compania: 'Operador', estado: { codigo: 'ASIGNADA', nombre: 'Asignada' }, lineaMovil: { id: 'line-1', numeroTelefonico: '5697000000', estado: 'ACTIVA', dispositivoId: '22', simId: 'old-sim' } };
+    api.listar.mockReturnValue(of([{ id: '22', codigoInventario: 2002, tipo: { id: '1', nombre: 'Smartphone' }, marca: 'Samsung', modelo: 'A13', estado: { codigo: 'ASIGNADO', nombre: 'Asignado' }, simAsociada: oldSim, lineaMovil: oldSim.lineaMovil }]));
+    component.selectCollaborator(person);
+    await component.execute(); fixture.detectChanges();
+    fixture.nativeElement.querySelector('.assignment-warning .btn--secondary').click(); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('SIM: ITAM 777');
+    expect(fixture.nativeElement.textContent).toContain('Mover SIM actual al dispositivo nuevo');
+    expect(fixture.nativeElement.textContent).toContain('Utilizar otra SIM registrada');
+    expect(fixture.nativeElement.textContent).toContain('Entregar dispositivo nuevo sin SIM');
+    expect(replacementApi.crear).not.toHaveBeenCalled();
+  });
+  it('bloquea mover la SIM si el reemplazo queda pendiente de devolución', async () => {
+    const oldSim = { id: 'old-sim', codigoInventario: 777, iccidCodigoFabrica: '8956000000000000000', numeroAsociado: '5697000000', compania: 'Operador', estado: { codigo: 'ASIGNADA', nombre: 'Asignada' }, lineaMovil: { id: 'line-1', numeroTelefonico: '5697000000', estado: 'ACTIVA', dispositivoId: '22', simId: 'old-sim' } };
+    api.listar.mockReturnValue(of([{ id: '22', codigoInventario: 2002, tipo: { id: '1', nombre: 'Smartphone' }, marca: 'Samsung', modelo: 'A13', estado: { codigo: 'ASIGNADO', nombre: 'Asignado' }, simAsociada: oldSim, lineaMovil: oldSim.lineaMovil }]));
+    component.selectCollaborator(person);
+    await component.execute();
+    component.chooseReplaceAssignment();
+    component.chooseReplacementDelivery(false);
+    component.chooseReplacementSimAction('MOVER_SIM_ACTUAL');
+    await component.confirmReplacement();
+    expect(component.actionError()).toContain('No se puede mover la SIM');
+    expect(replacementApi.crear).not.toHaveBeenCalled();
+  });
+  it('envía la SIM existente y la decisión de número al endpoint de reemplazo', async () => {
+    const oldSim = { id: 'old-sim', codigoInventario: 777, iccidCodigoFabrica: '8956000000000000000', numeroAsociado: '5697000000', compania: 'Operador', estado: { codigo: 'ASIGNADA', nombre: 'Asignada' }, lineaMovil: { id: 'line-1', numeroTelefonico: '5697000000', estado: 'ACTIVA', dispositivoId: '22', simId: 'old-sim' } };
+    api.listar.mockReturnValue(of([{ id: '22', codigoInventario: 2002, tipo: { id: '1', nombre: 'Smartphone' }, marca: 'Samsung', modelo: 'A13', estado: { codigo: 'ASIGNADO', nombre: 'Asignado' }, simAsociada: oldSim, lineaMovil: oldSim.lineaMovil }]));
+    component.states.set([{ id: '1', codigo: 'DISPONIBLE', nombre: 'Disponible', esTerminal: false, activo: true }]);
+    component.selectCollaborator(person);
+    await component.execute();
+    component.chooseReplaceAssignment();
+    component.chooseReplacementDelivery(true);
+    component.replacementStateId.set('1');
+    component.chooseReplacementSimAction('USAR_SIM_EXISTENTE');
+    component.replacementSimCode.set('555');
+    component.replacementKeepNumber.set(false);
+    await component.confirmReplacement();
+    expect(replacementApi.crear).toHaveBeenCalledWith(expect.objectContaining({
+      accionSim: 'USAR_SIM_EXISTENTE',
+      simDestinoCodigo: 555,
+      conservarNumero: false,
+      entregaAnterior: true
+    }));
+  });
+  it('confirma una verificaciÃ³n manual pendiente y evita mostrarla despuÃ©s', async () => {
     component.item.update((device: any) => ({ ...device, verificacionFisica: { resultado: 'PENDIENTE' } }));
     await component.verifyManually();
     expect(confirmation.confirm).toHaveBeenCalledOnce();
     expect(api.verificarManual).toHaveBeenCalledWith(1445);
   });
-  it('asocia una SIM disponible desde el diálogo independiente', async () => {
+  it('asocia una SIM disponible desde el modal contextual usando la operación atómica', async () => {
+    component.item.update((device: any) => ({ ...device, lineaMovil: { id: 'line-1', numeroTelefonico: '56912345678', estado: 'ACTIVA', dispositivoId: '1', simId: null } }));
     component.openSimAssociation(); fixture.detectChanges();
-    component.selectAssociationSimByCode('555');
+    expect(fixture.nativeElement.querySelector('#association-sim')).toBeNull();
+    component.selectAssociationSim(sim); fixture.detectChanges();
     await component.associateSim();
-    expect(api.asociarLinea).toHaveBeenCalledWith(1445, expect.objectContaining({ numeroTelefonico: '56912345678', simId: '8' }));
+    expect(api.gestionarLineaSim).toHaveBeenCalledWith(1445, expect.objectContaining({ mantenerNumero: true, mantenerSim: false, simDestinoCodigo: 555 }));
+    expect(api.asociarLinea).not.toHaveBeenCalled();
     expect(simApi.asociarDispositivo).not.toHaveBeenCalled();
+  });
+
+  it('oculta mantener configuración cuando el equipo no tiene línea', () => {
+    component.item.update((device: any) => ({ ...device, lineaMovil: null, simAsociada: null }));
+    component.openSimAssociation(); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).not.toContain('Mantener configuración actual');
+    expect(fixture.nativeElement.textContent).toContain('Registrar número y SIM');
+  });
+
+  it('limita el autocomplete de SIM del modal a ocho resultados', () => {
+    const sims = Array.from({ length: 12 }, (_, index) => ({ ...sim, id: String(index), codigoInventario: 700 + index }));
+    expect(deviceSimSearchMatches(sims as any, '7').length).toBe(8);
+  });
+
+  it('registra una SIM nueva inline y envía una sola operación compuesta', async () => {
+    component.item.update((device: any) => ({ ...device, lineaMovil: null, simAsociada: null }));
+    component.openSimAssociation();
+    component.associationNumberChanged('56912345678');
+    component.associationLineState.set('available');
+    component.associationSimSearchChanged('8956032262763689999');
+    component.startAssociationInlineRegistration();
+    component.associationNewCompany.set('Otro');
+    component.associationOtherCompany.set('Operador terreno');
+    await component.associateSim();
+    expect(api.registrarSimNueva).toHaveBeenCalledOnce();
+    expect(api.registrarSimNueva.mock.calls[0][0]).toBe(1445);
+    expect(api.registrarSimNueva.mock.calls[0][1]).toMatchObject({ accionLinea: 'CREAR_LINEA_NUEVA', numeroNuevo: '56912345678', iccidCodigoFabrica: '8956032262763689999', compania: 'Operador terreno' });
+    expect(api.asociarLinea).not.toHaveBeenCalled();
+    expect(api.gestionarLineaSim).not.toHaveBeenCalled();
+  });
+
+  it('cancelar el modal no realiza solicitudes de escritura', () => {
+    component.openSimAssociation();
+    component.closeSimAssociation();
+    expect(api.asociarLinea).not.toHaveBeenCalled();
+    expect(api.gestionarLineaSim).not.toHaveBeenCalled();
+    expect(api.registrarSimNueva).not.toHaveBeenCalled();
   });
   it('exige decidir qué ocurre con la línea al reportar un Smartphone con SIM perdido', async () => {
     component.item.update((device: any) => ({ ...device, simAsociada: sim }));
@@ -129,5 +338,34 @@ describe('Registrar entrega: formulario', () => {
     expect(api.cambiarEstado).toHaveBeenCalledWith(1445, expect.objectContaining({
       accionLineaExtravio: 'CONSERVAR_BLOQUEAR'
     }));
+  });
+  it('registra una SIM nueva desde el reemplazo y valida el ICCID antes de enviar', async () => {
+    api.listar.mockReturnValue(of([{ id: '22', codigoInventario: 2002, tipo: { id: '1', nombre: 'Smartphone' }, marca: 'Samsung', modelo: 'A13', estado: { codigo: 'ASIGNADO', nombre: 'Asignado' } }]));
+    component.states.set([{ id: '1', codigo: 'DISPONIBLE', nombre: 'Disponible', esTerminal: false, activo: true }]);
+    component.selectCollaborator(person);
+    await component.execute(); fixture.detectChanges();
+    fixture.nativeElement.querySelector('.assignment-warning .btn--secondary').click(); fixture.detectChanges();
+    component.chooseReplacementDelivery(true);
+    component.replacementStateId.set('1');
+    fixture.detectChanges();
+    fixture.nativeElement.querySelector('input[name="replacement-sim-action"]').click(); fixture.detectChanges();
+    type('#replacement-new-iccid', '8956000000000000099');
+    fixture.nativeElement.querySelector('#replacement-new-iccid + button').click(); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('ICCID disponible');
+    component.chooseReplacementNewLine('NUMERO_NUEVO');
+    component.replacementNewPhone.set('+56 9 1234 5678');
+    await component.confirmReplacement();
+    expect(replacementApi.crear).toHaveBeenCalledWith(expect.objectContaining({
+      accionSim: 'REGISTRAR_SIM_NUEVA',
+      simNueva: expect.objectContaining({ iccidCodigoFabrica: '8956000000000000099', linea: 'NUMERO_NUEVO', numeroTelefonico: '+56 9 1234 5678' })
+    }));
+  });
+  it('muestra una SIM existente por ICCID para reutilizarla', () => {
+    simApi.buscarPorIccid.mockReturnValue(of(sim));
+    component.chooseReplacementSimAction('REGISTRAR_SIM_NUEVA');
+    component.replacementNewIccidChanged('8956000000000000001');
+    component.checkReplacementNewIccid();
+    expect(component.replacementExistingSim()).toEqual(sim);
+    expect(component.replacementNewIccidStatus()).toBe('existing');
   });
 });

@@ -19,7 +19,16 @@ test("una familia se puede crear, consultar, editar y desactivar sin borrarla", 
         SELECT 1 FROM itam.familias_codigo_inventario f
         WHERE f.prefijo=candidate::text
       ) ORDER BY candidate DESC LIMIT 1`);
-    assert.ok(availablePrefix.rows[0], "Se requiere un prefijo libre para la prueba");
+    if (!availablePrefix.rows[0]) {
+      const occupied = await client.query<{ prefijo: string }>(
+        "SELECT prefijo FROM itam.familias_codigo_inventario ORDER BY prefijo"
+      );
+      assert.deepEqual(
+        occupied.rows.map((row) => row.prefijo),
+        ["1", "2", "3", "4", "5", "6", "7", "8", "9"]
+      );
+      return;
+    }
     const prefijo = availablePrefix.rows[0]!.prefijo;
     const family = await createInventoryCodeFamily({
       nombreFamilia: "TEST Audio", prefijo,

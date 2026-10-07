@@ -31,6 +31,10 @@ import {
   obtenerTrazabilidadDispositivo,
   validarIdentificadorDispositivo
 } from "./dispositivos.service";
+import { gestionarLineaSim } from "../lineas-moviles/gestionar-linea-sim.service";
+import type { GestionarLineaSimInput } from "../lineas-moviles/gestionar-linea-sim.types";
+import { registrarSimNuevaEnDispositivo } from "../lineas-moviles/registrar-sim-linea.service";
+import type { RegistrarSimNuevaInput } from "../lineas-moviles/registrar-sim-linea.types";
 export {
   listarVerificacionesFisicasController,
   registrarVerificacionManualController,
@@ -410,6 +414,62 @@ export const asociarLineaController = asyncHandler(
       simId: lineaMovil.sim_id,
       colaboradorId: lineaMovil.colaborador_id
     });
+  }
+);
+
+export const gestionarLineaSimController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const codigo = parsePositiveInteger(req.params.codigo, "codigo");
+    const body = parseBodyObject(req.body);
+    const mantenerSim = body.mantenerSim;
+    const mantenerNumero = body.mantenerNumero;
+
+    if (typeof mantenerSim !== "boolean") {
+      throw new ValidationError("mantenerSim debe ser boolean.");
+    }
+    if (typeof mantenerNumero !== "boolean") {
+      throw new ValidationError("mantenerNumero debe ser boolean.");
+    }
+
+    const simDestinoCodigo = parseOptionalPositiveInteger(
+      body.simDestinoCodigo ?? body.sim_destino_codigo,
+      "simDestinoCodigo"
+    ) ?? null;
+    const numeroNuevo = parseOptionalString(
+      body.numeroNuevo ?? body.numero_nuevo,
+      "numeroNuevo",
+      30
+    ) ?? null;
+    const input: GestionarLineaSimInput = {
+      mantenerSim,
+      mantenerNumero,
+      simDestinoCodigo,
+      numeroNuevo,
+      responsable: authenticatedActorName(req),
+      observaciones: parseOptionalString(body.observaciones, "observaciones")
+    };
+
+    sendItem(res, await gestionarLineaSim(codigo, input));
+  }
+);
+
+export const registrarSimNuevaController = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const codigo = parsePositiveInteger(req.params.codigo, "codigo");
+    const body = parseBodyObject(req.body);
+    const accionLinea = parseEnum(body.accionLinea, "accionLinea", [
+      "USAR_LINEA_EXISTENTE", "CREAR_LINEA_NUEVA", "SIN_LINEA"
+    ] as const);
+    const input: RegistrarSimNuevaInput = {
+      iccidCodigoFabrica: parseRequiredString(body.iccidCodigoFabrica, "iccidCodigoFabrica", 32),
+      compania: parseOptionalString(body.compania, "compania", 100),
+      observaciones: parseOptionalString(body.observaciones, "observaciones"),
+      accionLinea,
+      lineaMovilId: parseOptionalPositiveInteger(body.lineaMovilId, "lineaMovilId") ?? null,
+      numeroNuevo: parseOptionalString(body.numeroNuevo, "numeroNuevo", 30),
+      responsable: authenticatedActorName(req)
+    };
+    sendItem(res, await registrarSimNuevaEnDispositivo(codigo, input), 201);
   }
 );
 

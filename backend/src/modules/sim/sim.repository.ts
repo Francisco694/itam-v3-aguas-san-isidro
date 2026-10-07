@@ -67,6 +67,18 @@ export const listarSim = async (): Promise<SimRow[]> => {
   return result.rows;
 };
 
+export const listarSimPorColaborador = async (colaboradorId: number): Promise<SimRow[]> => {
+  const result = await pool.query<SimRow>(
+    `
+      ${simSelect}
+      WHERE s.colaborador_id = $1
+      ORDER BY s.codigo_inventario ASC
+    `,
+    [colaboradorId]
+  );
+  return result.rows;
+};
+
 export const obtenerSimPorCodigo = async (
   codigoInventario: number,
   client?: PoolClient,
@@ -119,8 +131,25 @@ export const obtenerSimPorDispositivoId = async (
   return result.rows[0] ?? null;
 };
 
-export const existeOtraSimOperableConNumero = async (
-  numeroAsociado: string,
+export const obtenerSimPorIccid = async (
+  iccid: string,
+  client?: PoolClient,
+  forUpdate = false
+): Promise<SimRow | null> => {
+  const result = await getDb(client).query<SimRow>(
+    `
+      ${simSelect}
+      WHERE REGEXP_REPLACE(BTRIM(s.iccid_codigo_fabrica), '[^0-9]', '', 'g') = $1
+      LIMIT 1
+      ${forUpdate ? "FOR UPDATE OF s" : ""}
+    `,
+    [iccid]
+  );
+  return result.rows[0] ?? null;
+};
+
+export const existeOtraLineaConNumero = async (
+  numeroTelefonico: string,
   simId: string | null,
   client: PoolClient,
   simIdAdicionalExcluida: string | null = null
@@ -129,20 +158,33 @@ export const existeOtraSimOperableConNumero = async (
     `
       SELECT EXISTS (
         SELECT 1
-        FROM itam.sim s
-        JOIN itam.estados e ON e.id = s.estado_id
-        WHERE ($2::bigint IS NULL OR s.id <> $2::bigint)
-          AND ($3::bigint IS NULL OR s.id <> $3::bigint)
-          AND e.tipo_entidad = 'SIM'
-          AND e.activo = TRUE
-          AND e.codigo IN ('DISPONIBLE', 'ASIGNADA')
-          AND REGEXP_REPLACE(COALESCE(s.numero_asociado, ''), '[^0-9]', '', 'g') = $1
+        FROM itam.lineas_moviles linea
+        LEFT JOIN itam.sim sim ON sim.id = linea.sim_id
+        LEFT JOIN itam.estados estado_sim ON estado_sim.id = sim.estado_id
+        WHERE REGEXP_REPLACE(linea.numero_telefonico, '[^0-9]', '', 'g') = $1
+          AND ($2::bigint IS NULL OR sim.id IS NULL OR sim.id <> $2::bigint)
+          AND ($3::bigint IS NULL OR sim.id IS NULL OR sim.id <> $3::bigint)
+          AND (sim.id IS NULL OR estado_sim.codigo IN ('DISPONIBLE', 'ASIGNADA'))
+          AND linea.estado <> 'DADA_BAJA'
       ) AS existe
     `,
-    [numeroAsociado, simId, simIdAdicionalExcluida]
+    [numeroTelefonico, simId, simIdAdicionalExcluida]
   );
-
   return result.rows[0]?.existe ?? false;
+};
+
+export const existeOtraSimOperableConNumero = async (
+  numeroAsociado: string,
+  simId: string | null,
+  client: PoolClient,
+  simIdAdicionalExcluida: string | null = null
+): Promise<boolean> => {
+  return existeOtraLineaConNumero(
+    numeroAsociado,
+    simId,
+    client,
+    simIdAdicionalExcluida
+  );
 };
 
 export const obtenerEstadoSimPorCodigo = async (
@@ -187,27 +229,36 @@ export const crearSim = async (
   input: CrearSimInput,
   codigoInventario: number,
   estadoId: string,
-  client: PoolClient
+  client: PoolClient,
+  options: {
+    dispositivoId?: string | null;
+    colaboradorId?: string | number | null;
+    lineaMovilId?: string | null;
+  } = {}
 ): Promise<SimRow> => {
   const result = await client.query<{ codigo_inventario: number }>(
     `
       INSERT INTO itam.sim (
         codigo_inventario,
         iccid_codigo_fabrica,
-        numero_asociado,
         compania,
         estado_id,
+        colaborador_id,
+        dispositivo_id,
+        linea_movil_id,
         observaciones
       )
-      VALUES ($1, $2, $3, $4, $5, $6)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       RETURNING codigo_inventario
     `,
     [
       codigoInventario,
       input.iccidCodigoFabrica,
-      input.numeroAsociado ?? null,
       input.compania ?? null,
       estadoId,
+      options.colaboradorId ?? null,
+      options.dispositivoId ?? null,
+      options.lineaMovilId ?? null,
       input.observaciones ?? null
     ]
   );
@@ -233,16 +284,12 @@ export const actualizarSim = async (
           $2,
           iccid_codigo_fabrica
         ),
-        numero_asociado = CASE
-          WHEN $3::boolean THEN $4
-          ELSE numero_asociado
-        END,
         compania = CASE
-          WHEN $5::boolean THEN $6
+          WHEN $3::boolean THEN $4
           ELSE compania
         END,
         observaciones = CASE
-          WHEN $7::boolean THEN $8
+          WHEN $5::boolean THEN $6
           ELSE observaciones
         END
       WHERE codigo_inventario = $1
@@ -251,8 +298,6 @@ export const actualizarSim = async (
     [
       codigoInventario,
       input.iccidCodigoFabrica ?? null,
-      input.numeroAsociado !== undefined,
-      input.numeroAsociado ?? null,
       input.compania !== undefined,
       input.compania ?? null,
       input.observaciones !== undefined,
@@ -270,18 +315,16 @@ export const actualizarSim = async (
 export const asociarSimADispositivo = async (
   codigoInventario: number,
   dispositivoId: string,
-  client: PoolClient,
-  numeroAsociado?: string | null
+  client: PoolClient
 ): Promise<SimRow | null> => {
   const result = await client.query<{ codigo_inventario: number }>(
     `
       UPDATE itam.sim
-      SET dispositivo_id = $2,
-          numero_asociado = COALESCE($3, numero_asociado)
+      SET dispositivo_id = $2
       WHERE codigo_inventario = $1
       RETURNING codigo_inventario
     `,
-    [codigoInventario, dispositivoId, numeroAsociado?.trim() || null]
+    [codigoInventario, dispositivoId]
   );
 
   if (!result.rows[0]) {
@@ -365,6 +408,28 @@ export const desasignarSimDeColaborador = async (
     result.rows[0].codigo_inventario,
     client
   );
+};
+
+export const recibirSimEnTi = async (
+  simId: string,
+  estadoDisponibleId: number | string,
+  client: PoolClient
+): Promise<SimRow | null> => {
+  const result = await client.query<{ codigo_inventario: number }>(
+    `
+      UPDATE itam.sim
+      SET dispositivo_id = NULL,
+          colaborador_id = NULL,
+          estado_id = $2
+      WHERE id = $1
+      RETURNING codigo_inventario
+    `,
+    [simId, estadoDisponibleId]
+  );
+
+  if (!result.rows[0]) return null;
+
+  return obtenerSimPorCodigo(result.rows[0].codigo_inventario, client);
 };
 
 export const cambiarEstadoSim = async (

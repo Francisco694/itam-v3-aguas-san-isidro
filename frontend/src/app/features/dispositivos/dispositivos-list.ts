@@ -553,11 +553,11 @@ export class DispositivosList implements OnInit {
       || 'Sin responsable conocido';
   }
   protected exportCsv():void {
-    const headers=['Código ITAM','Tipo','Marca','Modelo','Número de serie','IMEI','Estado','Custodio','Departamento','Dependencia','Ubicación','Valor comercial','Fecha registro'];
+    const headers=['Código ITAM','Tipo','Marca','Modelo','Número de serie','IMEI','SIM ITAM','ICCID','Número telefónico','Estado','Custodio','Departamento','Dependencia','Ubicación','Valor comercial','Fecha registro'];
     const rows=this.items().map((item)=>{
       const departmentId=item.departamento?.id||item.colaborador?.departamento?.id;
       const department=departmentId?this.departments().find((candidate)=>candidate.id===departmentId):undefined;
-      return [item.codigoInventario,item.tipo.nombre,item.marca,item.modelo,item.numeroSerie,item.imei,item.estado.nombre,this.custody(item),department?.nombre,department?.dependencia_nombre,item.localidad||item.ubicacionDetalle,item.valorComercial,item.fechaRegistro];
+      return [item.codigoInventario,item.tipo.nombre,item.marca,item.modelo,item.numeroSerie,item.imei,item.simAsociada?.codigoInventario,item.simAsociada?.iccidCodigoFabrica,item.numeroTelefonico||item.lineaMovil?.numeroTelefonico,item.estado.nombre,this.custody(item),department?.nombre,department?.dependencia_nombre,item.localidad||item.ubicacionDetalle,item.valorComercial,item.fechaRegistro];
     });
     const escape=(value:unknown):string=>'"'+String(value??'').replace(/"/g,'""')+'"';
     const csv='\uFEFF'+[headers,...rows].map((row)=>row.map(escape).join(';')).join('\r\n');

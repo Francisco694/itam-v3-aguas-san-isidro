@@ -58,6 +58,12 @@ describe('formulario dinámico de activos', () => {
     });
   });
 
+  it('Tablet puede mostrar IMEI opcional sin convertirlo en un campo obligatorio', () => {
+    const tablet = type('Tablet', { config: { ...defaultConfig, mostrarImei: true } });
+    expect(assetFieldVisibility(tablet)).toMatchObject({ imei: true, numeroSerie: true });
+    expect(tablet.requiereImei).toBe(false);
+  });
+
   it('Notebook, Monitor y PC muestran serie pero no IMEI', () => {
     for (const name of ['Notebook', 'Monitor', 'PC']) {
       expect(assetFieldVisibility(type(name))).toMatchObject({ numeroSerie: true, imei: false });

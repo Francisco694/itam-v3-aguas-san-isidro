@@ -66,6 +66,13 @@ const processSelect = `
     p.creado_en,
     p.actualizado_en,
     COALESCE(pendientes.equipos_pendientes, 0) AS equipos_pendientes,
+    COALESCE((
+      SELECT COUNT(*)
+      FROM itam.sim sim_custodia
+      INNER JOIN itam.estados sim_estado ON sim_estado.id = sim_custodia.estado_id
+      WHERE sim_custodia.colaborador_id = p.colaborador_id
+        AND sim_estado.codigo NOT IN ('DADA_BAJA', 'EXTRAVIADA')
+    ), 0) AS sims_pendientes,
     COALESCE(pendientes.valor_pendiente, 0) AS valor_pendiente,
     COALESCE(recuperados.valor_recuperado, 0) AS valor_recuperado
   FROM itam.procesos_offboarding p

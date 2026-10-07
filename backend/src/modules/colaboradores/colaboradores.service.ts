@@ -18,6 +18,7 @@ import {
   ,listarInventarioConciliableColaborador
 } from "./colaboradores.repository";
 import { getOpenOffboardingProcesses } from "../offboarding/offboarding.service";
+import { listarSimPorColaborador } from "../sim/sim.repository";
 import type {
   ActualizarColaboradorInput,
   Colaborador,
@@ -410,16 +411,35 @@ export const obtenerInventarioConciliadoColaborador = async (
   id: number
 ): Promise<InventarioConciliado> => {
   const colaborador = await obtenerColaborador(id);
-  const grupos = clasificarInventarioConciliado(
-    await listarInventarioConciliableColaborador(id)
-  );
-  return { colaborador, ...grupos };
+  const [rows, sims] = await Promise.all([
+    listarInventarioConciliableColaborador(id),
+    listarSimPorColaborador(id)
+  ]);
+  const grupos = clasificarInventarioConciliado(rows);
+  return {
+    colaborador,
+    ...grupos,
+    simsCustodia: sims.map((sim) => ({
+      id: sim.sim_id,
+      codigoInventario: sim.sim_codigo_inventario,
+      iccid: sim.iccid_codigo_fabrica,
+      compania: sim.compania,
+      estado: { codigo: sim.estado_codigo, nombre: sim.estado_nombre },
+      linea: sim.linea_movil_id && sim.linea_numero_telefonico
+        ? { id: sim.linea_movil_id, numeroTelefonico: sim.linea_numero_telefonico, estado: sim.linea_estado ?? "ACTIVA" }
+        : null,
+      dispositivo: sim.dispositivo_id
+        ? { id: sim.dispositivo_id, codigoInventario: sim.dispositivo_codigo_inventario!, tipo: sim.tipo_dispositivo }
+        : null
+    }))
+  };
 };
 
 export const obtenerPendientesOffboarding = async ():Promise<PendienteOffboarding[]> =>
   (await getOpenOffboardingProcesses()).map(process=>({
     colaborador:process.colaborador,
     activosPendientes:process.equiposPendientes,
+    simsPendientes:process.simsPendientes,
     valorPendiente:process.valorPendiente,
     estado:"PENDIENTE"
   }));

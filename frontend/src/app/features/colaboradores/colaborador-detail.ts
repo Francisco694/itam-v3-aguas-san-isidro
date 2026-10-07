@@ -8,8 +8,10 @@ import {
   ClasificacionConciliada,
   Colaborador,
   InventarioConciliadoColaborador,
+  ReemplazoDispositivo,
 } from '../../core/models/itam.models';
 import { ColaboradoresService } from '../../core/services/colaboradores.service';
+import { ReemplazosDispositivoService } from '../../core/services/reemplazos-dispositivo.service';
 import { PageHeader } from '../../shared/components/page-header/page-header';
 import { StatusBadge } from '../../shared/components/status-badge/status-badge';
 import { ViewState } from '../../shared/components/view-state/view-state';
@@ -91,10 +93,25 @@ export const visibleReconciliationLabel = (classification: ClasificacionConcilia
         <section class="custody-summary" aria-label="Resumen del inventario conciliado">
           <div><span>Equipos actuales</span><strong>{{ inventoryData.actuales.length }}</strong></div>
           <div><span>Valor de equipos actuales</span><strong>{{ clp(inventoryData.valorTotalActual) }}</strong></div>
+          <div><span>SIM bajo custodia</span><strong>{{ inventoryData.simsCustodia.length }}</strong></div>
           <div class="summary-warning"><span>Registros que requieren revisión</span><strong>{{ inventoryData.pendientes.length }}</strong></div>
         </section>
 
-        @if (!inventoryData.actuales.length && !inventoryData.historicos.length && !inventoryData.pendientes.length) {
+        @if (pendingReplacements().length) {
+          <section class="card replacement-pending" aria-label="Devoluciones pendientes por reemplazo">
+            <header><div><span>REEMPLAZOS ABIERTOS</span><h2>Equipos pendientes de devolución</h2><p>El equipo anterior sigue bajo custodia hasta que TI lo reciba físicamente.</p></div></header>
+            <div class="table-wrap"><table class="data-table reconciled-table"><thead><tr><th>Anterior</th><th>Nuevo</th><th>Inicio</th><th>Registró</th><th>Acción</th></tr></thead><tbody>
+              @for (replacement of pendingReplacements(); track replacement.id) { <tr>
+                <td><a [routerLink]="['/dispositivos', replacement.dispositivoAnterior.codigoInventario]">ITAM {{ replacement.dispositivoAnterior.codigoInventario }}</a><span class="cell-secondary">{{ replacement.dispositivoAnterior.tipo }} · {{ replacement.dispositivoAnterior.marca || 'Sin marca' }} {{ replacement.dispositivoAnterior.modelo || '' }}</span></td>
+                <td><a [routerLink]="['/dispositivos', replacement.dispositivoNuevo.codigoInventario]">ITAM {{ replacement.dispositivoNuevo.codigoInventario }}</a><span class="cell-secondary">Reemplazo entregado</span></td>
+                <td>{{ replacement.fechaInicio | date:'dd/MM/yyyy HH:mm' }}</td><td>{{ replacement.usuarioInicio?.nombre || 'Usuario actual' }}</td>
+                <td><a class="btn btn--primary btn--small" [routerLink]="['/dispositivos', replacement.dispositivoAnterior.codigoInventario]">Recibir equipo</a></td>
+              </tr> }
+            </tbody></table></div>
+          </section>
+        }
+
+        @if (!inventoryData.actuales.length && !inventoryData.historicos.length && !inventoryData.pendientes.length && !inventoryData.simsCustodia.length) {
           <section class="card"><app-view-state kind="empty" title="Sin equipos vinculados" message="No hay equipos actuales ni registros históricos para este colaborador." /></section>
         } @else {
           <section class="card collaborator-assets current-assets">
@@ -112,6 +129,24 @@ export const visibleReconciliationLabel = (classification: ClasificacionConcilia
                   <td>{{ asset.fechaAsignacion | date: 'dd/MM/yyyy' }}</td>
                   <td><app-status-badge [code]="asset.estadoOriginal.codigo" [label]="asset.estadoOriginal.nombre" /></td>
                   <td><a class="btn btn--ghost btn--small" [routerLink]="['/dispositivos', asset.codigoItam]">Ver equipo</a></td>
+                </tr> }
+              </tbody></table></div>
+            }
+          </section>
+
+          <section class="card collaborator-assets sim-assets">
+            <header><div><span>SIM FÍSICAS</span><h2>SIM bajo custodia</h2><p>Tarjetas físicas que continúan bajo responsabilidad de este colaborador, aunque no estén instaladas en un dispositivo.</p></div></header>
+            @if (!inventoryData.simsCustodia.length) {
+              <app-view-state kind="empty" title="Sin SIM bajo custodia" />
+            } @else {
+              <div class="table-wrap"><table class="data-table reconciled-table"><thead><tr><th>SIM</th><th>ICCID</th><th>Línea oficial</th><th>Dispositivo instalado</th><th>Estado</th><th>Acción</th></tr></thead><tbody>
+                @for (sim of inventoryData.simsCustodia; track sim.id) { <tr>
+                  <td><strong>ITAM {{ sim.codigoInventario }}</strong><span class="cell-secondary">{{ sim.compania || 'Sin compañía' }}</span></td>
+                  <td><span class="code">{{ sim.iccid || 'Pendiente de validación' }}</span></td>
+                  <td>{{ sim.linea?.numeroTelefonico || 'Sin línea asociada' }}</td>
+                  <td>{{ sim.dispositivo ? ('ITAM ' + sim.dispositivo.codigoInventario) : 'Sin dispositivo instalado' }}</td>
+                  <td><app-status-badge [code]="sim.estado.codigo" [label]="sim.estado.nombre" /></td>
+                  <td><a class="btn btn--ghost btn--small" [routerLink]="['/sim', sim.codigoInventario]">Ver SIM</a></td>
                 </tr> }
               </tbody></table></div>
             }
@@ -163,16 +198,18 @@ export const visibleReconciliationLabel = (classification: ClasificacionConcilia
   styles: [`
     .detail-card{padding:1.4rem}.detail-title{align-items:center;border-bottom:1px solid var(--color-border);display:flex;justify-content:space-between;margin-bottom:1.2rem;padding-bottom:1.2rem}.detail-title>div{align-items:center;display:flex;gap:.8rem}.detail-title h2{font-size:1.2rem;margin:0}.detail-title p{color:var(--color-muted);margin:.2rem 0 0}.initial{align-items:center;background:var(--color-primary-soft);border-radius:.7rem;color:var(--color-primary);display:flex;font-size:1.15rem;font-weight:850;height:2.8rem;justify-content:center;width:2.8rem}
     .custody-summary{display:grid;gap:1rem;grid-template-columns:repeat(3,minmax(0,1fr));margin:1rem 0}.custody-summary>div{background:var(--navy);border-bottom:3px solid var(--cyan);border-radius:1rem;color:#fff;padding:1.2rem}.custody-summary .summary-warning{border-bottom-color:#f59e0b}.custody-summary span{display:block;font-size:.75rem}.custody-summary strong{display:block;font-size:1.5rem;margin-top:.3rem}
-    .collaborator-assets{margin-top:1rem;overflow:hidden}.collaborator-assets header{border-left:4px solid var(--cyan);padding:1rem 1.2rem}.historical-assets header{border-left-color:var(--blue)}.pending-assets header{border-left-color:#f59e0b}.collaborator-assets header span{color:var(--blue);font-size:.68rem;font-weight:800;letter-spacing:.05em}.collaborator-assets h2{font-size:1.05rem;margin:.2rem 0 0}.collaborator-assets header p{color:var(--slate-500);font-size:.76rem;margin:.25rem 0 0}.reconciled-table{min-width:1050px}.pending-table{min-width:900px}.identity-label{color:var(--slate-500);display:block;font-size:.68rem;font-weight:700;text-transform:uppercase}.code{display:block;margin-top:.2rem}.reason-cell{color:var(--slate-700);font-size:.76rem;line-height:1.4;max-width:24rem}.reconciliation-badge{border-radius:999px;display:inline-flex;font-size:.7rem;font-weight:800;line-height:1.2;padding:.35rem .55rem}.reconciliation-badge.current{background:#dbeafe;color:#1e40af}.reconciliation-badge.historical{background:#e2e8f0;color:#334155}.reconciliation-badge.pending{background:#fef3c7;color:#92400e}.reconciliation-badge.conflict{background:#fee2e2;color:#991b1b}
+    .collaborator-assets{margin-top:1rem;overflow:hidden}.collaborator-assets header{border-left:4px solid var(--cyan);padding:1rem 1.2rem}.historical-assets header{border-left-color:var(--blue)}.pending-assets header{border-left-color:#f59e0b}.replacement-pending{margin-top:1rem;overflow:hidden}.replacement-pending header{border-left:4px solid #f59e0b;padding:1rem 1.2rem}.replacement-pending header span{color:#b45309;font-size:.68rem;font-weight:800;letter-spacing:.05em}.replacement-pending h2{font-size:1.05rem;margin:.2rem 0 0}.replacement-pending header p{color:var(--slate-500);font-size:.76rem;margin:.25rem 0 0}.collaborator-assets header span{color:var(--blue);font-size:.68rem;font-weight:800;letter-spacing:.05em}.collaborator-assets h2{font-size:1.05rem;margin:.2rem 0 0}.collaborator-assets header p{color:var(--slate-500);font-size:.76rem;margin:.25rem 0 0}.reconciled-table{min-width:1050px}.pending-table{min-width:900px}.identity-label{color:var(--slate-500);display:block;font-size:.68rem;font-weight:700;text-transform:uppercase}.code{display:block;margin-top:.2rem}.reason-cell{color:var(--slate-700);font-size:.76rem;line-height:1.4;max-width:24rem}.reconciliation-badge{border-radius:999px;display:inline-flex;font-size:.7rem;font-weight:800;line-height:1.2;padding:.35rem .55rem}.reconciliation-badge.current{background:#dbeafe;color:#1e40af}.reconciliation-badge.historical{background:#e2e8f0;color:#334155}.reconciliation-badge.pending{background:#fef3c7;color:#92400e}.reconciliation-badge.conflict{background:#fee2e2;color:#991b1b}
     @media(max-width:767px){.detail-title{align-items:flex-start;gap:1rem}.custody-summary{grid-template-columns:1fr}.collaborator-assets header{padding:.9rem 1rem}}
   `],
 })
 export class ColaboradorDetail implements OnInit {
   protected readonly auth = inject(AuthService);
   private readonly service = inject(ColaboradoresService);
+  private readonly replacements = inject(ReemplazosDispositivoService);
   private readonly route = inject(ActivatedRoute);
   protected readonly item = signal<Colaborador | null>(null);
   protected readonly inventory = signal<InventarioConciliadoColaborador | null>(null);
+  protected readonly pendingReplacements = signal<ReemplazoDispositivo[]>([]);
   protected readonly loading = signal(true);
   protected readonly error = signal('');
   protected readonly clp = formatClp;
@@ -184,8 +221,8 @@ export class ColaboradorDetail implements OnInit {
 
   ngOnInit(): void {
     const id = this.route.snapshot.paramMap.get('id') || '';
-    forkJoin({ person: this.service.obtener(id), inventory: this.service.inventarioConciliado(id) }).subscribe({
-      next: (result) => { this.item.set(result.person); this.inventory.set(result.inventory); this.loading.set(false); },
+    forkJoin({ person: this.service.obtener(id), inventory: this.service.inventarioConciliado(id), replacements: this.replacements.porColaborador(id) }).subscribe({
+      next: (result) => { this.item.set(result.person); this.inventory.set(result.inventory); this.pendingReplacements.set(result.replacements.filter(item => item.estadoOperacion === 'PENDIENTE_DEVOLUCION')); this.loading.set(false); },
       error: (error) => { this.error.set(errorMessage(error)); this.loading.set(false); },
     });
   }

@@ -15,7 +15,7 @@ export interface InventoryCodeFamilyInput { nombreFamilia: string; prefijo: stri
 export interface PrefixSuggestion { prefijo: string | null; disponible: boolean; mensaje: string; }
 export type TipoCampoFormulario = 'text' | 'select' | 'number';
 export interface CampoEspecificoFormulario { clave: string; etiqueta: string; tipo: TipoCampoFormulario; requerido: boolean; maxLength?: number; min?: number; max?: number; opciones?: string[]; }
-export interface ConfiguracionFormularioTipo { mostrarMarca: boolean; mostrarModelo: boolean; mostrarNumeroSerie: boolean; camposEspecificos: CampoEspecificoFormulario[]; permiteSim?: boolean; }
+export interface ConfiguracionFormularioTipo { mostrarMarca: boolean; mostrarModelo: boolean; mostrarNumeroSerie: boolean; mostrarImei?: boolean; camposEspecificos: CampoEspecificoFormulario[]; permiteSim?: boolean; }
 export interface FamiliaCodigoTipoDispositivo { id: string; nombre: string; prefijo: string; activo: boolean; estrategiaCodigo: InventoryCodeStrategy; agrupaTipos: boolean; etiquetaOperativa: string | null; }
 export interface TipoDispositivo { id: string; nombre: string; descripcion: string | null; activo: boolean; requiereImei: boolean; configuracionFormulario: ConfiguracionFormularioTipo; permiteSim?: boolean; familiaCodigoInventario: FamiliaCodigoTipoDispositivo | null; creadoEn: string; actualizadoEn: string; }
 export interface TipoDispositivoInput { nombre: string; descripcion?: string | null; familiaCodigoInventarioId?: number | null; activo?: boolean; requiereImei?: boolean; permiteSim?: boolean; }
@@ -141,6 +141,58 @@ export interface CambiarEstadoInput extends ResponsableInput { estadoId: number;
 export interface DevolverDispositivoInput extends ResponsableInput { condicion?: string | null; resultado?: 'DEVUELTO'|'DANADO'; }
 export interface ComprobanteDevolucionResumen {id:string;numeroComprobante:string;fecha:string;resultado:'DEVUELTO'|'DANADO';}
 export interface ResultadoDevolucion {dispositivo:Dispositivo;comprobante:ComprobanteDevolucionResumen;}
+export type EstadoReemplazo = 'PENDIENTE_DEVOLUCION'|'COMPLETADO'|'CANCELADO';
+export type DestinoDispositivoAnterior = 'DISPONIBLE'|'RETENIDO_REVISION'|'DADO_BAJA';
+export type AccionSimReemplazo = 'MOVER_SIM_ACTUAL'|'USAR_SIM_EXISTENTE'|'REGISTRAR_SIM_NUEVA'|'SIN_SIM';
+export type LineaSimNuevaReemplazo = 'CONSERVAR_NUMERO'|'NUMERO_NUEVO'|'SIN_LINEA';
+export interface RegistrarSimNuevaReemplazoInput {
+  iccidCodigoFabrica: string;
+  compania?: string|null;
+  observaciones?: string|null;
+  linea: LineaSimNuevaReemplazo;
+  numeroTelefonico?: string|null;
+}
+export interface ReemplazoDispositivo {
+  id:string;
+  estadoOperacion:EstadoReemplazo;
+  fechaInicio:string;
+  fechaRecepcionAnterior:string|null;
+  fechaCierre:string|null;
+  observacion:string|null;
+  motivoCancelacion:string|null;
+  destinoDispositivoAnterior:DestinoDispositivoAnterior|null;
+  colaborador:{id:string;nombre:string;rut:string};
+  dispositivoAnterior:{id:string;codigoInventario:number;tipo:string;marca:string|null;modelo:string|null;estado:{codigo:string;nombre:string}};
+  dispositivoNuevo:{id:string;codigoInventario:number;tipo:string;marca:string|null;modelo:string|null;estado:{codigo:string;nombre:string}};
+  usuarioInicio:{id:string;nombre:string}|null;
+  usuarioCierre:{id:string;nombre:string}|null;
+  comprobanteDevolucionId:string|null;
+  comprobante?:ComprobanteDevolucionResumen;
+}
+export interface CrearReemplazoDispositivoInput {
+  colaboradorId:number;
+  dispositivoAnteriorCodigo:number;
+  dispositivoNuevoCodigo:number;
+  entregaAnterior:boolean;
+  destinoDispositivoAnterior?:DestinoDispositivoAnterior;
+  motivoBaja?:MotivoBaja;
+  condicion?:string|null;
+  resultado?:'DEVUELTO'|'DANADO';
+  accionSim?:AccionSimReemplazo;
+  simDestinoCodigo?:number;
+  conservarNumero?:boolean;
+  simNueva?:RegistrarSimNuevaReemplazoInput;
+  observaciones?:string|null;
+}
+export interface RecibirReemplazoDispositivoInput {
+  destinoDispositivoAnterior:DestinoDispositivoAnterior;
+  simEntregada?:boolean;
+  motivoBaja?:MotivoBaja;
+  condicion?:string|null;
+  resultado?:'DEVUELTO'|'DANADO';
+  responsable?:string;
+  observaciones?:string|null;
+}
 export type ResultadoOffboarding='DEVUELTO'|'PENDIENTE'|'NO_ENTREGADO'|'EXTRAVIADO'|'ROBADO_HURTADO'|'DANADO';
 export interface ResultadoOffboardingInput extends ResponsableInput { resultado:ResultadoOffboarding; condicion?:string|null; }
 export type MotivoBaja='IRREPARABLE'|'REPARACION_NO_CONVENIENTE'|'MULTIPLES_REPARACIONES'|'OBSOLESCENCIA'|'DANO_FISICO'|'SIN_REPUESTOS'|'OTRO';
@@ -157,6 +209,36 @@ export interface Sim {
   observaciones: string | null; fechaRegistro: string; creadoEn: string; actualizadoEn: string;
 }
 export interface SimInput { codigoInventario?: number; iccidCodigoFabrica: string; numeroAsociado?: string | null; compania?: string | null; observaciones?: string | null; responsable?: string; }
+export interface SimLineaHistorial { id: string; lineaMovilId: string; simId: string; codigoSim: number; iccid: string | null; numeroTelefonico: string; fechaInicio: string; fechaFin: string | null; motivo: string; usuarioId: string | null; }
+export interface GestionarLineaSimInput { mantenerSim: boolean; mantenerNumero: boolean; simDestinoCodigo: number | null; numeroNuevo: string | null; observaciones?: string | null; }
+export type RegistrarSimNuevaAccionLinea = 'USAR_LINEA_EXISTENTE'|'CREAR_LINEA_NUEVA'|'SIN_LINEA';
+export interface LineaMovilLookup {
+  id: string; numeroTelefonico: string; estado: EstadoLineaMovil;
+  sim: { id: string; codigoInventario: number | null; iccid: string | null; compania: string | null; estado: EstadoResumen | null } | null;
+  dispositivo: { id: string; codigoInventario: number | null; tipo: string | null } | null;
+  colaborador: { id: string; nombre: string | null } | null;
+  departamento: { id: string; nombre: string | null } | null;
+}
+export interface RegistrarSimNuevaInput {
+  iccidCodigoFabrica: string; compania?: string | null; observaciones?: string | null;
+  accionLinea: RegistrarSimNuevaAccionLinea; lineaMovilId?: number | null; numeroNuevo?: string | null;
+}
+export interface RegistrarSimNuevaResult {
+  operacion: 'REGISTRAR_SIM_NUEVA';
+  sim: { id: string; codigoInventario: number; iccid: string | null; estado: string; dispositivoId: string | null; colaboradorId: string | null; lineaMovilId: string | null };
+  linea: { id: string; numeroTelefonico: string; estado: EstadoLineaMovil } | null;
+  dispositivo: { id: string; codigoInventario: number };
+}
+export interface GestionarLineaSimResult {
+  operacion: string;
+  dispositivo: { id: string; codigoInventario: number };
+  linea: { id: string; numeroTelefonico: string; estado: LineaMovilResumen['estado']; dispositivoId: string | null; simId: string | null } | null;
+  simAnterior: { id: string; codigoInventario: number; iccid: string | null; estado: string; dispositivoId: string | null; lineaMovilId: string | null; colaboradorId: string | null } | null;
+  simActual: { id: string; codigoInventario: number; iccid: string | null; estado: string; dispositivoId: string | null; lineaMovilId: string | null; colaboradorId: string | null } | null;
+  numeroAnterior: string | null;
+  numeroNuevo: string | null;
+}
+export interface AsociarLineaSimInput extends ResponsableInput { lineaMovilId: number; motivo?: string; }
 export interface AsociarDispositivoInput extends ResponsableInput { dispositivoCodigoInventario: number; numeroTelefonico?: string | null; numeroAsociado?: string | null; reemplazarSimActual?: boolean; }
 export interface AsociarLineaDispositivoInput { numeroTelefonico: string; simId?: string | null; }
 export interface AsignarSimColaboradorInput extends ResponsableInput { colaboradorId: number; }
@@ -208,11 +290,17 @@ export interface ActivoConciliado {
   estadoOriginal:{codigo:string;nombre:string};clasificacionConciliada:ClasificacionConciliada;
   motivoConciliacion:string;requiereValidacionManual:boolean;valorComercial:number;
 }
+export interface SimCustodiaColaborador {
+  id:string; codigoInventario:number; iccid:string|null; compania:string|null;
+  estado:{codigo:string;nombre:string};
+  linea:{id:string;numeroTelefonico:string;estado:string}|null;
+  dispositivo:{id:string;codigoInventario:number;tipo:string|null}|null;
+}
 export interface InventarioConciliadoColaborador {
   colaborador:Colaborador;actuales:ActivoConciliado[];historicos:ActivoConciliado[];
-  pendientes:ActivoConciliado[];valorTotalActual:number;
+  pendientes:ActivoConciliado[];valorTotalActual:number;simsCustodia:SimCustodiaColaborador[];
 }
-export interface PendienteOffboarding {colaborador:Colaborador;activosPendientes:number;valorPendiente:number;estado:'PENDIENTE';}
+export interface PendienteOffboarding {colaborador:Colaborador;activosPendientes:number;simsPendientes?:number;valorPendiente:number;estado:'PENDIENTE';}
 
 export type EstadoOrdenServicio='PENDIENTE_DIAGNOSTICO'|'COTIZACION_RECIBIDA'|'REPARACION_APROBADA'|'REPARACION_RECHAZADA'|'EN_REPARACION'|'REPARACION_TERMINADA'|'CERRADA'|'BAJA';
 export interface EntregaTemporal {id:string;ordenServicioId:string;dispositivo:{id:string;codigoInventario:number;tipo:string;marca:string|null;modelo:string|null};colaborador:{id:string;nombre:string;rut:string};fechaEntrega:string;responsableEntrega:string;observacionesEntrega:string|null;fechaDevolucion:string|null;responsableDevolucion:string|null;observacionesDevolucion:string|null;estado:'ABIERTA'|'CERRADA'|'CANCELADA';}
@@ -231,4 +319,4 @@ export interface ActaDispositivo {id:string;codigoInventario:number;tipo:string;
 export interface ActaEntrega {id:string;numeroActa:string;colaborador:ColaboradorResumen|null;departamento:DepartamentoResumen|null;recepcionante:ColaboradorResumen|null;localidad:string|null;fecha:string;estado:string;estadoDocumental:'VIGENTE'|'DEVOLUCION_PARCIAL'|'CERRADA'|'ANULADA';responsableTi:string;observaciones:string|null;declaracion:string|null;valorTotal:number;dispositivos:ActaDispositivo[];creadoEn:string;actualizadoEn:string;}
 export interface CrearActaInput {colaboradorId?:number|null;departamentoId?:number|null;recepcionanteId?:number|null;localidad?:string|null;responsableTi:string;observaciones?:string|null;declaracion?:string|null;dispositivosCodigos:number[];}
 
-export interface ComprobanteDevolucion {id:string;numeroComprobante:string;fecha:string;resultado:'DEVUELTO'|'DANADO';condicion:string|null;observaciones:string|null;responsableTi:string;origen:'INVENTARIO'|'OFFBOARDING';actaEntrega:{id:string;numeroActa:string}|null;colaborador:{id:string;nombre:string;rut:string}|null;departamento:{id:string;nombre:string}|null;devueltoPor:{id:string;nombre:string;rut:string}|null;dispositivo:{id:string;codigoInventario:number;tipo:string;marca:string|null;modelo:string|null;numeroSerie:string|null;imei:string|null};creadoEn:string;}
+export interface ComprobanteDevolucion {id:string;numeroComprobante:string;fecha:string;resultado:'DEVUELTO'|'DANADO';condicion:string|null;observaciones:string|null;responsableTi:string;origen:'INVENTARIO'|'OFFBOARDING'|'REEMPLAZO';actaEntrega:{id:string;numeroActa:string}|null;colaborador:{id:string;nombre:string;rut:string}|null;departamento:{id:string;nombre:string}|null;devueltoPor:{id:string;nombre:string;rut:string}|null;dispositivo:{id:string;codigoInventario:number;tipo:string;marca:string|null;modelo:string|null;numeroSerie:string|null;imei:string|null};creadoEn:string;}

@@ -13,3 +13,17 @@ export const normalizarNumeroTelefonicoChileno = (valor: string): string => {
 
   return limpio.length === 9 ? `56${limpio}` : limpio;
 };
+
+export const normalizarIccid = (valor: string): string => {
+  const original = valor.trim();
+  if (!/^[0-9\s-]+$/.test(original)) {
+    throw new ValidationError("El ICCID solo puede contener dÃ­gitos, espacios o guiones.");
+  }
+
+  const normalizado = original.replace(/[\s-]/g, "");
+  if (!/^\d{19,20}$/.test(normalizado)) {
+    throw new ValidationError("El ICCID debe contener 19 o 20 dÃ­gitos.");
+  }
+
+  return normalizado;
+};

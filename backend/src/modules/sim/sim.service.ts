@@ -26,6 +26,7 @@ import {
   listarSim,
   obtenerEstadoSimPorCodigo,
   obtenerEstadoSimPorId,
+  obtenerSimPorIccid,
   obtenerSimPorCodigo,
   obtenerSimPorDispositivoId
 } from "./sim.repository";
@@ -40,13 +41,23 @@ import type {
   HistorialSim,
   HistorialSimRow,
   ResponsableInput,
+  AsociarLineaInput,
+  DesasociarLineaInput,
   SimResumen,
-  SimRow
+  SimRow,
+  CrearSimTransaccionalOptions
 } from "./sim.types";
 import { tipoDispositivoPermiteSim } from "../tipos-dispositivo/tipos-dispositivo.types";
-import { normalizarNumeroTelefonicoChileno } from "./sim-phone";
+import { normalizarIccid, normalizarNumeroTelefonicoChileno } from "./sim-phone";
 import { vincularLineaMovil, vincularLineaMovilADispositivo } from "../lineas-moviles/lineas-moviles.service";
-import { actualizarVinculosLinea } from "../lineas-moviles/lineas-moviles.repository";
+import {
+  actualizarVinculosLinea,
+  desasociarVinculoLineaSim,
+  insertarHistorialLineaMovil,
+  listarHistorialLineaSimPorSim,
+  obtenerLineaPorId,
+  sincronizarVinculoLineaSim
+} from "../lineas-moviles/lineas-moviles.repository";
 
 const estadoSimAsignada = "ASIGNADA";
 const estadoSimDisponible = "DISPONIBLE";
@@ -118,7 +129,7 @@ const mapSim = (row: SimRow): SimResumen => ({
   id: row.sim_id,
   codigoInventario: row.sim_codigo_inventario,
   iccidCodigoFabrica: row.iccid_codigo_fabrica,
-  numeroAsociado: row.linea_numero_telefonico ?? row.numero_asociado,
+  numeroAsociado: row.linea_numero_telefonico,
   lineaMovil: row.linea_movil_id && row.linea_numero_telefonico && row.linea_estado
     ? { id: row.linea_movil_id, numeroTelefonico: row.linea_numero_telefonico, estado: row.linea_estado }
     : null,
@@ -257,6 +268,79 @@ export const obtenerSim = async (
   return mapSim(sim);
 };
 
+export const obtenerSimPorIccidPublica = async (
+  iccidIngresado: string
+): Promise<SimResumen> => {
+  const iccid = normalizarIccid(iccidIngresado);
+  const sim = await obtenerSimPorIccid(iccid);
+  if (!sim) throw new NotFoundError("SIM no encontrada para el ICCID informado.");
+  return mapSim(sim);
+};
+
+/**
+ * Crea una SIM dentro de una transacción superior. No ejecuta BEGIN, COMMIT
+ * ni ROLLBACK; el caso de uso compuesto conserva el control transaccional.
+ */
+export const crearSimEnTransaccion = async (
+  input: CrearSimInput,
+  client: PoolClient,
+  options: CrearSimTransaccionalOptions
+): Promise<SimRow> => {
+  const iccid = normalizarIccid(input.iccidCodigoFabrica);
+  const estado = await obtenerEstadoSimPorCodigo(options.estadoCodigo, client);
+  if (!estado) throw new ConflictError(`No existe un estado ${options.estadoCodigo} activo para SIM.`);
+
+  const existenteAntes = await obtenerSimPorIccid(iccid, client, true);
+  if (existenteAntes) {
+    throw new ConflictError(`Esta SIM ya estÃ¡ registrada como ITAM ${existenteAntes.sim_codigo_inventario}.`);
+  }
+
+  const codigoInventario = await generateInventoryCode("SIM", null, client);
+
+  // Se vuelve a verificar después de adquirir el bloqueo de la familia de
+  // códigos. Así una carrera concurrente produce un conflicto funcional
+  // cuando la primera transacción ya confirmó la SIM.
+  const existenteDespues = await obtenerSimPorIccid(iccid, client, true);
+  if (existenteDespues) {
+    throw new ConflictError(`Esta SIM ya estÃ¡ registrada como ITAM ${existenteDespues.sim_codigo_inventario}.`);
+  }
+
+  const sim = await crearSim(
+    { ...input, iccidCodigoFabrica: iccid },
+    codigoInventario,
+    estado.id,
+    client,
+    {
+      dispositivoId: options.dispositivoId,
+      colaboradorId: options.colaboradorId,
+      lineaMovilId: options.lineaMovilId
+    }
+  );
+
+  await insertarHistorialSim(
+    sim.sim_id,
+    "ALTA_SIM",
+    null,
+    estado.id,
+    input.responsable,
+    input.observaciones,
+    {
+      codigoInventario,
+      iccidCodigoFabrica: iccid,
+      compania: input.compania ?? null,
+      estadoFinal: options.estadoCodigo,
+      dispositivoId: options.dispositivoId ?? null,
+      colaboradorId: options.colaboradorId ?? null,
+      lineaMovilId: options.lineaMovilId ?? null,
+      origen: "REEMPLAZO_DISPOSITIVO",
+      ...options.detalle
+    },
+    client
+  );
+
+  return sim;
+};
+
 export const crearNuevaSim = async (
   input: CrearSimInput
 ): Promise<SimResumen> => {
@@ -276,6 +360,14 @@ export const crearNuevaSim = async (
       );
     }
 
+    const iccid = normalizarIccid(input.iccidCodigoFabrica);
+    const existente = await obtenerSimPorIccid(iccid, client, true);
+    if (existente) {
+      throw new ConflictError(
+        `Esta SIM ya está registrada como ITAM ${existente.sim_codigo_inventario}.`
+      );
+    }
+
     const numeroAsociado = input.numeroAsociado?.trim()
       ? normalizarNumeroTelefonicoChileno(input.numeroAsociado)
       : null;
@@ -287,7 +379,11 @@ export const crearNuevaSim = async (
         "El número telefónico ya está registrado en otra SIM activa."
       );
     }
-    const inputNormalizado: CrearSimInput = { ...input, numeroAsociado };
+    const inputNormalizado: CrearSimInput = {
+      ...input,
+      iccidCodigoFabrica: iccid,
+      numeroAsociado
+    };
 
     const codigoInventario = await generateInventoryCode(
       "SIM",
@@ -310,7 +406,7 @@ export const crearNuevaSim = async (
       input.observaciones,
       {
         codigoInventario,
-        iccidCodigoFabrica: input.iccidCodigoFabrica
+      iccidCodigoFabrica: iccid
       },
       client
     );
@@ -370,6 +466,16 @@ export const actualizarSimExistente = async (
     }
 
     const inputNormalizado: ActualizarSimInput = { ...input };
+    if (input.iccidCodigoFabrica !== undefined) {
+      const iccid = normalizarIccid(input.iccidCodigoFabrica);
+      const existente = await obtenerSimPorIccid(iccid, client, true);
+      if (existente && existente.sim_id !== actual.sim_id) {
+        throw new ConflictError(
+          `Esta SIM ya está registrada como ITAM ${existente.sim_codigo_inventario}.`
+        );
+      }
+      inputNormalizado.iccidCodigoFabrica = iccid;
+    }
     if (input.numeroAsociado !== undefined) {
       const numeroIngresado = input.numeroAsociado?.trim() || null;
       if (!numeroIngresado && (actual.dispositivo_id || actual.linea_movil_id)) {
@@ -422,7 +528,7 @@ export const actualizarSimExistente = async (
         input.observaciones,
         {
           lineaMovilId: vinculacion.linea.id,
-          numeroAnterior: actual.linea_numero_telefonico ?? actual.numero_asociado,
+          numeroAnterior: actual.linea_numero_telefonico,
           numeroTelefonico: vinculacion.linea.numero_telefonico,
           descripcion: "Número telefónico actualizado en la línea móvil asociada."
         },
@@ -480,7 +586,7 @@ export const asociarDispositivo = async (
       throw new ValidationError("El tipo de dispositivo no está configurado para llevar SIM.");
     }
     const numeroIngresado = input.numeroAsociado?.trim()
-      || sim.numero_asociado?.trim()
+      || sim.linea_numero_telefonico?.trim()
       || null;
     if (!numeroIngresado) {
       throw new ValidationError("El número telefónico es obligatorio para la SIM seleccionada.");
@@ -540,8 +646,7 @@ export const asociarDispositivo = async (
     const asociada = await asociarSimADispositivo(
       codigoInventario,
       dispositivo.dispositivo_id,
-      client,
-      numeroAsociado
+      client
     );
 
     if (!asociada) {
@@ -565,7 +670,7 @@ export const asociarDispositivo = async (
         dispositivoCodigoInventario:
           input.dispositivoCodigoInventario,
         lineaMovilId: linea.linea.id,
-        numeroAsociado: actualizada.numero_asociado,
+        numeroAsociado: actualizada.linea_numero_telefonico,
         estadoAutomatico: actualizada.estado_codigo,
         descripcion: "SIM asociada al smartphone con número telefónico registrado."
       },
@@ -580,8 +685,8 @@ export const asociarDispositivo = async (
       input.responsable,
       input.observaciones,
       {
-        numeroAnterior: sim.numero_asociado,
-        numeroTelefonico: actualizada.numero_asociado,
+        numeroAnterior: sim.linea_numero_telefonico,
+        numeroTelefonico: actualizada.linea_numero_telefonico,
         descripcion: "Número telefónico registrado o actualizado en la SIM."
       },
       client
@@ -597,7 +702,7 @@ export const asociarDispositivo = async (
       {
         simCodigoInventario: actualizada.sim_codigo_inventario,
         lineaMovilId: linea.linea.id,
-        numeroAsociado: actualizada.numero_asociado,
+        numeroAsociado: actualizada.linea_numero_telefonico,
         descripcion: "SIM asociada al smartphone con número telefónico registrado."
       },
       client
@@ -908,4 +1013,125 @@ export const obtenerHistorialSim = async (
   const rows = await listarHistorialSim(codigoInventario);
 
   return rows.map(mapHistorial);
+};
+
+const mapHistorialLineaSim = (row: import("../lineas-moviles/lineas-moviles.types").LineaMovilSimHistorialRow) => ({
+  id: row.id,
+  lineaMovilId: row.linea_movil_id,
+  simId: row.sim_id,
+  codigoSim: row.sim_codigo_inventario,
+  iccid: row.iccid_codigo_fabrica,
+  numeroTelefonico: row.numero_telefonico,
+  fechaInicio: toIsoDateTime(row.fecha_inicio),
+  fechaFin: row.fecha_fin ? toIsoDateTime(row.fecha_fin) : null,
+  motivo: row.motivo,
+  usuarioId: row.usuario_id
+});
+
+export const obtenerHistorialLineaSim = async (
+  codigoInventario: number
+) => {
+  const sim = await obtenerSimPorCodigo(codigoInventario);
+  if (!sim) throw new NotFoundError("SIM no encontrada.");
+  const rows = await listarHistorialLineaSimPorSim(sim.sim_id);
+  return rows.map(mapHistorialLineaSim);
+};
+
+export const asociarLineaASim = async (
+  codigoInventario: number,
+  input: AsociarLineaInput
+): Promise<SimResumen> => {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const sim = await obtenerSimPorCodigo(codigoInventario, client, true);
+    if (!sim) throw new NotFoundError("SIM no encontrada.");
+    validarSimOperable(sim);
+
+    const linea = await obtenerLineaPorId(String(input.lineaMovilId), client, true);
+    if (!linea) throw new NotFoundError("Línea móvil no encontrada.");
+    if (linea.estado === "DADA_BAJA") {
+      throw new ConflictError("No se puede asociar una línea móvil dada de baja.");
+    }
+    if (linea.sim_id && linea.sim_id !== sim.sim_id) {
+      throw new ConflictError("La línea móvil ya está asociada a otra SIM.");
+    }
+
+    await sincronizarVinculoLineaSim(
+      linea.id,
+      sim.sim_id,
+      input.motivo ?? "ASOCIACION_MANUAL",
+      client
+    );
+    await insertarHistorialLineaMovil(
+      linea.id,
+      "LINEA_MOVIL_ASOCIADA_A_SIM",
+      input.responsable,
+      input.observaciones,
+      { simId: sim.sim_id, simCodigoInventario: codigoInventario },
+      client
+    );
+    await insertarHistorialSim(
+      sim.sim_id,
+      "LINEA_MOVIL_ASOCIADA_A_SIM",
+      sim.estado_id,
+      sim.estado_id,
+      input.responsable,
+      input.observaciones,
+      { lineaMovilId: linea.id, numeroTelefonico: linea.numero_telefonico },
+      client
+    );
+
+    const actualizada = await obtenerSimPorCodigo(codigoInventario, client);
+    await client.query("COMMIT");
+    return mapSim(actualizada ?? sim);
+  } catch (error) {
+    await client.query("ROLLBACK");
+    return normalizarErrorSim(error);
+  } finally {
+    client.release();
+  }
+};
+
+export const desasociarLineaDeSim = async (
+  codigoInventario: number,
+  input: DesasociarLineaInput
+): Promise<SimResumen> => {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const sim = await obtenerSimPorCodigo(codigoInventario, client, true);
+    if (!sim) throw new NotFoundError("SIM no encontrada.");
+    if (!sim.linea_movil_id) throw new ConflictError("La SIM no tiene una línea móvil asociada.");
+
+    const linea = await obtenerLineaPorId(sim.linea_movil_id, client, true);
+    if (!linea) throw new NotFoundError("La línea móvil asociada no existe.");
+    await desasociarVinculoLineaSim(linea.id, sim.sim_id, client);
+    await insertarHistorialLineaMovil(
+      linea.id,
+      "LINEA_MOVIL_DESASOCIADA_DE_SIM",
+      input.responsable,
+      input.observaciones,
+      { simId: sim.sim_id, motivo: input.motivo ?? "DESASOCIACION_MANUAL" },
+      client
+    );
+    await insertarHistorialSim(
+      sim.sim_id,
+      "LINEA_MOVIL_DESASOCIADA_DE_SIM",
+      sim.estado_id,
+      sim.estado_id,
+      input.responsable,
+      input.observaciones,
+      { lineaMovilId: linea.id, motivo: input.motivo ?? "DESASOCIACION_MANUAL" },
+      client
+    );
+    const actualizada = await obtenerSimPorCodigo(codigoInventario, client);
+    await client.query("COMMIT");
+    return mapSim(actualizada ?? sim);
+  } catch (error) {
+    await client.query("ROLLBACK");
+    return normalizarErrorSim(error);
+  } finally {
+    client.release();
+  }
 };

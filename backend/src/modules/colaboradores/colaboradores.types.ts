@@ -113,6 +113,17 @@ export interface InventarioConciliado {
   historicos: ActivoConciliado[];
   pendientes: ActivoConciliado[];
   valorTotalActual: number;
+  simsCustodia: SimCustodiaColaborador[];
+}
+
+export interface SimCustodiaColaborador {
+  id: string;
+  codigoInventario: number;
+  iccid: string | null;
+  compania: string | null;
+  estado: { codigo: string; nombre: string };
+  linea: { id: string; numeroTelefonico: string; estado: string } | null;
+  dispositivo: { id: string; codigoInventario: number; tipo: string | null } | null;
 }
 
 export interface PendienteOffboardingRow {

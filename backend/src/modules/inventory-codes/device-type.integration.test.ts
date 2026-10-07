@@ -203,7 +203,7 @@ test("el catálogo periférico real comparte familia 6 y configuración dinámic
   assert.equal(result.rows.length, 9);
   assert.equal(result.rows.every((row) => row.prefijo === "6"), true);
   assert.equal(result.rows.every((row) => row.agrupa_tipos), true);
-  assert.equal(result.rows.every((row) => row.etiqueta_operativa === "Periférico"), true);
+  assert.equal(result.rows.every((row) => row.etiqueta_operativa === "Periféricos y accesorios"), true);
   const keyboard = result.rows.find((row) => row.nombre === "Teclado");
   assert.equal(
     keyboard?.configuracion_formulario.camposEspecificos.some(

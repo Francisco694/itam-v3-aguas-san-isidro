@@ -170,7 +170,15 @@ export const lockInventoryCodeFamily = async (
         '[]'::JSONB AS tipos_asociados
       FROM itam.familias_codigo_inventario
       WHERE tipo_entidad = $1
-        AND COALESCE(tipo_activo_normalizado, '') = COALESCE($2, '')
+        AND (
+          COALESCE(tipo_activo_normalizado, '') = COALESCE($2, '')
+          OR EXISTS (
+            SELECT 1
+              FROM itam.tipos_dispositivo tipo_asociado
+             WHERE tipo_asociado.familia_codigo_inventario_id = familias_codigo_inventario.id
+               AND UPPER(BTRIM(tipo_asociado.nombre)) = UPPER(BTRIM($2))
+          )
+        )
         AND activo = TRUE
       FOR UPDATE
     `,

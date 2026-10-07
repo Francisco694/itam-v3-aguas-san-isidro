@@ -50,7 +50,7 @@ const simPrintDocument = (sims: readonly Sim[], qrs: readonly string[], mode: 'A
               @for (item of filtered(); track item.id) {
                 <tr>
                   <td class="select-column"><input type="checkbox" [attr.aria-label]="'Seleccionar SIM ' + item.codigoInventario" [checked]="selected(item.id)" (change)="toggleItem(item.id, $event)" /></td><td><a class="asset-link" [routerLink]="[item.codigoInventario]">#{{ item.codigoInventario }}</a></td>
-                  <td><span class="cell-primary">{{ item.numeroAsociado || 'Sin numero' }}</span><span class="cell-secondary">ICCID {{ item.iccidCodigoFabrica || 'pendiente de completar' }}</span></td>
+                  <td><span class="cell-primary">{{ item.lineaMovil?.numeroTelefonico || 'Sin línea asociada' }}</span><span class="cell-secondary">ICCID {{ item.iccidCodigoFabrica || 'Pendiente de validación' }}</span></td>
                   <td>{{ item.compania || 'Sin compania' }}</td>
                   <td><app-status-badge [code]="item.estado.codigo" [label]="item.estado.nombre" /></td>
                   <td>{{ item.colaborador?.nombre || 'Sin asignar' }}</td>
@@ -67,12 +67,12 @@ const simPrintDocument = (sims: readonly Sim[], qrs: readonly string[], mode: 'A
               <header class="mobile-record-card__top">
                 <div><label><input type="checkbox" [checked]="selected(item.id)" (change)="toggleItem(item.id, $event)" /> Seleccionar</label>
                   <a class="mobile-record-card__title code" [routerLink]="[item.codigoInventario]">SIM {{ item.codigoInventario }}</a>
-                  <span class="mobile-record-card__subtitle">{{ item.numeroAsociado || 'Sin numero asociado' }}</span>
+                  <span class="mobile-record-card__subtitle">{{ item.lineaMovil?.numeroTelefonico || 'Sin línea asociada' }}</span>
                 </div>
                 <app-status-badge [code]="item.estado.codigo" [label]="item.estado.nombre" />
               </header>
               <dl class="mobile-record-card__details">
-                <div class="sim-iccid"><dt>ICCID</dt><dd>{{ item.iccidCodigoFabrica || 'Pendiente de completar' }}</dd></div>
+                <div class="sim-iccid"><dt>ICCID</dt><dd>{{ item.iccidCodigoFabrica || 'Pendiente de validación' }}</dd></div>
                 <div><dt>Compania</dt><dd>{{ item.compania || 'Sin compania' }}</dd></div>
                 <div><dt>Asignacion</dt><dd>{{ item.colaborador?.nombre || 'Sin asignar' }}</dd></div>
                 <div><dt>Dispositivo</dt><dd>{{ item.dispositivo ? 'ITAM ' + item.dispositivo.codigoInventario : 'Sin asociar' }}</dd></div>
@@ -131,7 +131,7 @@ export class SimList implements OnInit {
       (!query ||
         String(item.codigoInventario).includes(query) ||
         item.iccidCodigoFabrica?.toLowerCase().includes(query) ||
-        (item.numeroAsociado || '').toLowerCase().includes(query) ||
+        (item.lineaMovil?.numeroTelefonico || '').toLowerCase().includes(query) ||
         (item.compania || '').toLowerCase().includes(query))
     );
   }

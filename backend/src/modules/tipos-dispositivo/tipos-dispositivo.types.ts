@@ -25,6 +25,7 @@ export interface ConfiguracionFormularioTipo {
   mostrarMarca: boolean;
   mostrarModelo: boolean;
   mostrarNumeroSerie: boolean;
+  mostrarImei?: boolean;
   camposEspecificos: CampoEspecificoFormulario[];
   /** Permite asociar una SIM a los dispositivos de este tipo. */
   permiteSim?: boolean;

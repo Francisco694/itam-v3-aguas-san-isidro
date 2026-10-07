@@ -5,7 +5,7 @@ import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angu
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { LucideBuilding, LucideCircleAlert, LucideDownload, LucideExternalLink, LucideFileText, LucideHistory, LucidePackageCheck, LucidePencil, LucidePlus, LucideRotateCcw, LucideShieldAlert, LucideShieldCheck, LucideUserCheck, LucideUsers, LucideWrench, LucideX } from '@lucide/angular';
 import { catchError, combineLatest, forkJoin, map, Observable, of, switchMap } from 'rxjs';
-import { ActaEntrega, Colaborador, ComprobanteDevolucion, Departamento, Dispositivo, Estado, HistorialEvento, LineaMovilResumen, OrdenServicio, ResultadoDevolucion, Sim, TrazabilidadDispositivo } from '../../core/models/itam.models';
+import { ActaEntrega, Colaborador, ComprobanteDevolucion, Departamento, Dispositivo, Estado, HistorialEvento, LineaMovilLookup, LineaMovilResumen, OrdenServicio, RegistrarSimNuevaAccionLinea, ResultadoDevolucion, Sim, TrazabilidadDispositivo, ReemplazoDispositivo } from '../../core/models/itam.models';
 import { ColaboradoresService } from '../../core/services/colaboradores.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { AuthService } from '../../core/services/auth.service';
@@ -18,6 +18,7 @@ import { ServicioTecnicoService } from '../../core/services/servicio-tecnico.ser
 import { ActasEntregaService } from '../../core/services/actas-entrega.service';
 import { ComprobantesDevolucionService } from '../../core/services/comprobantes-devolucion.service';
 import { FacturasAdquisicionService } from '../../core/services/facturas-adquisicion.service';
+import { ReemplazosDispositivoService } from '../../core/services/reemplazos-dispositivo.service';
 import { ComprobanteDevolucionPreview } from '../../shared/components/document-preview/comprobante-devolucion-preview';
 import { AssetLabel, assetLabelResponsible } from '../../shared/components/asset-label/asset-label';
 import { PageHeader } from '../../shared/components/page-header/page-header';
@@ -202,6 +203,26 @@ export const simMatchesQuery = (sim: Sim, query: string): boolean => {
     || (sim.iccidCodigoFabrica ?? '').toLocaleLowerCase('es').includes(value);
 };
 
+export type DeviceSimChange = 'KEEP' | 'NUMBER' | 'SIM' | 'BOTH';
+
+export const deviceSimSearchMatches = (sims: readonly Sim[], query: string, limit = 8): Sim[] => {
+  const value = query.trim().toLocaleLowerCase('es');
+  if (!value) return [];
+  const digits = value.replace(/\D/g, '');
+  return sims.filter((sim) =>
+    (digits && String(sim.codigoInventario).includes(digits))
+    || (sim.iccidCodigoFabrica ?? '').toLocaleLowerCase('es').includes(value)
+    || (sim.numeroAsociado ?? '').toLocaleLowerCase('es').includes(value)
+  ).slice(0, limit);
+};
+
+export const deviceSimChangeLabel = (change: DeviceSimChange, hasCurrentSim: boolean): string => {
+  if (change === 'NUMBER') return 'Actualizar número';
+  if (change === 'SIM') return hasCurrentSim ? 'Cambiar SIM' : 'Asociar SIM';
+  if (change === 'BOTH') return hasCurrentSim ? 'Cambiar número y SIM' : 'Registrar número y SIM';
+  return 'Mantener configuración actual';
+};
+
 export const deviceActionErrorMessage = (error: unknown): string =>
   errorMessage(error);
 
@@ -252,6 +273,7 @@ interface SimilarAssignedDevicePrompt {
           <button type="button" class="icon-button" aria-label="Cerrar mensaje" (click)="clearFeedback()"><svg lucideX></svg></button>
         </section>
       }
+      @if(pendingReplacement(); as pending){<section class="notice notice--warning replacement-pending-banner" role="status"><strong>Devoluci&oacute;n pendiente por reemplazo</strong><span>ITAM {{pending.dispositivoAnterior.codigoInventario}} contin&uacute;a bajo custodia. El nuevo equipo es ITAM {{pending.dispositivoNuevo.codigoInventario}}.</span></section>}
       <section class="device-banner">
         <div><span>EQUIPO TECNOLÓGICO</span><h2>{{ device.tipo.nombre }} · {{ device.marca || 'Sin marca' }} {{ device.modelo || '' }}</h2><p>{{ deviceTechnicalIdentifier(device).label }}: {{ deviceTechnicalIdentifier(device).value }}</p></div>
         <div><app-status-badge [code]="device.estado.codigo" [label]="device.estado.nombre" />@if (auth.user()?.rol !== 'SOLO_LECTURA') { <a class="btn btn--secondary btn--small" [routerLink]="['editar']"><svg lucidePencil></svg>Editar ficha</a> }</div>
@@ -283,7 +305,7 @@ interface SimilarAssignedDevicePrompt {
             <div><dt>Fecha de ingreso al inventario</dt><dd>{{ device.fechaIngresoInventario | date:'dd/MM/yyyy HH:mm:ss' }}</dd></div>
             <div><dt>Registrado en ITAM</dt><dd>{{ device.creadoEn | date:'dd/MM/yyyy HH:mm:ss' }}</dd></div>
           </dl>
-          <section class="physical-label"><span>ETIQUETA FÍSICA</span><app-asset-label [code]="device.codigoInventario" [assetType]="device.tipo.nombre" [brandModel]="(device.marca || '') + (device.modelo ? ' ' + device.modelo : '')" [identifierLabel]="isSmartphone(device) ? 'IMEI' : 'N° serie'" [identifier]="isSmartphone(device) ? device.imei || '' : device.numeroSerie || ''" [responsible]="labelResponsible(device)" [phone]="labelPhone(device) || ''" [detail]="true" printLabel="Reimprimir etiqueta" /></section>
+          <section class="physical-label"><span>ETIQUETA FÍSICA</span><app-asset-label [code]="device.codigoInventario" [assetType]="device.tipo.nombre" [brandModel]="(device.marca || '') + (device.modelo ? ' ' + device.modelo : '')" [identifierLabel]="deviceTechnicalIdentifier(device).label" [identifier]="deviceTechnicalIdentifier(device).value" [responsible]="labelResponsible(device)" [phone]="labelPhone(device) || ''" [detail]="true" printLabel="Reimprimir etiqueta" /></section>
           @if(device.simAsociada){<section class="associated-sim"><strong>SIM asociada #{{ device.simAsociada.codigoInventario }}</strong><span>{{ smartphonePhoneText(device) }} · {{ device.simAsociada.compania || 'Sin operador' }}</span></section>}
         </article>
         <article class="panoramic-column audit-column">
@@ -314,6 +336,18 @@ interface SimilarAssignedDevicePrompt {
               @if(action()==='service'){<section class="technical-order-identity"><strong>Orden de Trabajo - Servicio Técnico</strong><span>Revisa los antecedentes del equipo antes de registrar el envío.</span><dl><div><dt>Código ITAM</dt><dd>{{device.codigoInventario}}</dd></div><div><dt>Tipo de equipo</dt><dd>{{device.tipo.nombre}}</dd></div><div><dt>Marca / modelo</dt><dd>{{device.marca || 'Sin marca'}} {{device.modelo || ''}}</dd></div><div><dt>IMEI / serie</dt><dd>{{device.imei || device.numeroSerie || 'No informado'}}</dd></div><div><dt>Usuario / área</dt><dd>{{device.colaborador?.nombre || device.departamento?.nombre || 'No informado'}}</dd></div></dl></section>}
               <header><div><small>OPERACIÓN EN CURSO</small><h4>{{ actionTitle() }}</h4></div><button class="icon-button" type="button" aria-label="Cancelar operación" [disabled]="submitting()" (click)="action.set(null)"><svg lucideX></svg></button></header>
               @if(actionError()){<div class="notice notice--error" role="alert"><strong>{{ actionErrorTitle() || 'No se pudo registrar la operación' }}</strong><span>{{ actionError() }}</span></div>}
+              @if(action()==='return' && pendingReplacement(); as pending){<div class="notice notice--warning"><strong>Recibir equipo pendiente</strong><span>Se cerrarÃ¡ el reemplazo iniciado el {{pending.fechaInicio | date:'dd/MM/yyyy HH:mm'}}.</span></div><div class="field"><label for="replacement-return-state">Destino del dispositivo recibido *</label><select id="replacement-return-state" [value]="replacementStateId()" (change)="replacementStateId.set($any($event.target).value)"><option value="">Seleccionar destino</option>@for(state of replacementStates(); track state.id){<option [value]="state.id">{{state.nombre}}</option>}</select></div>@if(replacementRequiresBajaReason()){<div class="field"><label for="replacement-return-reason">Motivo de baja *</label><select id="replacement-return-reason" [value]="replacementBajaMotivo()" (change)="replacementBajaMotivo.set($any($event.target).value)"><option value="">Seleccionar motivo</option><option value="IRREPARABLE">Irreparable</option><option value="REPARACION_NO_CONVENIENTE">ReparaciÃ³n no conveniente</option><option value="MULTIPLES_REPARACIONES">MÃºltiples reparaciones</option><option value="OBSOLESCENCIA">Obsolescencia</option><option value="DANO_FISICO">DaÃ±o fÃ­sico</option><option value="SIN_REPUESTOS">Sin repuestos</option><option value="OTRO">Otro</option></select></div>}
+              }
+              @if(action()==='return' && pendingReplacement() && item()?.simAsociada; as pendingSim){
+                <section class="replacement-sim-receipt" role="group" aria-label="Resolución de SIM en recepción posterior">
+                  <strong>El dispositivo tiene una SIM asociada.</strong>
+                  <span>SIM ITAM {{ pendingSim.codigoInventario }} · ICCID {{ pendingSim.iccidCodigoFabrica || 'Pendiente de validación' }} · {{ pendingSim.compania || 'Sin compañía' }} · Número {{ pendingSim.lineaMovil?.numeroTelefonico || 'Sin número' }}</span>
+                  <span>¿La SIM también fue entregada físicamente?</span>
+                  <div class="assignment-warning__buttons"><button class="btn btn--secondary" type="button" [class.btn--primary]="pendingSimDelivered()===true" (click)="choosePendingSimDelivery(true)">Sí, recibir dispositivo y SIM</button><button class="btn btn--secondary" type="button" [class.btn--primary]="pendingSimDelivered()===false" (click)="choosePendingSimDelivery(false)">No, solo dispositivo</button></div>
+                  @if(pendingSimDelivered()===true){<small>La SIM quedará DISPONIBLE, sin colaborador ni dispositivo. La línea y su número se conservarán asociados a la SIM.</small>}
+                  @if(pendingSimDelivered()===false){<small>La SIM quedará ASIGNADA al colaborador, sin dispositivo instalado. La línea continuará asociada a la SIM.</small>}
+                </section>
+              }
               @if(action()==='assign-person'){
                 @if(checkingAssignment()){<div class="notice notice--info" role="status">Verificando si el colaborador ya tiene un equipo del mismo tipo...</div>}
                 @if(similarAssignedDevices(); as duplicate){
@@ -331,12 +365,31 @@ interface SimilarAssignedDevicePrompt {
                   }
                   @if(assignmentResolution()==='REPLACE' && replacementDevice(); as oldDevice){
                     <section class="replacement-confirmation" role="alert">
-                      <strong>Confirmar reemplazo de equipo</strong>
-                      <span>El equipo ITAM {{oldDevice.codigoInventario}} será recibido en bodega antes de entregar el nuevo equipo.</span>
+                      <div class="replacement-new-sim-action">
+                        <label><input type="radio" name="replacement-sim-action" [checked]="replacementSimAction()==='REGISTRAR_SIM_NUEVA'" (change)="chooseReplacementSimAction('REGISTRAR_SIM_NUEVA')" [disabled]="submitting()" /> Registrar SIM nueva</label>
+                        @if(replacementSimAction()==='REGISTRAR_SIM_NUEVA'){
+                          <div class="replacement-new-sim-form">
+                            <div class="field"><label for="replacement-new-iccid">ICCID de la SIM nueva</label><div class="inline-field"><input id="replacement-new-iccid" type="text" [value]="replacementNewIccid()" (input)="replacementNewIccidChanged($any($event.target).value)" [disabled]="submitting()" maxlength="32" /><button class="btn btn--secondary" type="button" (click)="checkReplacementNewIccid()" [disabled]="submitting() || replacementNewIccidStatus()==='checking'">{{replacementNewIccidStatus()==='checking' ? 'Comprobando…' : 'Comprobar ICCID'}}</button></div>
+                              @if(replacementNewIccidStatus()==='available'){<small class="field-help">ICCID disponible. Se generará automáticamente el código ITAM.</small>}
+                              @if(replacementNewIccidStatus()==='existing' && replacementExistingSim(); as existingSim){<small class="field-help">Ya existe: ITAM {{existingSim.codigoInventario}} · {{existingSim.estado.nombre}} <button class="btn btn--link" type="button" (click)="useExistingReplacementSim()">Utilizar esta SIM</button></small>}
+                            </div>
+                            <div class="field"><label for="replacement-new-company">Compañía</label><input id="replacement-new-company" type="text" [value]="replacementNewCompany()" (input)="replacementNewCompany.set($any($event.target).value)" [disabled]="submitting()" maxlength="100" /></div>
+                            <div class="field"><label for="replacement-new-observations">Observaciones</label><textarea id="replacement-new-observations" [value]="replacementNewObservations()" (input)="replacementNewObservations.set($any($event.target).value)" [disabled]="submitting()"></textarea></div>
+                            <div class="field"><label>Línea telefónica</label><label><input type="radio" name="replacement-new-line" [checked]="replacementNewLine()==='CONSERVAR_NUMERO'" (change)="chooseReplacementNewLine('CONSERVAR_NUMERO')" [disabled]="submitting() || !oldDevice.lineaMovil?.numeroTelefonico" /> Conservar número actual</label><label><input type="radio" name="replacement-new-line" [checked]="replacementNewLine()==='NUMERO_NUEVO'" (change)="chooseReplacementNewLine('NUMERO_NUEVO')" [disabled]="submitting()" /> Registrar número nuevo</label><label><input type="radio" name="replacement-new-line" [checked]="replacementNewLine()==='SIN_LINEA'" (change)="chooseReplacementNewLine('SIN_LINEA')" [disabled]="submitting()" /> Sin línea</label></div>
+                            @if(replacementNewLine()==='NUMERO_NUEVO'){<div class="field"><label for="replacement-new-phone">Número telefónico nuevo</label><input id="replacement-new-phone" type="tel" [value]="replacementNewPhone()" (input)="replacementNewPhone.set($any($event.target).value)" [disabled]="submitting()" placeholder="+56 9 1234 5678" /></div>}
+                          </div>
+                        }
+                      </div>
+                      @if(oldDevice.simAsociada; as oldSim){<div class="replacement-sim-resolution"><strong>Este dispositivo tiene una SIM asociada.</strong><span>SIM: ITAM {{oldSim.codigoInventario}} · ICCID {{oldSim.iccidCodigoFabrica || 'Pendiente de validación'}} · Número {{oldDevice.lineaMovil?.numeroTelefonico || 'Sin número'}}</span><label><input type="radio" name="replacement-sim-action" [checked]="replacementSimAction()==='MOVER_SIM_ACTUAL'" (change)="chooseReplacementSimAction('MOVER_SIM_ACTUAL')" [disabled]="submitting() || replacementDelivered()===false" /> Mover SIM actual al dispositivo nuevo</label><label><input type="radio" name="replacement-sim-action" [checked]="replacementSimAction()==='USAR_SIM_EXISTENTE'" (change)="chooseReplacementSimAction('USAR_SIM_EXISTENTE')" [disabled]="submitting()" /> Utilizar otra SIM registrada</label><label><input type="radio" name="replacement-sim-action" [checked]="replacementSimAction()==='SIN_SIM'" (change)="chooseReplacementSimAction('SIN_SIM')" [disabled]="submitting()" /> Entregar dispositivo nuevo sin SIM</label><label><input type="radio" name="replacement-sim-action" [checked]="replacementSimAction()===null" (change)="chooseReplacementSimAction(null)" [disabled]="submitting()" /> Cancelar resolución SIM</label>@if(replacementSimAction()==='USAR_SIM_EXISTENTE'){<select id="replacement-sim" [value]="replacementSimCode()" (change)="replacementSimCode.set($any($event.target).value)" [disabled]="submitting()"><option value="">Seleccionar SIM disponible</option>@for(candidate of replacementSims(); track candidate.id){<option [value]="candidate.codigoInventario">ITAM {{candidate.codigoInventario}} · ICCID {{candidate.iccidCodigoFabrica || 'Pendiente'}} · {{candidate.estado.nombre}} · {{candidate.lineaMovil?.numeroTelefonico || 'Sin línea'}}</option>}</select><div class="field"><label>¿Deseas conservar el número actual?</label><label><input type="radio" name="replacement-keep-number" [checked]="replacementKeepNumber()===true" (change)="replacementKeepNumber.set(true)" [disabled]="submitting() || replacementDelivered()===false" /> Sí, conservar línea/número actual</label><label><input type="radio" name="replacement-keep-number" [checked]="replacementKeepNumber()===false" (change)="replacementKeepNumber.set(false)" [disabled]="submitting()" /> Utilizar la línea/número de la SIM seleccionada</label></div>}</div>}
+                      <strong>{{ replacementDelivered()===false ? 'Continuar con devolución pendiente' : 'Reemplazar equipo' }}</strong>
+                      <div class="field"><label>Â¿El colaborador entregÃ³ fÃ­sicamente el dispositivo anterior?</label><div class="assignment-warning__buttons"><button class="btn btn--secondary" type="button" [class.btn--primary]="replacementDelivered()===true" (click)="chooseReplacementDelivery(true)">SÃ­, fue entregado</button><button class="btn btn--secondary" type="button" [class.btn--primary]="replacementDelivered()===false" (click)="chooseReplacementDelivery(false)">No fue entregado</button></div></div>
+                      @if(replacementDelivered()===false){<div class="notice notice--warning"><strong>El dispositivo anterior no ha sido entregado.</strong><span>Continuará bajo responsabilidad del colaborador. Si continúa, el nuevo equipo será entregado y el anterior quedará pendiente de devolución.</span></div>}
+                      @if(replacementDelivered()===true){<span>El equipo ITAM {{oldDevice.codigoInventario}} será recibido en bodega antes de entregar el nuevo equipo.</span>}
                       @if(duplicate.devices.length > 1){<div class="field"><label for="replacement-device">Equipo que será reemplazado *</label><select id="replacement-device" [value]="replacementDevice()?.codigoInventario || ''" (change)="selectReplacementDevice($any($event.target).value, duplicate.devices)">@for(existing of duplicate.devices; track existing.codigoInventario){<option [value]="existing.codigoInventario">ITAM {{existing.codigoInventario}} · {{existing.marca || 'Sin marca'}} {{existing.modelo || ''}}</option>}</select></div>}
-                      <div class="field"><label for="replacement-state">Estado del equipo recibido *</label><select id="replacement-state" [value]="replacementStateId()" (change)="replacementStateId.set($any($event.target).value)"><option value="">Seleccionar estado</option>@for(state of replacementStates(); track state.id){<option [value]="state.id">{{state.nombre}}</option>}</select><small class="delivery-help">Disponible, retenido para revisión, servicio técnico o dado de baja.</small></div>
-                      @if(replacementRequiresBajaReason()){<div class="field"><label for="replacement-baja-reason">Motivo de baja *</label><select id="replacement-baja-reason" [value]="replacementBajaMotivo()" (change)="replacementBajaMotivo.set($any($event.target).value)"><option value="">Seleccionar motivo</option><option value="IRREPARABLE">Irreparable</option><option value="REPARACION_NO_CONVENIENTE">Reparación no conveniente</option><option value="MULTIPLES_REPARACIONES">Múltiples reparaciones</option><option value="OBSOLESCENCIA">Obsolescencia</option><option value="DANO_FISICO">Daño físico</option><option value="SIN_REPUESTOS">Sin repuestos</option><option value="OTRO">Otro</option></select></div>}
-                      <div class="assignment-warning__buttons"><button class="btn btn--primary" type="button" [disabled]="submitting()" (click)="confirmReplacement()">Confirmar reemplazo</button><button class="btn btn--ghost" type="button" [disabled]="submitting()" (click)="cancelAssignmentDecision()">Cancelar</button></div>
+                      @if(replacementDelivered()===true){<div class="field"><label for="replacement-state">Estado del equipo recibido *</label><select id="replacement-state" [value]="replacementStateId()" (change)="replacementStateId.set($any($event.target).value)"><option value="">Seleccionar estado</option>@for(state of replacementStates(); track state.id){<option [value]="state.id">{{state.nombre}}</option>}</select><small class="delivery-help">Disponible, retenido para revisión o dado de baja.</small></div>}
+                      @if(replacementDelivered()===true && replacementRequiresBajaReason()){<div class="field"><label for="replacement-baja-reason">Motivo de baja *</label><select id="replacement-baja-reason" [value]="replacementBajaMotivo()" (change)="replacementBajaMotivo.set($any($event.target).value)"><option value="">Seleccionar motivo</option><option value="IRREPARABLE">Irreparable</option><option value="REPARACION_NO_CONVENIENTE">Reparación no conveniente</option><option value="MULTIPLES_REPARACIONES">Múltiples reparaciones</option><option value="OBSOLESCENCIA">Obsolescencia</option><option value="DANO_FISICO">Daño físico</option><option value="SIN_REPUESTOS">Sin repuestos</option><option value="OTRO">Otro</option></select></div>}
+                      @if(replacementDelivered() !== null){<section class="replacement-summary" aria-label="Resumen del reemplazo"><strong>Resumen del reemplazo</strong><span>Equipo anterior: ITAM {{oldDevice.codigoInventario}} · {{oldDevice.marca || 'Sin marca'}} {{oldDevice.modelo || ''}}</span><span>Equipo nuevo: ITAM {{item()?.codigoInventario}}</span>@if(oldDevice.simAsociada){<span>SIM: @switch(replacementSimAction()){ @case('MOVER_SIM_ACTUAL'){Se moverá la SIM actual al equipo nuevo.} @case('USAR_SIM_EXISTENTE'){Se utilizará la SIM registrada ITAM {{replacementSimCode()}}.} @case('SIN_SIM'){El equipo nuevo se entregará sin SIM.} @default{Pendiente de resolver.} }</span>}@if(oldDevice.simAsociada && replacementSimAction()==='USAR_SIM_EXISTENTE' && replacementKeepNumber() !== null){<span>Número: {{replacementKeepNumber() ? 'Se conservará la línea/número actual.' : 'Se utilizará la línea/número de la SIM seleccionada.'}}</span>}@if(oldDevice.simAsociada && replacementDelivered()===true && replacementSimAction()!=='MOVER_SIM_ACTUAL'){<span>SIM anterior: será recibida por TI y quedará DISPONIBLE.</span>}@if(oldDevice.simAsociada && replacementDelivered()===false){<span>SIM anterior: permanecerá con el dispositivo anterior.</span>}<span>Equipo anterior: {{replacementDelivered() ? 'Será recibido y enviado al destino seleccionado.' : 'Continuará bajo responsabilidad del colaborador y quedará pendiente de devolución.'}}</span></section>}
+                      <div class="assignment-warning__buttons"><button class="btn btn--primary" type="button" [disabled]="submitting()" (click)="confirmReplacement()">{{ replacementDelivered()===false ? 'Continuar' : 'Reemplazar equipo' }}</button><button class="btn btn--ghost" type="button" [disabled]="submitting()" (click)="cancelAssignmentDecision()">Cancelar</button></div>
                     </section>
                   }
                 }
@@ -362,7 +415,7 @@ interface SimilarAssignedDevicePrompt {
                       }
                     }
                   </div>
-                  @if(canCarrySim(device)){
+                  @if(canCarrySim(device) && assignmentResolution()!=='REPLACE'){
                     <div class="field delivery-field delivery-sim">
                       <label for="delivery-phone">Número telefónico{{ jointDelivery() ? ' *' : '' }}</label>
                       <input id="delivery-phone" type="tel" inputmode="tel" maxlength="20" placeholder="569XXXXXXXX" [value]="deliveryPhone()" (input)="deliveryPhone.set($any($event.target).value); actionError.set('')" [disabled]="submitting()" />
@@ -420,7 +473,7 @@ interface SimilarAssignedDevicePrompt {
               @if(action()==='service'){<div class="field"><label for="service-date">Fecha de envío *</label><input id="service-date" type="date" formControlName="fechaEnvio" /></div><div class="field"><label for="provider">Proveedor / técnico / destino *</label><input id="provider" formControlName="proveedor" maxlength="180" /></div><div class="field"><label for="service-type">Tipo de servicio *</label><select id="service-type" formControlName="tipoServicio"><option value="">Seleccionar</option><option value="GARANTIA">Garantía</option><option value="REPARACION">Reparación</option><option value="MANTENCION">Mantención</option><option value="DIAGNOSTICO">Diagnóstico</option></select></div><div class="field"><label for="failure">Falla reportada *</label><textarea id="failure" formControlName="fallaReportada"></textarea></div><div class="field"><label for="accessories">Accesorios entregados</label><textarea id="accessories" formControlName="accesoriosEntregados"></textarea></div>}
               @if(action()==='retire'){<div class="notice notice--info">La baja conservará el motivo, el valor comercial vigente y el responsable TI en la trazabilidad.</div><div class="field"><label for="retire-reason">Motivo *</label><select id="retire-reason" formControlName="motivoBaja"><option value="">Seleccionar</option><option value="IRREPARABLE">Irreparable</option><option value="REPARACION_NO_CONVENIENTE">Reparación no conveniente</option><option value="MULTIPLES_REPARACIONES">Múltiples reparaciones</option><option value="OBSOLESCENCIA">Obsolescencia</option><option value="DANO_FISICO">Daño físico</option><option value="SIN_REPUESTOS">Sin repuestos</option><option value="OTRO">Otro</option></select></div>}
               <div class="field action-notes"><label for="action-notes">Observaciones</label><textarea id="action-notes" formControlName="observaciones" placeholder="Motivo, condición o antecedentes relevantes"></textarea></div>
-              <div class="action-form__buttons"><button class="btn btn--ghost" type="button" (click)="action.set(null)">Cancelar</button><button class="btn btn--primary" type="submit" [disabled]="submitting()">{{ submitting() ? 'Procesando…' : (action()==='service'?'Registrar envío':'Confirmar operación') }}</button></div>
+              <div class="action-form__buttons"><button class="btn btn--ghost" type="button" (click)="action.set(null)">Cancelar</button><button class="btn btn--primary" type="submit" [disabled]="submitting()">{{ submitting() ? 'Procesando…' : (action()==='service' ? 'Registrar envío' : (action()==='assign-person' && assignmentResolution()==='ADD' ? 'Agregar equipo' : (action()==='assign-person' && assignmentResolution()==='REPLACE' ? 'Reemplazar equipo' : 'Confirmar operación'))) }}</button></div>
               @if(action()==='service'){<div class="form-grid"><div class="field"><label for="service-area">Área solicitante</label><input id="service-area" formControlName="areaSolicitante" maxlength="180" /></div><div class="field"><label for="service-contact">Contacto del servicio técnico</label><input id="service-contact" formControlName="contactoServicio" maxlength="180" /></div></div><div class="field"><label for="service-responsible">Responsable TI *</label><input id="service-responsible" formControlName="responsable" maxlength="150" /></div>}
             </form>
           }
@@ -440,14 +493,56 @@ interface SimilarAssignedDevicePrompt {
     @if(simAssociationOpen()){
       <div class="sim-association-overlay" role="presentation" (click)="closeSimAssociation()">
         <section class="sim-association-dialog card" role="dialog" aria-modal="true" aria-labelledby="sim-association-title" (click)="$event.stopPropagation()">
-          <header><div><small>SMARTPHONE</small><h2 id="sim-association-title">{{ item() && lineActionCopy(item()!).title }}</h2></div><button class="icon-button" type="button" aria-label="Cerrar" [disabled]="submitting()" (click)="closeSimAssociation()"><svg lucideX></svg></button></header>
+          <header><div><small>GESTIÓN LÍNEA / SIM</small><h2 id="sim-association-title">Gestionar línea / SIM</h2><p>La línea móvil es independiente de la tarjeta SIM física.</p></div><button class="icon-button" type="button" aria-label="Cerrar" [disabled]="submitting()" (click)="closeSimAssociation()"><svg lucideX></svg></button></header>
           @if(modalError(); as error){<div class="notice notice--error modal-save-error" role="alert"><strong>{{error.title}}</strong><span>{{error.detail}}</span></div>}
           <form novalidate (ngSubmit)="associateSim()">
-            @if(submitting()){<div class="notice notice--info" role="status" aria-live="polite">Guardando número telefónico...</div>}
-            <div class="field"><label for="association-phone">Número telefónico *</label><input id="association-phone" type="tel" inputmode="tel" maxlength="20" placeholder="569XXXXXXXX" [value]="simPhone()" (input)="simPhone.set($any($event.target).value); simError.set(''); modalError.set(null)" [disabled]="submitting()" required /><small class="hint">Acepta 9 dígitos o formato 56XXXXXXXXX.</small>@if(simPhone().trim() && !isPhoneValid(simPhone())){<small class="field-error" role="alert">Ingrese 9 dígitos o formato 56XXXXXXXXX.</small>}</div>
-            @if(item()?.simAsociada; as currentSim){<div class="delivery-selection" role="status"><div><small>SIM asociada actualmente</small><strong>ITAM {{currentSim.codigoInventario}}</strong><span>{{currentSim.compania || 'Sin operador'}} · Elige otra SIM solo si deseas reemplazarla.</span></div></div>}@else{<div class="notice notice--warning">SIM pendiente de asociar. Puedes guardar el número ahora y asociar una SIM después.</div>}
-            <div class="field"><label for="association-sim">{{item()?.simAsociada ? 'Reemplazar por una SIM disponible' : 'SIM disponible'}}</label><select id="association-sim" [value]="selectedSim()?.codigoInventario || ''" (change)="selectAssociationSimByCode($any($event.target).value)" [disabled]="simLoading() || submitting()"><option value="">{{simLoading() ? 'Cargando SIM disponibles…' : (item()?.simAsociada ? 'Mantener SIM actual' : 'Pendiente de asociar')}}</option>@for(sim of associationSims();track sim.id){<option [value]="sim.codigoInventario">ITAM {{sim.codigoInventario}} · {{sim.numeroAsociado || 'Sin número'}} · {{sim.compania || 'Sin operador'}}</option>}</select><small class="delivery-help">La SIM es opcional; el número queda guardado en la línea móvil.</small></div>
-            <footer><button class="btn btn--ghost" type="button" [disabled]="submitting()" (click)="closeSimAssociation()">Cancelar</button><button class="btn btn--primary" type="submit" [disabled]="submitting()">{{submitting() ? 'Guardando número telefónico...' : 'Guardar cambios'}}</button></footer>
+            @if(submitting()){<div class="notice notice--info" role="status" aria-live="polite">Procesando cambio de línea / SIM…</div>}
+            <section class="association-current-state">
+              <h3>Configuración actual</h3>
+              <div class="association-current-grid">
+                <div><small>Número actual</small><strong>{{ item()?.lineaMovil?.numeroTelefonico || 'Sin línea asociada' }}</strong></div>
+                <div><small>SIM actual</small><strong>{{ item()?.simAsociada ? ('ITAM ' + item()!.simAsociada!.codigoInventario + ' · ' + (item()!.simAsociada!.compania || 'Sin compañía')) : 'Sin SIM asociada' }}</strong><span>{{ item()?.simAsociada ? ('ICCID ' + (item()!.simAsociada!.iccidCodigoFabrica || 'Pendiente')) : 'No existe tarjeta instalada' }}</span></div>
+              </div>
+            </section>
+            <section class="association-decision">
+              <h3>¿Qué necesitas cambiar?</h3>
+              @if(item()?.lineaMovil && item()?.simAsociada){<label><input type="radio" name="association-change" [checked]="associationChange()==='KEEP'" (change)="chooseAssociationChange('KEEP')" [disabled]="submitting()" /> Mantener configuración actual</label>}
+              <label><input type="radio" name="association-change" [checked]="associationChange()==='NUMBER'" (change)="chooseAssociationChange('NUMBER')" [disabled]="submitting()" /> Cambiar número telefónico</label>
+              <label><input type="radio" name="association-change" [checked]="associationChange()==='SIM'" (change)="chooseAssociationChange('SIM')" [disabled]="submitting()" /> {{ item()?.simAsociada ? 'Cambiar SIM' : 'Asociar SIM' }}</label>
+              <label><input type="radio" name="association-change" [checked]="associationChange()==='BOTH'" (change)="chooseAssociationChange('BOTH')" [disabled]="submitting()" /> {{ item()?.simAsociada ? 'Cambiar número y SIM' : 'Registrar número y SIM' }}</label>
+            </section>
+            <div class="association-edit-grid">
+            @if(associationChange()==='NUMBER' || associationChange()==='BOTH'){
+              <section class="association-section">
+                <h3>1. Nuevo número</h3>
+                <label for="association-phone">Número telefónico</label>
+                <input id="association-phone" type="tel" inputmode="tel" maxlength="20" placeholder="+56 9 9746 4529" [value]="associationNumber()" (input)="associationNumberChanged($any($event.target).value)" [disabled]="submitting()" required />
+                <small class="hint">Busca el número oficial registrado en ITAM.</small>
+                @if(associationLineState()==='checking'){<p class="association-lookup">Comprobando número oficial…</p>}
+                @if(associationLineState()==='available'){<div class="association-context association-context--success">✓ Número no registrado en ITAM. Se puede registrar como nueva línea.</div>}
+                @if(associationLineLookup(); as line){<div class="association-context" [class.association-context--warning]="associationLineState()==='conflict'"><strong>{{associationLineState()==='conflict' ? 'Número asociado a otro equipo' : ('Línea encontrada · ' + line.estado)}}</strong><span>{{line.numeroTelefonico}}</span><span>SIM {{line.sim ? ('ITAM ' + line.sim.codigoInventario + (line.sim.compania ? (' · ' + line.sim.compania) : '')) : 'Sin SIM'}}</span>@if(line.dispositivo){<span>Equipo ITAM {{line.dispositivo.codigoInventario}}</span>}@if(line.colaborador){<span>{{line.colaborador.nombre}}{{line.departamento ? (' · ' + line.departamento.nombre) : ''}}</span>}@if(associationLineState()==='conflict'){<strong class="association-conflict">No se trasladará silenciosamente.</strong>}</div>}
+                @if(associationNumber() && !isPhoneValid(associationNumber())){<small class="field-error" role="alert">Ingrese 9 dígitos o formato 56XXXXXXXXX.</small>}
+              </section>
+            }
+            @if(associationChange()==='SIM' || associationChange()==='BOTH'){
+              <section class="association-section">
+                <h3>{{ associationChange()==='BOTH' ? '2.' : '1.' }} SIM física</h3>
+                <div class="association-sim-control">
+                  <label for="association-sim-search">Buscar SIM por código ITAM o ICCID</label>
+                  <input id="association-sim-search" type="search" autocomplete="off" placeholder="ITAM 2041 o 895603…" [value]="associationSimQuery()" (input)="associationSimSearchChanged($any($event.target).value)" [disabled]="submitting()" />
+                  @if(simLoading()){<p class="association-lookup">Cargando SIM disponibles…</p>}
+                  @if(associationSelectedSim(); as selected){<div class="association-selected"><div><small>SIM seleccionada · {{selected.estado.nombre}}</small><strong>ITAM {{selected.codigoInventario}} · {{selected.compania || 'Sin compañía'}}</strong><span>ICCID {{selected.iccidCodigoFabrica || 'Pendiente'}}{{selected.lineaMovil?.numeroTelefonico ? (' · Línea ' + selected.lineaMovil!.numeroTelefonico) : ''}}{{selected.dispositivo ? (' · Equipo ITAM ' + selected.dispositivo.codigoInventario) : ''}}</span></div><button type="button" class="btn btn--ghost btn--small" (click)="clearAssociationSim()" [disabled]="submitting()">Cambiar</button></div>}
+                  @if(!associationSelectedSim() && associationSimResults().length){<div class="association-sim-results" role="listbox">@for(candidate of associationSimResults();track candidate.id){<div class="association-sim-result" [class.association-sim-result--blocked]="!isSimSelectableForAssociation(candidate)"><div><strong>ITAM {{candidate.codigoInventario}} · {{candidate.compania || 'Sin compañía'}}</strong><span>ICCID {{candidate.iccidCodigoFabrica || 'Pendiente'}}</span><span>{{candidate.estado.nombre}}{{candidate.lineaMovil?.numeroTelefonico ? (' · Línea ' + candidate.lineaMovil!.numeroTelefonico) : ''}}{{candidate.dispositivo ? (' · Equipo ITAM ' + candidate.dispositivo.codigoInventario) : ''}}</span></div>@if(isSimSelectableForAssociation(candidate)){<button type="button" class="btn btn--secondary btn--small" (click)="selectAssociationSim(candidate)">Usar esta SIM</button>}@else{<span>⚠ SIM actualmente asignada</span>}</div>}</div>}
+                  @if(associationSimQuery() && !associationSelectedSim() && !associationSimResults().length && isValidIccidValue(associationSimQuery())){<div class="association-context association-context--success"><strong>SIM no registrada en ITAM</strong><span>ICCID {{normalizeIccidValue(associationSimQuery())}}</span><button type="button" class="btn btn--secondary btn--small" (click)="startAssociationInlineRegistration()">+ Registrar esta SIM</button></div>}
+                </div>
+                @if(associationInlineRegistration()){<div class="association-inline-registration"><h4>Registrar nueva SIM</h4><label for="association-new-iccid">ICCID *</label><input id="association-new-iccid" type="text" maxlength="24" [value]="associationNewIccid()" (input)="associationNewIccid.set($any($event.target).value)" [disabled]="submitting()" /><label for="association-new-company">Compañía *</label><select id="association-new-company" [value]="associationNewCompany()" (change)="associationNewCompany.set($any($event.target).value)" [disabled]="submitting()"><option value="">Seleccionar compañía</option><option>Claro</option><option>Entel</option><option>Movistar</option><option>WOM</option><option>Otro</option></select>@if(associationNewCompany()==='Otro'){<label for="association-other-company">Especifique compañía</label><input id="association-other-company" type="text" [value]="associationOtherCompany()" (input)="associationOtherCompany.set($any($event.target).value)" [disabled]="submitting()" />}<label for="association-new-observations">Observaciones</label><textarea id="association-new-observations" rows="2" [value]="associationNewObservations()" (input)="associationNewObservations.set($any($event.target).value)" [disabled]="submitting()"></textarea><small>Código ITAM: se generará automáticamente.</small></div>}
+              </section>
+            }
+            </div>
+            @if(associationChange()!=='KEEP'){
+              <section class="association-result"><h3>RESULTADO DEL CAMBIO</h3><div><small>EQUIPO</small><strong>ITAM {{item()?.codigoInventario}} · {{item()?.marca || 'Sin marca'}} {{item()?.modelo || ''}}</strong></div><div><small>NÚMERO</small><span>{{item()?.lineaMovil?.numeroTelefonico || 'Sin línea'}}{{associationNumber() && isPhoneValid(associationNumber()) ? (' → ' + normalizePhone(associationNumber())) : ''}}</span></div><div><small>SIM</small><span>{{item()?.simAsociada ? ('ITAM ' + item()!.simAsociada!.codigoInventario) : 'Sin SIM'}}{{associationInlineRegistration() ? (' → Nueva SIM · ' + (associationNewCompany() === 'Otro' ? (associationOtherCompany() || 'Otra compañía') : (associationNewCompany() || 'Compañía pendiente'))) : associationSelectedSim() ? (' → ITAM ' + associationSelectedSim()!.codigoInventario + ' · ' + (associationSelectedSim()!.compania || 'Sin compañía')) : ''}}</span>@if(associationInlineRegistration() && associationNewIccid()){<span>ICCID {{normalizeIccidValue(associationNewIccid())}}</span>}</div>@if(associationLineState()==='conflict' && associationLineLookup()?.dispositivo){<div class="association-context association-context--warning">EQUIPO ORIGEN DE LA LÍNEA: ITAM {{associationLineLookup()!.dispositivo!.codigoInventario}}. Debes utilizar otro número.</div>}</section>
+            }
+            <footer><button class="btn btn--ghost" type="button" [disabled]="submitting()" (click)="closeSimAssociation()">Cancelar</button><button class="btn btn--primary" type="submit" [disabled]="!canSubmitAssociation()">{{submitting() ? 'Procesando…' : associationSubmitLabel()}}</button></footer>
           </form>
         </section>
       </div>
@@ -456,7 +551,12 @@ interface SimilarAssignedDevicePrompt {
   styleUrl: './dispositivo-detail.scss',
   styles: [`
     .invoice-document{align-items:center;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:.7rem;display:flex;flex-wrap:wrap;gap:.6rem;margin-top:.8rem;padding:.7rem}.invoice-document>span{align-items:center;color:var(--slate-500);display:flex;font-size:.74rem;gap:.45rem;margin-right:auto}.invoice-document>span svg{color:var(--blue);height:1rem;width:1rem}.device-feedback{align-items:flex-start;display:flex;gap:.75rem;justify-content:space-between;margin-bottom:1rem;position:relative;z-index:1}.device-feedback div,.modal-save-error{display:grid;gap:.25rem}.device-feedback span,.modal-save-error span{display:block}
-    .assignment-warning,.replacement-confirmation{background:#fff7ed;border:1px solid #fed7aa;border-radius:.85rem;display:grid;gap:.65rem;margin-bottom:1rem;padding:1rem}.assignment-warning>strong,.replacement-confirmation>strong{color:#9a3412;font-size:.82rem}.assignment-warning>span,.replacement-confirmation>span{color:#7c2d12;font-size:.72rem;line-height:1.45}.assignment-warning__devices{display:grid;gap:.3rem}.assignment-warning__devices span{background:#ffedd5;border-radius:.45rem;color:#7c2d12;font-size:.68rem;padding:.45rem .6rem}.assignment-warning__buttons{display:flex;flex-wrap:wrap;gap:.55rem}.replacement-confirmation{background:#eff6ff;border-color:#bfdbfe}.replacement-confirmation>strong{color:#1d4ed8}.replacement-confirmation>span{color:#1e3a8a}.replacement-confirmation .field{margin-top:.15rem}
+    .assignment-warning,.replacement-confirmation{background:#fff7ed;border:1px solid #fed7aa;border-radius:.85rem;display:grid;gap:.65rem;margin-bottom:1rem;padding:1rem}.assignment-warning>strong,.replacement-confirmation>strong{color:#9a3412;font-size:.82rem}.assignment-warning>span,.replacement-confirmation>span{color:#7c2d12;font-size:.72rem;line-height:1.45}.assignment-warning__devices{display:grid;gap:.3rem}.assignment-warning__devices span{background:#ffedd5;border-radius:.45rem;color:#7c2d12;font-size:.68rem;padding:.45rem .6rem}.assignment-warning__buttons{display:flex;flex-wrap:wrap;gap:.55rem}.replacement-confirmation{background:#eff6ff;border-color:#bfdbfe}.replacement-confirmation>strong{color:#1d4ed8}.replacement-confirmation>span{color:#1e3a8a}.replacement-confirmation .field{margin-top:.15rem}.replacement-sim-resolution{background:#fff;border:1px solid #bfdbfe;border-radius:.65rem;display:grid;gap:.45rem;padding:.75rem}.replacement-sim-resolution>span{color:#1e3a8a;font-size:.72rem}
+    .sim-association-dialog{max-height:calc(100vh - 2rem);max-width:46rem;overflow:auto}.sim-association-dialog header p{color:var(--slate-500);font-size:.72rem;margin:.25rem 0 0}.association-current-state,.association-decision,.association-section,.association-result{border-top:1px solid var(--gray-200);display:grid;gap:.55rem;margin-top:1rem;padding-top:1rem}.association-current-state h3,.association-decision h3,.association-section h3,.association-result h3{font-size:.86rem;margin:0}.association-current-grid{display:grid;gap:.6rem;grid-template-columns:repeat(2,minmax(0,1fr))}.association-current-grid>div,.association-selected,.association-context,.association-result{background:#f8fafc;border:1px solid var(--gray-200);border-radius:.65rem;padding:.7rem}.association-current-grid small,.association-result small{color:var(--blue);display:block;font-size:.58rem;font-weight:850;letter-spacing:.06em;text-transform:uppercase}.association-current-grid strong,.association-current-grid span,.association-result span{display:block;font-size:.72rem;margin-top:.2rem;overflow-wrap:anywhere}.association-current-grid span,.association-result span{color:var(--slate-500)}.association-decision{gap:.4rem}.association-decision label{align-items:center;display:flex;font-size:.74rem;gap:.45rem}.association-section .hint{color:var(--slate-500);font-size:.66rem}.association-lookup{color:var(--slate-500);font-size:.68rem;margin:0}.association-context{display:grid;gap:.2rem;font-size:.7rem}.association-context--success{background:#f0fdf4;border-color:#bbf7d0;color:#166534}.association-context--warning{background:#fff7ed;border-color:#fed7aa;color:#9a3412}.association-conflict{color:#b91c1c}.association-sim-results{display:grid;gap:.45rem;max-height:14rem;overflow:auto}.association-sim-result{align-items:center;background:#f8fafc;border:1px solid var(--gray-200);border-radius:.65rem;display:flex;gap:.7rem;justify-content:space-between;padding:.65rem}.association-sim-result>div{display:grid;gap:.14rem;min-width:0}.association-sim-result strong{font-size:.74rem}.association-sim-result span{color:var(--slate-500);font-size:.66rem}.association-sim-result--blocked{background:#fff7ed;border-color:#fed7aa}.association-sim-result--blocked>span{color:#b45309;font-size:.64rem;text-align:right}.association-selected{align-items:center;display:flex;justify-content:space-between}.association-selected>div{display:grid;gap:.14rem}.association-selected small{color:var(--blue);font-size:.58rem;font-weight:850}.association-selected strong{font-size:.74rem}.association-selected span{color:var(--slate-500);font-size:.66rem}.association-inline-registration{background:#eff6ff;border:1px solid #bfdbfe;border-radius:.65rem;display:grid;gap:.45rem;padding:.75rem}.association-inline-registration h4{font-size:.78rem;margin:0}.association-result{grid-template-columns:repeat(3,minmax(0,1fr))}.association-result>div{display:grid;gap:.15rem;min-width:0}.association-result>h3{grid-column:1/-1}.association-result .association-context{grid-column:1/-1}.association-result strong{font-size:.72rem;overflow-wrap:anywhere}.association-result span{font-size:.66rem}.association-section input:not([type=radio]),.association-section select,.association-inline-registration input,.association-inline-registration select{width:100%}
+    .association-edit-grid{display:grid;gap:.65rem;grid-template-columns:repeat(2,minmax(0,1fr))}.association-edit-grid>.association-section:only-child{grid-column:1/-1}.association-current-state,.association-decision,.association-section,.association-result{gap:.4rem;margin-top:.65rem;padding-top:.65rem}.association-current-grid>div,.association-selected,.association-context,.association-result{padding:.55rem}.association-sim-results{gap:.3rem;max-height:11rem}.association-sim-result{gap:.5rem;padding:.45rem .55rem}.association-sim-result>div{gap:.08rem}.association-sim-result span{font-size:.62rem}.association-selected{padding:.5rem .55rem}.association-inline-registration{gap:.35rem;padding:.6rem}.association-inline-registration textarea{min-height:3rem}.association-result{gap:.35rem;padding:.55rem}.association-result>div{gap:.1rem}.association-section input:not([type=radio]),.association-section select,.association-inline-registration input,.association-inline-registration select,.association-inline-registration textarea{width:100%}
+    .sim-association-dialog{max-width:760px;padding:1rem}.sim-association-dialog form{gap:16px;margin-top:.75rem}.association-current-state{margin-top:0;padding-top:0}.association-current-grid{align-items:stretch;gap:10px}.association-current-grid>div{min-height:58px;padding:10px}.association-decision{display:grid;gap:6px;grid-template-columns:repeat(4,minmax(0,1fr));padding-top:16px}.association-decision h3{grid-column:1/-1}.association-decision label{background:#f8fafc;border:1px solid var(--gray-200);border-radius:.55rem;font-size:.68rem;min-height:34px;padding:5px 7px}.association-edit-grid{align-items:start;gap:16px;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.association-section{border:1px solid var(--gray-200);border-radius:.7rem;margin:0;min-width:0;padding:12px}.association-section h3{margin-bottom:2px}.association-section>label,.association-inline-registration>label,.association-sim-control>label{font-size:.68rem}.association-section input:not([type=radio]),.association-section select,.association-inline-registration input,.association-inline-registration select,.association-inline-registration textarea{box-sizing:border-box;line-height:1.2;min-height:42px;padding:9px 10px}.association-sim-control{display:grid;gap:6px;position:relative}.association-sim-results{background:#fff;border:1px solid var(--gray-300);border-radius:.65rem;box-shadow:0 8px 22px #0f17241f;left:0;max-height:220px;overflow-y:auto;position:absolute;right:0;top:4.45rem;z-index:20}.association-sim-result{min-height:54px;padding:8px 10px}.association-sim-result>div{gap:2px}.association-selected{min-height:54px}.association-result{gap:10px;grid-template-columns:1fr 1fr;margin-top:0;padding:10px}.association-result>h3,.association-result>div:first-of-type,.association-result .association-context{grid-column:1/-1}.association-result>div{padding:0}.sim-association-dialog footer{border-top:1px solid var(--gray-200);margin-top:0;padding-top:12px}.sim-association-dialog footer .btn{min-height:40px}
+    @media(max-width:900px) and (min-width:701px){.association-decision{grid-template-columns:repeat(2,minmax(0,1fr))}}
+    @media(max-width:700px){.association-current-grid,.association-result,.association-edit-grid{grid-template-columns:1fr}.association-decision{grid-template-columns:1fr}.association-sim-result{align-items:flex-start;flex-direction:column}.association-sim-result--blocked>span{text-align:left}.sim-association-dialog{max-height:calc(100vh - 1rem);padding:.85rem}}
     .traceability-overview { background: transparent; border: 0; display: grid; gap: .75rem; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: .75rem 0; }
     .traceability-card { align-items: flex-start; background: #fff; border: 1px solid var(--gray-200); border-radius: .85rem; box-shadow: var(--shadow-sm); display: flex; gap: .7rem; min-width: 0; padding: .95rem; }
     .traceability-overview .traceability-card + .traceability-card { border-left: 1px solid var(--gray-200); }
@@ -512,6 +612,19 @@ export class DispositivoDetail implements OnInit {
   protected readonly replacementBajaMotivo = signal('');
   protected readonly checkingAssignment = signal(false);
   protected readonly replacementConfirmed = signal(false);
+  protected readonly replacementDelivered = signal<boolean | null>(null);
+  protected readonly pendingSimDelivered = signal<boolean | null>(null);
+  protected readonly replacementSimAction = signal<'MOVER_SIM_ACTUAL' | 'USAR_SIM_EXISTENTE' | 'REGISTRAR_SIM_NUEVA' | 'SIN_SIM' | null>(null);
+  protected readonly replacementSimCode = signal('');
+  protected readonly replacementSims = signal<Sim[]>([]);
+  protected readonly replacementKeepNumber = signal<boolean | null>(null);
+  protected readonly replacementNewIccid = signal('');
+  protected readonly replacementNewCompany = signal('');
+  protected readonly replacementNewObservations = signal('');
+  protected readonly replacementNewLine = signal<'CONSERVAR_NUMERO' | 'NUMERO_NUEVO' | 'SIN_LINEA' | null>(null);
+  protected readonly replacementNewPhone = signal('');
+  protected readonly replacementNewIccidStatus = signal<'idle' | 'checking' | 'available' | 'existing' | 'error'>('idle');
+  protected readonly replacementExistingSim = signal<Sim | null>(null);
   protected readonly jointDelivery = signal(false);
   protected readonly simQuery = signal('');
   protected readonly selectedSim = signal<Sim | null>(null);
@@ -519,10 +632,21 @@ export class DispositivoDetail implements OnInit {
   protected readonly deliveryPhone = signal('');
   protected readonly associationSims = signal<Sim[]>([]);
   protected readonly simAssociationOpen = signal(false);
-  protected readonly simPhone = signal('');
   protected readonly simLoading = signal(false);
   protected readonly simError = signal('');
   protected readonly modalError = signal<ModalErrorMessage | null>(null);
+  protected readonly associationChange = signal<DeviceSimChange>('KEEP');
+  protected readonly associationNumber = signal('');
+  protected readonly associationLineLookup = signal<LineaMovilLookup | null>(null);
+  protected readonly associationLineState = signal<'idle' | 'checking' | 'available' | 'found' | 'conflict'>('idle');
+  protected readonly associationSimQuery = signal('');
+  protected readonly associationSelectedSim = signal<Sim | null>(null);
+  protected readonly associationInlineRegistration = signal(false);
+  protected readonly associationNewIccid = signal('');
+  protected readonly associationNewCompany = signal('');
+  protected readonly associationOtherCompany = signal('');
+  protected readonly associationNewObservations = signal('');
+  private associationLookupTimer?: ReturnType<typeof setTimeout>;
   protected readonly feedback = signal<FeedbackMessage | null>(null);
   private feedbackTimer?: number;
   protected matchingCollaborators(): Colaborador[] { return this.collaborators().filter(person => collaboratorMatchesQuery(person, this.collaboratorQuery())); }
@@ -537,9 +661,10 @@ export class DispositivoDetail implements OnInit {
     this.collaboratorQuery.set(person.nombre);
     this.actionForm.controls.colaboradorId.setValue(person.id);
     this.resetAssignmentDecision();
+    this.checkForSimilarAssignment(Number(person.id));
   }
   protected replacementStates(): Estado[] {
-    const allowed = new Set(['DISPONIBLE', 'RETENIDO_REVISION', 'SERVICIO_TECNICO', 'DADO_BAJA']);
+    const allowed = new Set(['DISPONIBLE', 'RETENIDO_REVISION', 'DADO_BAJA']);
     return this.states().filter(state => allowed.has(state.codigo));
   }
   protected replacementStateName(): string {
@@ -554,6 +679,11 @@ export class DispositivoDetail implements OnInit {
     this.replacementStateId.set('');
     this.replacementBajaMotivo.set('');
     this.replacementConfirmed.set(false);
+    this.replacementDelivered.set(null);
+    this.replacementSimAction.set(null);
+    this.replacementSimCode.set('');
+    this.replacementKeepNumber.set(null);
+    this.resetReplacementNewSim();
     this.actionError.set('');
   }
   protected chooseReplaceAssignment(): void {
@@ -561,33 +691,171 @@ export class DispositivoDetail implements OnInit {
     if (!prompt?.devices.length) return;
     this.assignmentResolution.set('REPLACE');
     this.replacementDevice.set(prompt.devices[0]);
-    this.replacementStateId.set(this.states().find(state => state.codigo === 'RETENIDO_REVISION')?.id || '');
+    this.replacementStateId.set('');
     this.replacementBajaMotivo.set('');
     this.replacementConfirmed.set(false);
+    this.replacementDelivered.set(null);
+    this.replacementSimAction.set(null);
+    this.replacementSimCode.set('');
+    this.replacementKeepNumber.set(null);
+    this.resetReplacementNewSim();
     this.actionError.set('');
   }
   protected selectReplacementDevice(code: string, devices: Dispositivo[]): void {
     this.replacementDevice.set(devices.find(device => device.codigoInventario === Number(code)) || null);
     this.replacementConfirmed.set(false);
   }
+  protected chooseReplacementDelivery(delivered: boolean): void {
+    this.replacementDelivered.set(delivered);
+    this.replacementStateId.set('');
+    this.replacementBajaMotivo.set('');
+    this.replacementConfirmed.set(false);
+    this.actionError.set('');
+  }
+  protected choosePendingSimDelivery(delivered: boolean): void {
+    this.pendingSimDelivered.set(delivered);
+    this.actionError.set('');
+  }
+  protected chooseReplacementSimAction(action: 'MOVER_SIM_ACTUAL' | 'USAR_SIM_EXISTENTE' | 'REGISTRAR_SIM_NUEVA' | 'SIN_SIM' | null): void {
+    this.replacementSimAction.set(action);
+    this.replacementSimCode.set('');
+    this.replacementKeepNumber.set(null);
+    if (action !== 'REGISTRAR_SIM_NUEVA') this.resetReplacementNewSim();
+    this.actionError.set('');
+    if (action === 'USAR_SIM_EXISTENTE' && !this.replacementSims().length) {
+      this.simService.listar().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+        next: sims => this.replacementSims.set(sims.filter(isSimAvailableForJointDelivery)),
+        error: error => this.actionError.set(errorMessage(error))
+      });
+    }
+  }
+  protected replacementNewIccidChanged(value: string): void {
+    this.replacementNewIccid.set(value);
+    this.replacementNewIccidStatus.set('idle');
+    this.replacementExistingSim.set(null);
+    this.actionError.set('');
+  }
+  protected checkReplacementNewIccid(): void {
+    const iccid = this.replacementNewIccid().trim();
+    if (!iccid) {
+      this.replacementNewIccidStatus.set('idle');
+      this.replacementExistingSim.set(null);
+      this.actionError.set('Ingresa el ICCID de la SIM nueva.');
+      return;
+    }
+    this.replacementNewIccidStatus.set('checking');
+    this.simService.buscarPorIccid(iccid).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: sim => {
+        this.replacementExistingSim.set(sim);
+        this.replacementNewIccidStatus.set('existing');
+        this.actionError.set('La SIM ya existe. Puedes utilizarla como SIM registrada.');
+      },
+      error: error => {
+        if (error instanceof ApiError && error.status === 404) {
+          this.replacementExistingSim.set(null);
+          this.replacementNewIccidStatus.set('available');
+          this.actionError.set('ICCID disponible para registrar una SIM nueva.');
+          return;
+        }
+        this.replacementNewIccidStatus.set('error');
+        this.actionError.set(errorMessage(error));
+      }
+    });
+  }
+  protected useExistingReplacementSim(): void {
+    const sim = this.replacementExistingSim();
+    if (!sim || !isSimAvailableForJointDelivery(sim)) {
+      this.actionError.set('La SIM existente no está disponible para este reemplazo.');
+      return;
+    }
+    this.chooseReplacementSimAction('USAR_SIM_EXISTENTE');
+    this.replacementSimCode.set(String(sim.codigoInventario));
+  }
+  protected chooseReplacementNewLine(line: 'CONSERVAR_NUMERO' | 'NUMERO_NUEVO' | 'SIN_LINEA'): void {
+    this.replacementNewLine.set(line);
+    if (line !== 'NUMERO_NUEVO') this.replacementNewPhone.set('');
+    this.actionError.set('');
+  }
   protected cancelAssignmentDecision(): void {
     this.action.set(null);
     this.resetAssignmentDecision();
   }
   protected async confirmReplacement(): Promise<void> {
+    if (this.submitting()) return;
     const oldDevice = this.replacementDevice();
     if (!oldDevice) return;
-    if (!this.replacementStateId()) {
-      this.actionError.set('Selecciona el estado en que quedará el equipo recibido.');
+    if (this.replacementDelivered() === null) {
+      this.actionError.set('Confirma si el dispositivo anterior fue entregado físicamente.');
       return;
     }
-    if (this.replacementRequiresBajaReason() && !this.replacementBajaMotivo()) {
+    if (this.replacementDelivered() && !this.replacementStateId()) {
+      this.actionError.set('Selecciona el destino del dispositivo anterior recibido.');
+      return;
+    }
+    if (this.replacementDelivered() && this.replacementRequiresBajaReason() && !this.replacementBajaMotivo()) {
       this.actionError.set('Selecciona el motivo de baja del equipo reemplazado.');
       return;
     }
-    if (this.replacementRequiresBajaReason() && oldDevice.simAsociada) {
-      this.actionError.set('No se puede dar de baja el equipo anterior mientras tenga una SIM asociada. Desasocia primero la SIM.');
-      return;
+    if (oldDevice.simAsociada) {
+      const simAction = this.replacementSimAction();
+      if (!simAction) {
+        this.actionError.set('Indica qué deseas hacer con la SIM asociada.');
+        return;
+      }
+      if (simAction === 'MOVER_SIM_ACTUAL' && this.replacementDelivered() === false) {
+        this.actionError.set('No se puede mover la SIM mientras el dispositivo anterior no haya sido entregado.');
+        return;
+      }
+      if (simAction === 'USAR_SIM_EXISTENTE' && !this.replacementSimCode()) {
+        this.actionError.set('Selecciona la SIM registrada que utilizarás.');
+        return;
+      }
+      if (simAction === 'USAR_SIM_EXISTENTE' && this.replacementKeepNumber() === null) {
+        this.actionError.set('Indica si deseas conservar el número actual.');
+        return;
+      }
+    }
+    if (this.replacementSimAction() === 'REGISTRAR_SIM_NUEVA') {
+      if (!this.item() || !canDeviceCarrySim(this.item()!)) {
+        this.actionError.set('El dispositivo nuevo no admite una SIM.');
+        return;
+      }
+      if (!this.replacementNewIccid().trim()) {
+        this.actionError.set('Ingresa el ICCID de la SIM nueva.');
+        return;
+      }
+      if (this.replacementNewIccidStatus() === 'idle') {
+        this.actionError.set('Comprueba primero el ICCID antes de registrar la SIM.');
+        return;
+      }
+      if (this.replacementNewIccidStatus() === 'existing') {
+        this.actionError.set('El ICCID ya existe. Selecciona “Utilizar esta SIM” para continuar.');
+        return;
+      }
+      if (this.replacementNewIccidStatus() !== 'available') {
+        this.actionError.set('El ICCID debe estar disponible para registrar una SIM nueva.');
+        return;
+      }
+      const newLine = this.replacementNewLine();
+      if (!newLine) {
+        this.actionError.set('Selecciona qué ocurrirá con la línea telefónica.');
+        return;
+      }
+      if (newLine === 'CONSERVAR_NUMERO' && !oldDevice.lineaMovil?.numeroTelefonico) {
+        this.actionError.set('El dispositivo anterior no tiene una línea que pueda conservarse.');
+        return;
+      }
+      if (newLine === 'NUMERO_NUEVO' && !isChileanPhoneInputValid(this.replacementNewPhone())) {
+        this.actionError.set('Ingresa un número telefónico chileno válido.');
+        return;
+      }
+      if (newLine === 'CONSERVAR_NUMERO' && this.replacementDelivered() === false) {
+        const confirmed = await this.confirmation.confirm(
+          'El número se transferirá a la SIM nueva. La SIM anterior permanecerá bajo responsabilidad del colaborador, sin línea asociada.',
+          { title: 'Transferir línea con devolución pendiente', confirmLabel: 'Continuar' }
+        );
+        if (!confirmed) return;
+      }
     }
     this.replacementConfirmed.set(true);
     await this.execute();
@@ -595,7 +863,6 @@ export class DispositivoDetail implements OnInit {
   protected matchingSims(): Sim[] { return this.deliverySims().filter(sim => isSimAvailableForJointDelivery(sim) && simMatchesQuery(sim, this.simQuery())); }
   protected searchSim(query: string): void { const previous=this.selectedSim();if(!query&&previous?.numeroAsociado&&normalizeChileanPhoneInput(this.deliveryPhone())===normalizeChileanPhoneInput(previous.numeroAsociado))this.deliveryPhone.set('');this.simQuery.set(query);this.selectedSim.set(null); }
   protected selectSim(sim: Sim): void { this.selectedSim.set(sim); this.simQuery.set(String(sim.codigoInventario)); if(sim.numeroAsociado)this.deliveryPhone.set(sim.numeroAsociado); this.actionError.set(''); }
-  protected selectAssociationSimByCode(code: string): void { const device=this.item(),previous=this.selectedSim(),sim=this.associationSims().find(item=>item.codigoInventario===Number(code))||null,currentPhone=device ? smartphonePhoneValue(device) || '' : '';if(sim?.numeroAsociado&&!currentPhone)this.simPhone.set(sim.numeroAsociado);else if(!currentPhone&&previous?.numeroAsociado&&normalizeChileanPhoneInput(this.simPhone())===normalizeChileanPhoneInput(previous.numeroAsociado))this.simPhone.set('');this.selectedSim.set(sim);this.simError.set('');this.modalError.set(null); }
   protected toggleJointDelivery(enabled: boolean): void { this.jointDelivery.set(enabled); this.searchSim(''); this.deliveryPhone.set(''); if(enabled) this.loadDeliverySims(); }
   protected loadDeliverySims(): void {
     if(this.simLoading()) return;
@@ -627,7 +894,23 @@ export class DispositivoDetail implements OnInit {
     this.replacementStateId.set('');
     this.replacementBajaMotivo.set('');
     this.replacementConfirmed.set(false);
+    this.replacementDelivered.set(null);
+    this.pendingSimDelivered.set(null);
+    this.replacementSimAction.set(null);
+    this.replacementSimCode.set('');
+    this.replacementSims.set([]);
+    this.replacementKeepNumber.set(null);
+    this.resetReplacementNewSim();
     this.checkingAssignment.set(false);
+  }
+  private resetReplacementNewSim(): void {
+    this.replacementNewIccid.set('');
+    this.replacementNewCompany.set('');
+    this.replacementNewObservations.set('');
+    this.replacementNewLine.set(null);
+    this.replacementNewPhone.set('');
+    this.replacementNewIccidStatus.set('idle');
+    this.replacementExistingSim.set(null);
   }
   private resetDetailStateForRoute(): void {
     this.submitting.set(false);
@@ -638,9 +921,9 @@ export class DispositivoDetail implements OnInit {
     this.createdActa.set(null);
     this.activeServiceOrder.set(null);
     this.serviceOrders.set([]);
+    this.pendingReplacement.set(null);
     this.simAssociationOpen.set(false);
     this.selectedSim.set(null);
-    this.simPhone.set('');
     this.simError.set('');
     this.modalError.set(null);
     this.resetAssignmentDecision();
@@ -656,6 +939,7 @@ export class DispositivoDetail implements OnInit {
   protected readonly actasService=inject(ActasEntregaService);
   protected readonly returnService=inject(ComprobantesDevolucionService);
   protected readonly facturas=inject(FacturasAdquisicionService);
+  private readonly replacements=inject(ReemplazosDispositivoService);
   private readonly route = inject(ActivatedRoute);
   private readonly fb = inject(FormBuilder);
   protected readonly item = signal<Dispositivo | null>(null);
@@ -672,6 +956,7 @@ export class DispositivoDetail implements OnInit {
   protected readonly action = signal<DeviceAction | null>(null);
   protected readonly activeServiceOrder = signal<OrdenServicio | null>(null);
   protected readonly serviceOrders = signal<OrdenServicio[]>([]);
+  protected readonly pendingReplacement = signal<ReemplazoDispositivo | null>(null);
   protected readonly returnProof = signal<ComprobanteDevolucion | null>(null);
   protected readonly createdActa=signal<ActaEntrega|null>(null);
   protected readonly clp=formatClp;
@@ -679,6 +964,7 @@ export class DispositivoDetail implements OnInit {
   protected readonly canCarrySim=canDeviceCarrySim;
   protected readonly deviceTechnicalIdentifier=deviceTechnicalIdentifier;
   protected readonly isPhoneValid=isChileanPhoneInputValid;
+  protected readonly normalizePhone=normalizeChileanPhoneInput;
   protected readonly smartphonePhoneText=smartphonePhoneText;
   protected readonly smartphonePhonePending=smartphonePhonePending;
   protected readonly lineActionCopy=smartphoneLineActionCopy;
@@ -717,7 +1003,7 @@ export class DispositivoDetail implements OnInit {
   protected load(): void {
     const requestedId = this.id;
     this.loading.set(true); this.error.set('');
-    forkJoin({ traceability: this.service.trazabilidad(this.id), states: this.estadosService.listar('DISPOSITIVO'), collaborators: this.colaboradoresService.listar({ activo: true }), departments: this.departamentosService.listar(), serviceOrders: this.technicalService.listar().pipe(catchError(() => of([] as OrdenServicio[]))) }).subscribe({ next: (result) => { if (requestedId !== this.id) return; this.traceability.set(result.traceability); this.item.set(result.traceability.dispositivo); this.codigo = result.traceability.dispositivo.codigoInventario; this.serviceOrders.set(result.serviceOrders.filter(order => String(order.dispositivo.id) === String(result.traceability.dispositivo.id))); this.activeServiceOrder.set(activeTechnicalServiceOrderForDevice(result.serviceOrders, this.codigo)); this.history.set(result.traceability.eventos); this.states.set(result.states.filter((state) => state.activo)); this.collaborators.set(result.collaborators); this.departments.set(result.departments.filter((department) => department.activo)); this.loading.set(false); if (this.routeAction === 'assign' && !this.terminal() && !this.technicalServiceActive()) this.open('assign-person'); }, error: (error) => { if (requestedId !== this.id) return; this.error.set(errorMessage(error)); this.loading.set(false); } });
+    forkJoin({ traceability: this.service.trazabilidad(this.id), states: this.estadosService.listar('DISPOSITIVO'), collaborators: this.colaboradoresService.listar({ activo: true }), departments: this.departamentosService.listar(), serviceOrders: this.technicalService.listar().pipe(catchError(() => of([] as OrdenServicio[]))), replacements: this.replacements.pendientes().pipe(catchError(() => of([] as ReemplazoDispositivo[]))) }).subscribe({ next: (result) => { if (requestedId !== this.id) return; this.traceability.set(result.traceability); this.item.set(result.traceability.dispositivo); this.codigo = result.traceability.dispositivo.codigoInventario; this.pendingReplacement.set(result.replacements.find(replacement => replacement.dispositivoAnterior.codigoInventario === this.codigo && replacement.estadoOperacion === 'PENDIENTE_DEVOLUCION') || null); this.serviceOrders.set(result.serviceOrders.filter(order => String(order.dispositivo.id) === String(result.traceability.dispositivo.id))); this.activeServiceOrder.set(activeTechnicalServiceOrderForDevice(result.serviceOrders, this.codigo)); this.history.set(result.traceability.eventos); this.states.set(result.states.filter((state) => state.activo)); this.collaborators.set(result.collaborators); this.departments.set(result.departments.filter((department) => department.activo)); this.loading.set(false); if (this.routeAction === 'assign' && !this.terminal() && !this.technicalServiceActive()) this.open('assign-person'); }, error: (error) => { if (requestedId !== this.id) return; this.error.set(errorMessage(error)); this.loading.set(false); } });
   }
   protected terminal(): boolean { return this.states().find((state) => state.id === this.item()?.estado.id)?.esTerminal ?? false; }
   protected stateExists(code: string): boolean { return this.states().some((state) => state.codigo === code); }
@@ -744,102 +1030,220 @@ export class DispositivoDetail implements OnInit {
     this.submitting.set(true);
     this.service.verificarManual(this.codigo).subscribe({next:()=>{this.submitting.set(false);this.toast.success('Equipo verificado','La verificación manual quedó registrada en el historial.');this.load();},error:error=>{this.submitting.set(false);this.toast.error('No se pudo verificar',errorMessage(error));}});
   }
+  protected associationSimResults(): Sim[] {
+    return deviceSimSearchMatches(this.associationSims(), this.associationSimQuery());
+  }
+  protected isSimSelectableForAssociation(sim: Sim): boolean {
+    return sim.estado.codigo === 'DISPONIBLE' && !sim.dispositivo && !sim.colaborador;
+  }
+  protected isValidIccidValue(value: string): boolean { return /^\d{19,20}$/.test(this.normalizeIccidValue(value)); }
+  protected normalizeIccidValue(value: string): string { return value.trim().replace(/[\s-]/g, ''); }
+  protected chooseAssociationChange(change: DeviceSimChange): void {
+    const device = this.item();
+    this.associationChange.set(change);
+    this.modalError.set(null);
+    this.associationInlineRegistration.set(false);
+    this.associationSelectedSim.set(null);
+    this.associationSimQuery.set('');
+    this.associationLineLookup.set(null);
+    this.associationLineState.set('idle');
+    if ((change === 'NUMBER' || change === 'BOTH') && device?.lineaMovil?.numeroTelefonico) {
+      this.associationNumber.set(device.lineaMovil.numeroTelefonico);
+      this.lookupAssociationNumber(device.lineaMovil.numeroTelefonico);
+    } else {
+      this.associationNumber.set('');
+    }
+  }
+  protected associationNumberChanged(value: string): void {
+    this.associationNumber.set(value);
+    this.modalError.set(null);
+    this.lookupAssociationNumber(value);
+  }
+  private lookupAssociationNumber(value: string): void {
+    if (this.associationLookupTimer) clearTimeout(this.associationLookupTimer);
+    const normalized = normalizeChileanPhoneInput(value);
+    this.associationLineLookup.set(null);
+    if (!value.trim() || !isChileanPhoneInputValid(value)) {
+      this.associationLineState.set('idle');
+      return;
+    }
+    this.associationLineState.set('checking');
+    this.associationLookupTimer = setTimeout(() => {
+      this.simService.buscarLineaPorNumero(normalized).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+        next: line => {
+          this.associationLineLookup.set(line);
+          const device = this.item();
+          const conflict = !!line.dispositivo && String(line.dispositivo.id) !== String(device?.id)
+            || !!line.colaborador && !!device?.colaborador && String(line.colaborador.id) !== String(device.colaborador.id);
+          this.associationLineState.set(conflict ? 'conflict' : 'found');
+        },
+        error: error => {
+          if ((error as { status?: number })?.status === 404) this.associationLineState.set('available');
+          else { this.associationLineState.set('idle'); this.showModalError('No se pudo buscar el número', errorMessage(error)); }
+        }
+      });
+    }, 300);
+  }
+  protected associationSimSearchChanged(value: string): void {
+    this.associationSimQuery.set(value);
+    this.associationSelectedSim.set(null);
+    this.associationInlineRegistration.set(false);
+    this.modalError.set(null);
+  }
+  protected selectAssociationSim(sim: Sim): void {
+    if (!this.isSimSelectableForAssociation(sim)) return;
+    this.associationSelectedSim.set(sim);
+    this.associationSimQuery.set(String(sim.codigoInventario));
+    this.associationInlineRegistration.set(false);
+  }
+  protected clearAssociationSim(): void {
+    this.associationSelectedSim.set(null);
+    this.associationSimQuery.set('');
+    this.associationInlineRegistration.set(false);
+  }
+  protected startAssociationInlineRegistration(): void {
+    this.associationInlineRegistration.set(true);
+    this.associationNewIccid.set(this.normalizeIccidValue(this.associationSimQuery()));
+    this.associationNewCompany.set('');
+    this.associationOtherCompany.set('');
+    this.associationNewObservations.set('');
+  }
+  protected associationSubmitLabel(): string {
+    return deviceSimChangeLabel(this.associationChange(), !!this.item()?.simAsociada);
+  }
+  protected canSubmitAssociation(): boolean {
+    if (this.submitting() || this.associationChange() === 'KEEP') return false;
+    const change = this.associationChange();
+    const needsNumber = change === 'NUMBER' || change === 'BOTH';
+    const needsSim = change === 'SIM' || change === 'BOTH';
+    if (needsNumber && !isChileanPhoneInputValid(this.associationNumber())) return false;
+    if (needsNumber && !['available', 'found'].includes(this.associationLineState())) return false;
+    if (needsNumber && this.associationLineState() === 'conflict') return false;
+    if (!needsSim && !this.item()?.simAsociada) return false;
+    if (needsSim && this.associationInlineRegistration()) {
+      const company = this.associationNewCompany() === 'Otro' ? this.associationOtherCompany().trim() : this.associationNewCompany().trim();
+      return this.isValidIccidValue(this.associationNewIccid()) && !!company;
+    }
+    if (needsSim && !this.associationSelectedSim()) return false;
+    if (!needsNumber && !this.item()?.lineaMovil && !this.associationInlineRegistration()) return false;
+    if (needsNumber && !this.associationInlineRegistration() && this.associationLineState() === 'found'
+      && String(this.associationLineLookup()?.id) !== String(this.item()?.lineaMovil?.id)) return false;
+    return true;
+  }
   protected openSimAssociation(): void {
     if (this.auth.user()?.rol === 'SOLO_LECTURA') return;
-    const device=this.item();
-    if(!device || !canDeviceCarrySim(device) || this.submitting())return;
-    const currentPhone=smartphonePhoneText(device);this.action.set(null);this.selectedSim.set(null);this.simPhone.set(currentPhone==='Sin número telefónico asociado'||currentPhone==='Número telefónico pendiente de registrar'?'':currentPhone);this.simError.set('');this.modalError.set(null);this.associationSims.set([]);this.simAssociationOpen.set(true);this.simLoading.set(true);
-    this.simService.listar().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({next:sims=>{this.associationSims.set(sims.filter(isSimAvailableForDeviceAssociation));this.simLoading.set(false);},error:error=>{const message=errorMessage(error);this.simError.set(message);this.showModalError('No se pudieron cargar las SIM disponibles',message);this.simLoading.set(false);}});
+    const device = this.item();
+    if (!device || !canDeviceCarrySim(device) || this.submitting()) return;
+    const initialChange: DeviceSimChange = device.lineaMovil && device.simAsociada ? 'KEEP'
+      : device.lineaMovil ? 'SIM'
+        : device.simAsociada ? 'NUMBER' : 'BOTH';
+    this.action.set(null);
+    this.associationChange.set(initialChange);
+    this.associationNumber.set('');
+    this.associationLineLookup.set(null);
+    this.associationLineState.set('idle');
+    this.associationSimQuery.set('');
+    this.associationSelectedSim.set(null);
+    this.associationInlineRegistration.set(false);
+    this.associationNewIccid.set('');
+    this.associationNewCompany.set('');
+    this.associationOtherCompany.set('');
+    this.associationNewObservations.set('');
+    this.simError.set('');
+    this.modalError.set(null);
+    this.associationSims.set([]);
+    this.simAssociationOpen.set(true);
+    this.simLoading.set(true);
+    this.simService.listar().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: sims => { this.associationSims.set(sims); this.simLoading.set(false); },
+      error: error => { const message = errorMessage(error); this.simError.set(message); this.showModalError('No se pudieron cargar las SIM', message); this.simLoading.set(false); }
+    });
   }
-  protected closeSimAssociation(): void { if(this.submitting())return;this.simAssociationOpen.set(false);this.selectedSim.set(null);this.simPhone.set('');this.simError.set('');this.modalError.set(null); }
-  protected async associateSim(): Promise<void> {
-    const device=this.item(),sim=this.selectedSim();
-    if(this.submitting())return;
-    if(!device){this.showModalError('No se pudo guardar el número telefónico','No se pudo identificar el código ITAM del equipo actual.');return;}
-    const codigo=Number(device.codigoInventario);
-    if(!Number.isInteger(codigo)||codigo<=0){this.showModalError('No se pudo guardar el número telefónico','No se pudo identificar el código ITAM del equipo actual.');return;}
-    const phone=this.simPhone().trim();
-    if(!phone){this.showModalError('No se pudo guardar el número telefónico','Ingrese 9 dígitos o formato 56XXXXXXXXX.');return;}
-    if(!isChileanPhoneInputValid(phone)){this.showModalError('No se pudo guardar el número telefónico','Ingrese 9 dígitos o formato 56XXXXXXXXX.');return;}
-    const normalizedPhone=normalizeChileanPhoneInput(phone);
-    const actorName=this.auth.user()?.nombre?.trim()||'Responsable TI';
-    if(sim?.numeroAsociado && normalizeChileanPhoneInput(sim.numeroAsociado)!==normalizedPhone){
-      const confirmed=await this.confirmation.confirm('La SIM seleccionada ya tiene otro número. Confirme que desea reemplazarlo por el número ingresado.',{title:'Actualizar número de la SIM',confirmLabel:'Actualizar y asociar'});
-      if(!confirmed)return;
-    }
-    if(device.simAsociada && sim){
-      const confirmed=await this.confirmation.confirm(`La SIM ITAM ${device.simAsociada.codigoInventario} será reemplazada por la SIM ITAM ${sim.codigoInventario}. El número telefónico se conservará en la línea móvil.`,{title:'Reemplazar SIM',confirmLabel:'Reemplazar SIM'});
-      if(!confirmed)return;
-    }
-    this.submitting.set(true);this.simError.set('');this.modalError.set(null);
-    const linePayload = { numeroTelefonico: normalizedPhone, simId: sim?.id ?? device.simAsociada?.id ?? null };
-    console.log('[asociar-linea] codigo actual', codigo);
-    console.log('[asociar-linea] payload', linePayload);
-    const request: Observable<unknown> = this.service.asociarLinea(codigo,linePayload);
-    request.subscribe({next:(result)=>{
-      if (String(device.codigoInventario) !== this.id) return;
-      {
-        if(!isSavedMobileLine(result) || result.dispositivoId !== String(device.id)){
-          this.submitting.set(false);
-          const message='El servidor respondió, pero no devolvió la línea móvil guardada.';
-          this.showModalError('No se pudo confirmar el guardado',message);
-          this.toast.error('No se pudo confirmar el guardado del número telefónico',message);
-          return;
+  protected closeSimAssociation(): void {
+    if (this.submitting()) return;
+    if (this.associationLookupTimer) clearTimeout(this.associationLookupTimer);
+    this.simAssociationOpen.set(false);
+    this.associationChange.set('KEEP');
+    this.associationNumber.set('');
+    this.associationLineLookup.set(null);
+    this.associationLineState.set('idle');
+    this.associationSimQuery.set('');
+    this.associationSelectedSim.set(null);
+    this.associationInlineRegistration.set(false);
+    this.associationNewIccid.set('');
+    this.associationNewCompany.set('');
+    this.associationOtherCompany.set('');
+    this.associationNewObservations.set('');
+    this.simError.set('');
+    this.modalError.set(null);
+  }
+  protected associateSim(): void {
+    const device = this.item();
+    if (this.submitting() || !device || !this.canSubmitAssociation()) return;
+    const codigo = Number(device.codigoInventario);
+    const change = this.associationChange();
+    const changeNumber = change === 'NUMBER' || change === 'BOTH';
+    const changeSim = change === 'SIM' || change === 'BOTH';
+    const normalizedNumber = changeNumber ? normalizeChileanPhoneInput(this.associationNumber()) : null;
+    this.submitting.set(true);
+    this.modalError.set(null);
+    if (changeSim && this.associationInlineRegistration()) {
+      const company = this.associationNewCompany() === 'Otro' ? this.associationOtherCompany().trim() : this.associationNewCompany().trim();
+      let accionLinea: RegistrarSimNuevaAccionLinea = 'SIN_LINEA';
+      let lineaMovilId: number | null = null;
+      let numeroNuevo: string | null = null;
+      if (changeNumber) {
+        if (this.associationLineState() === 'found' && this.associationLineLookup()) {
+          accionLinea = 'USAR_LINEA_EXISTENTE';
+          lineaMovilId = Number(this.associationLineLookup()!.id);
+        } else {
+          accionLinea = 'CREAR_LINEA_NUEVA';
+          numeroNuevo = normalizedNumber;
         }
-        const savedNumber=result.numeroTelefonico.trim();
-        if(linePayload.simId && result.simId !== linePayload.simId){
-          this.submitting.set(false);
-          const message='El servidor guardó la línea, pero no confirmó la SIM seleccionada.';
-          this.showModalError('No se pudo confirmar el guardado',message);
-          this.toast.error('No se pudo confirmar la SIM asociada',message);
-          return;
-        }
-        if(savedNumber!==normalizedPhone){
-          this.submitting.set(false);
-          const message=`El backend guardó otro número: ${savedNumber}.`;
-          this.showModalError('No se pudo confirmar el guardado',message);
-          this.toast.error('No se pudo confirmar el número telefónico',message);
-          return;
-        }
-        this.service.obtener(device.codigoInventario).subscribe({
-          next:refreshed=>{
-            if (String(device.codigoInventario) !== this.id) return;
-            const refreshedPhone=normalizeChileanPhoneInput(smartphonePhoneValue(refreshed) || '');
-            if(refreshedPhone!==savedNumber){
-              this.submitting.set(false);
-              const message='La ficha del equipo no devolvió el número telefónico actualizado.';
-              this.showModalError('No se pudo confirmar el guardado',message);
-              this.toast.error('No se pudo confirmar el guardado del número telefónico',message);
-              return;
-            }
-            this.item.set(refreshed);
-            this.submitting.set(false);
-            this.closeSimAssociation();
-            const simStatus = linePayload.simId ? 'SIM asociada correctamente' : 'SIM pendiente de asociar';
-            this.showFeedback({
-              type: 'success',
-              title: 'Número telefónico guardado correctamente',
-              detail: `Número guardado: ${savedNumber}. ${simStatus}.`
-            });
-            this.toast.success('Número telefónico guardado correctamente',`Número guardado: ${savedNumber}. ${simStatus}.`);
-          },
-          error:error=>{
-            if (String(device.codigoInventario) !== this.id) return;
-             const message='La línea fue enviada, pero el detalle del equipo no devolvió el número guardado.';
-            this.submitting.set(false);
-            this.showModalError('No se pudo confirmar el guardado',message);
-            this.toast.error('No se pudo confirmar el guardado del número telefónico',message);
-          }
-        });
-        return;
+      } else if (device.lineaMovil) {
+        accionLinea = 'USAR_LINEA_EXISTENTE';
+        lineaMovilId = Number(device.lineaMovil.id);
       }
-    },error:(error: unknown)=>{
-      if (String(device.codigoInventario) !== this.id) return;
-       const message=mobileLineErrorDetail(error);
+      this.service.registrarSimNueva(codigo, {
+        iccidCodigoFabrica: this.normalizeIccidValue(this.associationNewIccid()),
+        compania: company,
+        observaciones: this.associationNewObservations().trim() || null,
+        accionLinea,
+        lineaMovilId,
+        numeroNuevo
+      }).subscribe({
+        next: () => this.finishAssociationSave(codigo, 'SIM nueva registrada y asociada correctamente.'),
+        error: error => this.failAssociationSave(error)
+      });
+      return;
+    }
+    if (changeSim && !device.lineaMovil) {
       this.submitting.set(false);
-      this.showModalError('No se pudo guardar el número telefónico',`Detalle: ${message}`);
-      this.toast.error('No se pudo guardar el número telefónico',message);
-    }});
+      this.showModalError('No se puede asociar esta SIM todavía', 'El flujo atómico disponible requiere una línea móvil vigente o el registro de una SIM nueva sin línea.');
+      return;
+    }
+    this.service.gestionarLineaSim(codigo, {
+      mantenerNumero: !changeNumber,
+      mantenerSim: !changeSim,
+      simDestinoCodigo: changeSim ? this.associationSelectedSim()!.codigoInventario : null,
+      numeroNuevo: normalizedNumber,
+      observaciones: 'Gestión desde ficha de dispositivo'
+    }).subscribe({
+      next: () => this.finishAssociationSave(codigo, `${this.associationSubmitLabel()} realizado correctamente.`),
+      error: error => this.failAssociationSave(error)
+    });
+  }
+  private finishAssociationSave(codigo: number, detail: string): void {
+    this.service.obtener(codigo).subscribe({
+      next: refreshed => { this.item.set(refreshed); this.submitting.set(false); this.closeSimAssociation(); this.showFeedback({ type: 'success', title: 'Gestión de línea / SIM completada', detail }); this.toast.success('Gestión de línea / SIM completada', detail); },
+      error: error => this.failAssociationSave(error)
+    });
+  }
+  private failAssociationSave(error: unknown): void {
+    const message = mobileLineErrorDetail(error);
+    this.submitting.set(false);
+    this.showModalError('No se pudo completar el cambio', message);
+    this.toast.error('No se pudo completar el cambio', message);
   }
    protected open(action: DeviceAction): void { const actor=this.auth.user();if(!actor){this.actionError.set('La sesión no permite identificar al responsable TI.');this.toast.error('Sesión no válida','Vuelva a iniciar sesión antes de registrar una operación.');return;}if(action==='service'&&this.technicalServiceActive()){this.actionErrorTitle.set('No se pudo registrar el envío a servicio técnico');this.actionError.set('El equipo ya se encuentra en servicio técnico.');return;}this.actionForm.reset({ colaboradorId: '', departamentoId: '',recibidoPorId:'', localidad: this.item()?.localidad || '', ubicacionDetalle: this.item()?.ubicacionDetalle || '', estadoId: '',accionLineaExtravio:'',proveedor:'',fechaEnvio: action==='service' ? todayDateInputValue() : '',tipoServicio: action==='service' ? 'DIAGNOSTICO' : '',fallaReportada:'',accesoriosEntregados:'',motivoBaja:'',motivoRecuperacion:'', responsable: actor.nombre, observaciones: '' }); this.searchCollaborator(''); this.resetAssignmentDecision(); this.jointDelivery.set(false); this.deliveryPhone.set(action==='assign-person'&&this.item()&&canDeviceCarrySim(this.item()!) ? smartphonePhoneValue(this.item()!) || '' : ''); this.searchSim(''); this.actionError.set(''); this.actionErrorTitle.set(''); this.action.set(action); }
   protected openState(code: string): void { const state = this.states().find((item) => item.codigo === code); if (!state) return; this.open('state'); this.actionForm.controls.estadoId.setValue(state.id); if(code==='EXTRAVIADO'&&this.item()&&isSmartphoneDevice(this.item()!)&&!this.item()!.simAsociada)this.actionForm.controls.accionLineaExtravio.setValue('NO_APLICA'); }
@@ -873,7 +1277,6 @@ export class DispositivoDetail implements OnInit {
           );
           if (!similar.length) {
             this.assignmentResolution.set('ADD');
-            void this.execute();
             return;
           }
           this.similarAssignedDevices.set({ collaborator, devices: similar });
@@ -886,13 +1289,99 @@ export class DispositivoDetail implements OnInit {
       });
   }
 
+  private executeGeneralReplacement(
+    value: ReturnType<typeof this.actionForm.getRawValue>,
+    actor: { nombre: string }
+  ): void {
+    const oldDevice = this.replacementDevice();
+    const newDevice = this.item();
+    const delivered = this.replacementDelivered() === true;
+    const targetState = delivered
+      ? this.replacementStates().find(state => state.id === this.replacementStateId())
+      : null;
+    if (!oldDevice || !newDevice || (delivered && !targetState)) {
+      this.actionError.set('Completa la informaciÃ³n del reemplazo antes de continuar.');
+      return;
+    }
+    const simAction = this.replacementSimAction() === 'REGISTRAR_SIM_NUEVA'
+      ? 'REGISTRAR_SIM_NUEVA'
+      : oldDevice.simAsociada
+        ? this.replacementSimAction()
+        : 'SIN_SIM';
+    if (oldDevice.simAsociada && !simAction) {
+      this.actionError.set('Resuelve primero qué ocurrirá con la SIM asociada.');
+      return;
+    }
+    this.submitting.set(true);
+    this.actionError.set('');
+    this.actionErrorTitle.set('');
+    this.replacements.crear({
+      colaboradorId: Number(value.colaboradorId),
+      dispositivoAnteriorCodigo: oldDevice.codigoInventario,
+      dispositivoNuevoCodigo: newDevice.codigoInventario,
+      entregaAnterior: delivered,
+      ...(targetState ? { destinoDispositivoAnterior: targetState.codigo as 'DISPONIBLE' | 'RETENIDO_REVISION' | 'DADO_BAJA' } : {}),
+      accionSim: simAction as 'MOVER_SIM_ACTUAL' | 'USAR_SIM_EXISTENTE' | 'REGISTRAR_SIM_NUEVA' | 'SIN_SIM',
+      ...(simAction === 'USAR_SIM_EXISTENTE' ? { simDestinoCodigo: Number(this.replacementSimCode()), conservarNumero: this.replacementKeepNumber() === true } : {}),
+      ...(simAction === 'REGISTRAR_SIM_NUEVA' ? {
+        simNueva: {
+          iccidCodigoFabrica: this.replacementNewIccid().trim(),
+          compania: this.replacementNewCompany().trim() || null,
+          observaciones: this.replacementNewObservations().trim() || null,
+          linea: this.replacementNewLine()!,
+          ...(this.replacementNewLine() === 'NUMERO_NUEVO' ? { numeroTelefonico: this.replacementNewPhone().trim() } : {})
+        }
+      } : {}),
+      ...(this.replacementRequiresBajaReason() ? { motivoBaja: this.replacementBajaMotivo() as import('../../core/models/itam.models').MotivoBaja } : {}),
+      observaciones: value.observaciones.trim() || null
+    }).subscribe({
+      next: replacement => {
+        this.action.set(null);
+        this.submitting.set(false);
+        this.resetAssignmentDecision();
+        const detail = delivered
+          ? `ITAM ${oldDevice.codigoInventario} quedÃ³ en ${targetState!.nombre}.`
+          : `ITAM ${oldDevice.codigoInventario} continÃºa bajo custodia y queda pendiente de devoluciÃ³n.`;
+        this.toast.success('Reemplazo registrado', `El nuevo equipo fue asignado. ${detail}`);
+        this.showFeedback({
+          type: delivered ? 'success' : 'warning',
+          title: delivered ? 'Reemplazo registrado correctamente' : 'Reemplazo con devoluciÃ³n pendiente',
+          detail
+        });
+        this.actasService.crear({
+          colaboradorId: Number(value.colaboradorId),
+          departamentoId: null,
+          recepcionanteId: null,
+          localidad: value.localidad.trim() || newDevice.localidad,
+          responsableTi: actor.nombre,
+          observaciones: value.observaciones.trim() || null,
+          dispositivosCodigos: [newDevice.codigoInventario]
+        }).subscribe({
+          next: acta => this.createdActa.set(acta),
+          error: error => this.toast.warning('Reemplazo registrado', `No fue posible generar el acta: ${errorMessage(error)}`)
+        });
+        void replacement;
+        this.load();
+      },
+      error: error => {
+        this.submitting.set(false);
+        this.replacementConfirmed.set(false);
+        this.actionErrorTitle.set('No se pudo completar el reemplazo');
+        this.actionError.set(errorMessage(error));
+      }
+    });
+  }
+
   private executeReplacementAssignment(
     value: ReturnType<typeof this.actionForm.getRawValue>,
     actor: { nombre: string },
     deliveryPhoneValue: string
   ): void {
-    const oldDevice = this.replacementDevice();
-    const targetState = this.replacementStates().find(state => state.id === this.replacementStateId());
+    this.executeGeneralReplacement(value, actor);
+    return;
+    /*
+    const oldDevice = this.replacementDevice()!;
+    const targetState = this.replacementStates().find(state => state.id === this.replacementStateId())!;
     if (!oldDevice || !targetState) {
       this.actionError.set('Selecciona el equipo anterior y el estado final del reemplazo.');
       return;
@@ -973,6 +1462,9 @@ export class DispositivoDetail implements OnInit {
     });
   }
 
+    */
+  }
+
   protected async execute(): Promise<void> {
     if (this.auth.user()?.rol === 'SOLO_LECTURA') return;
     const action = this.action(); if (!action || this.submitting()) return;
@@ -990,11 +1482,14 @@ export class DispositivoDetail implements OnInit {
       return;
     }
     const deliveryPhoneValue = this.deliveryPhone().trim();
-    if (action === 'assign-person' && this.item() && canDeviceCarrySim(this.item()!) && deliveryPhoneValue && !isChileanPhoneInputValid(deliveryPhoneValue)) { this.actionError.set('Ingresa un número telefónico chileno válido.'); return; }
-    if (action === 'assign-person' && this.jointDelivery() && (!this.selectedSim() || !this.item() || !canDeviceCarrySim(this.item()!) || this.item()!.simAsociada)) { this.actionError.set('Selecciona una SIM disponible para este dispositivo.'); return; }
-    if (action === 'assign-person' && this.jointDelivery() && !isChileanPhoneInputValid(deliveryPhoneValue)) { this.actionError.set('Ingresa un número telefónico chileno válido para la SIM.'); return; }
+    if (action === 'assign-person' && this.assignmentResolution() !== 'REPLACE' && this.item() && canDeviceCarrySim(this.item()!) && deliveryPhoneValue && !isChileanPhoneInputValid(deliveryPhoneValue)) { this.actionError.set('Ingresa un número telefónico chileno válido.'); return; }
+    if (action === 'assign-person' && this.assignmentResolution() !== 'REPLACE' && this.jointDelivery() && (!this.selectedSim() || !this.item() || !canDeviceCarrySim(this.item()!) || this.item()!.simAsociada)) { this.actionError.set('Selecciona una SIM disponible para este dispositivo.'); return; }
+    if (action === 'assign-person' && this.assignmentResolution() !== 'REPLACE' && this.jointDelivery() && !isChileanPhoneInputValid(deliveryPhoneValue)) { this.actionError.set('Ingresa un número telefónico chileno válido para la SIM.'); return; }
     if (action === 'assign-department' && (!value.departamentoId||!value.recibidoPorId)) { this.actionError.set('Selecciona el departamento y el colaborador que recibe.'); return; }
     if (action === 'state' && !value.estadoId) { this.actionError.set('Selecciona un estado.'); return; }
+    if (action === 'return' && this.pendingReplacement() && !this.replacementStateId()) { this.actionError.set('Selecciona el destino del dispositivo anterior.'); return; }
+    if (action === 'return' && this.pendingReplacement() && this.item()?.simAsociada && this.pendingSimDelivered() === null) { this.actionError.set('Indica si la SIM también fue entregada físicamente.'); return; }
+    if (action === 'return' && this.pendingReplacement() && this.replacementRequiresBajaReason() && !this.replacementBajaMotivo()) { this.actionError.set('Selecciona el motivo de baja.'); return; }
     if (action === 'state' && this.isReportingSmartphoneLost() && !value.accionLineaExtravio) { this.actionError.set('Indica qué hacer con la línea telefónica.'); return; }
     if (action === 'recover' && (!value.estadoId || !value.motivoRecuperacion.trim())) { this.actionError.set(!value.estadoId ? 'Selecciona el estado de recuperación.' : 'Ingresa el motivo de recuperación.'); return; }
     if (action === 'service' && this.technicalServiceActive()) { this.actionErrorTitle.set('No se pudo registrar el envío a servicio técnico'); this.actionError.set('El equipo ya se encuentra en servicio técnico.'); return; }
@@ -1009,20 +1504,21 @@ export class DispositivoDetail implements OnInit {
     if (action === 'state' && target?.esTerminal && !await this.confirmation.confirm(`El equipo cambiará a la situación “${target.nombre}”.`, { title: 'Confirmar cambio de situación', confirmLabel: 'Cambiar situación', tone: 'danger' })) return;
     if (action === 'state' && target?.codigo === 'EXTRAVIADO' && !await this.confirmation.confirm('Esta acción marcará el equipo como perdido y quedará registrada en su historial.', { title: 'Reportar equipo perdido', confirmLabel: 'Reportar', tone: 'danger' })) return;
     if (action === 'assign-person' && this.assignmentResolution() === 'REPLACE') {
-      this.executeReplacementAssignment(value, actor, deliveryPhoneValue);
+      this.executeGeneralReplacement(value, actor);
       return;
     }
     const common = { responsable: actor.nombre, observaciones: value.observaciones.trim() || null };
-    let request: Observable<Dispositivo|OrdenServicio|ResultadoDevolucion>;
+    let request: Observable<Dispositivo|OrdenServicio|ResultadoDevolucion|ReemplazoDispositivo>;
     if (action === 'assign-person') request = this.service.asignarColaborador(this.codigo, { ...common, colaboradorId: Number(value.colaboradorId), ...(deliveryPhoneValue && this.item() && canDeviceCarrySim(this.item()!) ? { numeroTelefonico: deliveryPhoneValue } : {}), ...(this.jointDelivery() && this.selectedSim() ? { simCodigoInventario: this.selectedSim()!.codigoInventario } : {}) });
     else if (action === 'assign-department') request = this.service.asignarDepartamento(this.codigo, { ...common, departamentoId: Number(value.departamentoId),recibidoPorId:Number(value.recibidoPorId), localidad: value.localidad.trim() || null, ubicacionDetalle: value.ubicacionDetalle.trim() || null });
+    else if (action === 'return' && this.pendingReplacement()) request = this.replacements.recibir(this.pendingReplacement()!.id, { destinoDispositivoAnterior: this.replacementStates().find(state => state.id === this.replacementStateId())!.codigo as 'DISPONIBLE' | 'RETENIDO_REVISION' | 'DADO_BAJA', ...(this.item()?.simAsociada ? { simEntregada: this.pendingSimDelivered() === true } : {}), ...(this.replacementRequiresBajaReason() ? { motivoBaja: this.replacementBajaMotivo() as import('../../core/models/itam.models').MotivoBaja } : {}), responsable: actor.nombre, observaciones: value.observaciones.trim() || null });
     else if (action === 'return') request = this.service.devolver(this.codigo, common);
     else if(action==='service')request=this.technicalService.crear({dispositivoCodigo:this.codigo,proveedor:value.proveedor.trim()||null,areaSolicitante:value.areaSolicitante.trim()||this.item()?.departamento?.nombre||'Area TI - Aguas San Isidro',contactoServicio:value.contactoServicio.trim()||null,fechaEnvio:value.fechaEnvio||null,tipoServicio:value.tipoServicio as 'GARANTIA'|'REPARACION'|'MANTENCION'|'DIAGNOSTICO',fallaReportada:value.fallaReportada.trim(),accesoriosEntregados:value.accesoriosEntregados.trim()||null,observaciones:value.observaciones.trim()||null,responsable:actor.nombre});
     else if(action==='retire')request=this.service.darBaja(this.codigo,{...common,motivo:value.motivoBaja as import('../../core/models/itam.models').MotivoBaja});
     else request = this.service.cambiarEstado(this.codigo, { ...common, estadoId: Number(value.estadoId), ...(action === 'recover' ? { recuperar: true, motivoRecuperacion: value.motivoRecuperacion.trim() } : {}), ...(action === 'state' && this.isReportingSmartphoneLost() ? { accionLineaExtravio: value.accionLineaExtravio as import('../../core/models/itam.models').AccionLineaExtravio } : {}) });
     this.submitting.set(true); this.actionError.set(''); this.actionErrorTitle.set('');
     request.subscribe({
-      next: (result) => {
+      next: (result: any) => {
         if(action==='service'&&'entregasTemporales' in result){
           const order=result;
           this.activeServiceOrder.set(order); this.action.set(null); this.submitting.set(false); this.showFeedback({type:'success',title:'Equipo enviado a servicio técnico',detail:'La orden de trabajo fue registrada correctamente y el PDF quedó disponible.'}); this.toast.success('Equipo enviado a servicio técnico','La orden de trabajo fue registrada correctamente y el PDF quedó disponible.'); this.load(); return;
