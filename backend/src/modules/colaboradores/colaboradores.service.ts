@@ -204,9 +204,6 @@ export const obtenerInventarioColaborador = async (id:number) => {
       resultado:row.resultado}))};
 };
 
-const MOTIVO_HISTORICO_RECIENTE =
-  "Existe un equipo más reciente asociado al mismo colaborador; no se registra devolución física en sistema.";
-
 const MOTIVO_HISTORICO_SIN_CIERRE =
   "La asociación figura en el historial, pero no existe una devolución física registrada.";
 
@@ -258,13 +255,55 @@ export const clasificarInventarioConciliado = (
   rows: readonly InventarioConciliableRow[]
 ): Pick<InventarioConciliado, "actuales" | "historicos" | "pendientes" | "valorTotalActual"> => {
   const clasificados = new Map<string, ActivoConciliado>();
-  const smartphonesVigentes: InventarioConciliableRow[] = [];
 
   for (const row of rows) {
     const smartphone = esSmartphone(row.tipo_dispositivo);
     const identificacionInsuficiente = smartphone
       ? !esImeiValido(row.imei)
       : !row.numero_serie?.trim() && !row.imei?.trim();
+
+    if (row.vinculo_actual) {
+      if (identificacionInsuficiente) {
+        clasificados.set(
+          row.dispositivo_id,
+          mapActivoConciliado(
+            row,
+            "PENDIENTE_VALIDACION",
+            smartphone
+              ? "El smartphone no tiene un IMEI válido que permita confirmar el activo físico."
+              : "El activo no tiene número de serie ni otro identificador físico suficiente."
+          )
+        );
+      } else if (row.identidad_duplicada) {
+        clasificados.set(
+          row.dispositivo_id,
+          mapActivoConciliado(
+            row,
+            "CONFLICTO_DATOS",
+            "El IMEI o número de serie aparece asociado a más de un colaborador."
+          )
+        );
+      } else if (row.tipo_cierre !== null || row.tiene_devolucion || row.tiene_baja) {
+        clasificados.set(
+          row.dispositivo_id,
+          mapActivoConciliado(
+            row,
+            "CONFLICTO_DATOS",
+            "La custodia actual del dispositivo contradice un cierre registrado en el historial."
+          )
+        );
+      } else {
+        clasificados.set(
+          row.dispositivo_id,
+          mapActivoConciliado(
+            row,
+            "ACTUAL_CONFIRMADO",
+            "La custodia actual del dispositivo corresponde a este colaborador."
+          )
+        );
+      }
+      continue;
+    }
 
     if (identificacionInsuficiente) {
       clasificados.set(
@@ -318,81 +357,23 @@ export const clasificarInventarioConciliado = (
       continue;
     }
 
-    if (!row.vinculo_actual) {
-      const contradiceVinculo = row.colaborador_actual_id !== null;
-      clasificados.set(
-        row.dispositivo_id,
-        mapActivoConciliado(
-          row,
-          contradiceVinculo ? "CONFLICTO_DATOS" : "HISTORICO_PROBABLE",
-          contradiceVinculo
-            ? "El historial y el custodio actual corresponden a colaboradores distintos sin cierre confirmado."
-            : MOTIVO_HISTORICO_SIN_CIERRE
-        )
-      );
-      continue;
-    }
-
-    if (smartphone) {
-      smartphonesVigentes.push(row);
-      continue;
-    }
-
     clasificados.set(
       row.dispositivo_id,
       mapActivoConciliado(
         row,
-        "ACTUAL_PROBABLE",
-        "Es el vínculo vigente disponible y no presenta contradicciones registradas."
+        row.colaborador_actual_id !== null ? "CONFLICTO_DATOS" : "HISTORICO_PROBABLE",
+        row.colaborador_actual_id !== null
+          ? "El historial y el custodio actual corresponden a colaboradores distintos sin cierre confirmado."
+          : MOTIVO_HISTORICO_SIN_CIERRE
       )
     );
   }
 
-  const smartphonesOrdenados = [...smartphonesVigentes].sort((a, b) => {
-    const fecha = new Date(b.fecha_asignacion).getTime() - new Date(a.fecha_asignacion).getTime();
-    if (fecha !== 0) return fecha;
-    return Number(b.evento_asignacion_id ?? 0) - Number(a.evento_asignacion_id ?? 0);
-  });
-  const fechaMasReciente = smartphonesOrdenados[0]
-    ? new Date(smartphonesOrdenados[0].fecha_asignacion).getTime()
-    : null;
-  const ultimosSimultaneos = smartphonesOrdenados.filter(
-    row => new Date(row.fecha_asignacion).getTime() === fechaMasReciente
-  );
-
-  for (const row of smartphonesOrdenados) {
-    const esUltimo = new Date(row.fecha_asignacion).getTime() === fechaMasReciente;
-    if (esUltimo && ultimosSimultaneos.length > 1) {
-      clasificados.set(
-        row.dispositivo_id,
-        mapActivoConciliado(
-          row,
-          "CONFLICTO_DATOS",
-          "Dos o más smartphones comparten la fecha de asignación más reciente; no existe evidencia suficiente para elegir uno."
-        )
-      );
-    } else if (esUltimo) {
-      clasificados.set(
-        row.dispositivo_id,
-        mapActivoConciliado(
-          row,
-          "ACTUAL_PROBABLE",
-          "Es el smartphone con la asignación más reciente y no presenta contradicciones registradas."
-        )
-      );
-    } else {
-      clasificados.set(
-        row.dispositivo_id,
-        mapActivoConciliado(row, "HISTORICO_PROBABLE", MOTIVO_HISTORICO_RECIENTE)
-      );
-    }
-  }
-
   const todos = rows.map(row => clasificados.get(row.dispositivo_id)!);
-  const actuales = todos.filter(item =>
-    ["ACTUAL_CONFIRMADO", "ACTUAL_PROBABLE"].includes(item.clasificacionConciliada)
-  );
+  const vigentesIds = new Set(rows.filter(row => row.vinculo_actual).map(row => row.dispositivo_id));
+  const actuales = todos.filter(item => vigentesIds.has(item.dispositivoId));
   const historicos = todos.filter(item =>
+    !vigentesIds.has(item.dispositivoId) &&
     ["HISTORICO_CONFIRMADO", "HISTORICO_PROBABLE"].includes(item.clasificacionConciliada)
   );
   const pendientes = todos.filter(item =>

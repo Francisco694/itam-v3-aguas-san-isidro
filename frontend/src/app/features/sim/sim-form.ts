@@ -1,5 +1,5 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { AbstractControl, FormBuilder, ReactiveFormsModule, ValidationErrors, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Sim } from '../../core/models/itam.models';
 import { SimService } from '../../core/services/sim.service';
@@ -8,6 +8,13 @@ import { AssetCreatedDialog } from '../../shared/components/asset-created-dialog
 import { PageHeader } from '../../shared/components/page-header/page-header';
 import { ViewState } from '../../shared/components/view-state/view-state';
 import { errorMessage } from '../../shared/utils/error-message';
+
+const validateIccid = (control: AbstractControl): ValidationErrors | null => {
+  const value = String(control.value ?? '').trim();
+  if (!value) return null;
+  if (!/^[\d\s-]+$/.test(value)) return { iccidCharacters: true };
+  return /^\d{19,20}$/.test(value.replace(/[\s-]/g, '')) ? null : { iccidLength: true };
+};
 
 @Component({
   selector: 'app-sim-form',
@@ -44,7 +51,15 @@ import { errorMessage } from '../../shared/utils/error-message';
               [class.invalid]="invalid('iccidCodigoFabrica')"
             />
             @if (invalid('iccidCodigoFabrica')) {
-              <p class="field-error">El ICCID es obligatorio (máximo 32 caracteres).</p>
+              @if (form.controls.iccidCodigoFabrica.hasError('required')) {
+                <p class="field-error">El ICCID es obligatorio.</p>
+              } @else if (form.controls.iccidCodigoFabrica.hasError('iccidCharacters')) {
+                <p class="field-error">El ICCID solo puede contener dígitos, espacios o guiones.</p>
+              } @else if (form.controls.iccidCodigoFabrica.hasError('iccidLength')) {
+                <p class="field-error">El ICCID debe contener 19 o 20 dígitos.</p>
+              } @else {
+                <p class="field-error">El ICCID no puede superar 32 caracteres.</p>
+              }
             }
             @if (iccidStatus() === 'available') { <p class="field-success">✓ ICCID disponible para registrar.</p> }
             @if (iccidStatus() === 'duplicate' && existingIccid(); as existing) {
@@ -118,7 +133,7 @@ export class SimForm implements OnInit {
   protected readonly existingIccid = signal<Sim | null>(null);
   protected readonly created = signal<Sim | null>(null);
   protected readonly form = this.fb.nonNullable.group({
-    iccidCodigoFabrica: ['', [Validators.required, Validators.maxLength(32)]],
+    iccidCodigoFabrica: ['', [Validators.required, Validators.maxLength(32), validateIccid]],
     compania: ['', [Validators.maxLength(100)]],
     observaciones: [''],
     responsable: ['', [Validators.required, Validators.maxLength(150)]],
