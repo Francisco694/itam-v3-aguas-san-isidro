@@ -2,6 +2,7 @@ import '@angular/compiler';
 import type { Dispositivo, HistorialEvento, Sim } from '../../core/models/itam.models';
 import { ApiError } from '../../core/models/api.models';
 import { assetLabelPhone } from '../../shared/components/asset-label/asset-label';
+import { isCellularRouterDevice } from '../../core/utils/device-capabilities';
 import {
   deviceActionErrorMessage,
   deviceTechnicalIdentifier,
@@ -62,6 +63,15 @@ describe('ficha de dispositivo QA-01/03/11', () => {
   it('permite SIM en tipos configurados aunque no sean Smartphones', () => {
     expect(canDeviceCarrySim({ tipo: { nombre: 'Tablet', permiteSim: true } } as Dispositivo)).toBe(true);
     expect(canDeviceCarrySim({ tipo: { nombre: 'Notebook' } } as Dispositivo)).toBe(false);
+  });
+
+  it('permite SIM solo al Router marcado como celular', () => {
+    const normalRouter = { tipo: { nombre: 'Router', permiteSim: false }, atributosEspecificos: { utilizaRedMovil: false }, imei: null } as unknown as Dispositivo;
+    const cellularRouter = { tipo: { nombre: 'Router', permiteSim: false }, atributosEspecificos: { utilizaRedMovil: true }, imei: '359158762297938' } as unknown as Dispositivo;
+    expect(isCellularRouterDevice(normalRouter)).toBe(false);
+    expect(canDeviceCarrySim(normalRouter)).toBe(false);
+    expect(isCellularRouterDevice(cellularRouter)).toBe(true);
+    expect(canDeviceCarrySim(cellularRouter)).toBe(true);
   });
 
   it('distingue un Smartphone sin SIM de una SIM pendiente de número', () => {

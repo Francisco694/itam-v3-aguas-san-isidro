@@ -4,6 +4,7 @@ export type EstadoReemplazo = "PENDIENTE_DEVOLUCION" | "COMPLETADO" | "CANCELADO
 export type DestinoDispositivoAnterior = "DISPONIBLE" | "RETENIDO_REVISION" | "DADO_BAJA";
 export type AccionSimReemplazo = "MOVER_SIM_ACTUAL" | "USAR_SIM_EXISTENTE" | "REGISTRAR_SIM_NUEVA" | "SIN_SIM";
 export type LineaSimNuevaReemplazo = "CONSERVAR_NUMERO" | "NUMERO_NUEVO" | "SIN_LINEA";
+export type LineaSimExistenteReemplazo = "CONSERVAR_NUMERO" | "USAR_NUMERO_SIM" | "NUMERO_NUEVO" | "SIN_LINEA";
 
 export interface RegistrarSimNuevaReemplazoInput {
   iccidCodigoFabrica: string;
@@ -25,6 +26,8 @@ export interface CrearReemplazoInput {
   accionSim?: AccionSimReemplazo;
   simDestinoCodigo?: number;
   conservarNumero?: boolean;
+  lineaSimExistente?: LineaSimExistenteReemplazo;
+  numeroTelefonicoNuevo?: string | null;
   simNueva?: RegistrarSimNuevaReemplazoInput;
   observaciones?: string | null;
   responsable: string;

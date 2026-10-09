@@ -59,6 +59,8 @@ export const crearReemplazoController = asyncHandler(async (req: Request, res: R
     accionSim: parseOptionalEnum(body.accionSim, "accionSim", ["MOVER_SIM_ACTUAL", "USAR_SIM_EXISTENTE", "REGISTRAR_SIM_NUEVA", "SIN_SIM"] as const),
     simDestinoCodigo: parseOptionalPositiveInteger(body.simDestinoCodigo, "simDestinoCodigo") ?? undefined,
     conservarNumero: body.conservarNumero === undefined ? undefined : parseBoolean(body.conservarNumero, "conservarNumero"),
+    lineaSimExistente: parseOptionalEnum(body.lineaSimExistente, "lineaSimExistente", ["CONSERVAR_NUMERO", "USAR_NUMERO_SIM", "NUMERO_NUEVO", "SIN_LINEA"] as const),
+    numeroTelefonicoNuevo: parseOptionalString(body.numeroTelefonicoNuevo, "numeroTelefonicoNuevo", 30),
     simNueva: body.simNueva === undefined ? undefined : (() => {
       const simNueva = parseBodyObject(body.simNueva);
       return {

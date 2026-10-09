@@ -8,7 +8,7 @@ export interface FamiliaCodigoTipoDispositivo {
   etiquetaOperativa: string | null;
 }
 
-export type TipoCampoFormulario = "text" | "select" | "number";
+export type TipoCampoFormulario = "text" | "select" | "number" | "boolean";
 
 export interface CampoEspecificoFormulario {
   clave: string;
@@ -37,11 +37,23 @@ export interface ConfiguracionFormularioTipo {
  */
 export const tipoDispositivoPermiteSim = (
   nombre: string,
-  configuracion?: Pick<ConfiguracionFormularioTipo, "permiteSim"> | null
+  configuracion?: Pick<ConfiguracionFormularioTipo, "permiteSim"> | null,
+  atributos?: Record<string, unknown> | null
 ): boolean => {
+  if (nombre.trim().toUpperCase() === "ROUTER") {
+    return atributos?.utilizaRedMovil === true;
+  }
   if (typeof configuracion?.permiteSim === "boolean") return configuracion.permiteSim;
   return nombre.trim().toUpperCase() === "SMARTPHONE";
 };
+
+export const tipoDispositivoRequiereImei = (
+  nombre: string,
+  requiereImei: boolean,
+  atributos?: Record<string, unknown> | null
+): boolean => requiereImei || (
+  nombre.trim().toUpperCase() === "ROUTER" && atributos?.utilizaRedMovil === true
+);
 
 export interface TipoDispositivo {
   id: string;

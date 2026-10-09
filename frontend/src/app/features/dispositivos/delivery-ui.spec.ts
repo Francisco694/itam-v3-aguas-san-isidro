@@ -96,10 +96,10 @@ describe('Registrar entrega: formulario', () => {
     api.listar.mockReturnValue(of([{ id: '22', codigoInventario: 2002, tipo: { id: '1', nombre: 'Smartphone' }, marca: 'Samsung', modelo: 'A13', estado: { codigo: 'ASIGNADO', nombre: 'Asignado' } }]));
     component.selectCollaborator(person);
     await component.execute(); fixture.detectChanges();
-    expect(fixture.nativeElement.textContent).toContain('ya tiene un equipo del mismo tipo');
+    expect(fixture.nativeElement.textContent).toContain('actualmente bajo custodia');
     expect(fixture.nativeElement.textContent).toContain('Agregar');
     expect(fixture.nativeElement.textContent).toContain('Reemplazar');
-    fixture.nativeElement.querySelector('.assignment-warning .btn--primary').click(); fixture.detectChanges();
+    fixture.nativeElement.querySelectorAll('input[name="assignment-resolution"]')[0].click(); fixture.detectChanges();
     expect(component.assignmentResolution()).toBe('ADD');
   });
   it('al elegir reemplazar solicita el estado final del equipo anterior', async () => {
@@ -112,7 +112,7 @@ describe('Registrar entrega: formulario', () => {
     ]);
     component.selectCollaborator(person);
     await component.execute(); fixture.detectChanges();
-    fixture.nativeElement.querySelector('.assignment-warning .btn--secondary').click(); fixture.detectChanges();
+    fixture.nativeElement.querySelectorAll('input[name="assignment-resolution"]')[1].click(); fixture.detectChanges();
     expect(component.assignmentResolution()).toBe('REPLACE');
     component.chooseReplacementDelivery(true); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('será recibido en bodega');
@@ -124,8 +124,8 @@ describe('Registrar entrega: formulario', () => {
     api.asignarColaborador.mockReturnValue(of({ ...component.item(), codigoInventario: 1445 }));
     component.selectCollaborator(person);
     fixture.detectChanges();
-    expect(fixture.nativeElement.textContent).toContain('Agregar equipo');
-    expect(fixture.nativeElement.textContent).not.toContain('ya tiene un equipo del mismo tipo');
+    expect(fixture.nativeElement.textContent).toContain('Confirmar operación');
+    expect(fixture.nativeElement.textContent).not.toContain('TIPO DE ENTREGA');
     await component.execute();
     expect(api.asignarColaborador).toHaveBeenCalledOnce();
   });
@@ -138,10 +138,56 @@ describe('Registrar entrega: formulario', () => {
     api.listar.mockReturnValue(of(devices));
     component.selectCollaborator(person);
     await component.execute(); fixture.detectChanges();
-    fixture.nativeElement.querySelector('.assignment-warning .btn--secondary').click(); fixture.detectChanges();
+    fixture.nativeElement.querySelectorAll('input[name="assignment-resolution"]')[1].click(); fixture.detectChanges();
     expect(fixture.nativeElement.querySelectorAll('#replacement-device option').length).toBe(2);
     component.selectReplacementDevice('2003', devices as any);
     expect(component.replacementDevice().codigoInventario).toBe(2003);
+  });
+
+  it('lista todos los equipos actuales aunque sean de tipos distintos', async () => {
+    const devices = [
+      { id: '22', codigoInventario: 2002, tipo: { id: '1', nombre: 'Smartphone' }, marca: 'Samsung', modelo: 'A13', estado: { codigo: 'ASIGNADO', nombre: 'Asignado' } },
+      { id: '23', codigoInventario: 2003, tipo: { id: '2', nombre: 'Notebook' }, marca: 'Lenovo', modelo: 'ThinkPad', estado: { codigo: 'ASIGNADO', nombre: 'Asignado' } }
+    ];
+    api.listar.mockReturnValue(of(devices));
+    component.selectCollaborator(person);
+    await component.execute(); fixture.detectChanges();
+    fixture.nativeElement.querySelectorAll('input[name="assignment-resolution"]')[1].click(); fixture.detectChanges();
+    const options = [...fixture.nativeElement.querySelectorAll('#replacement-device option')].map((option: HTMLOptionElement) => option.textContent);
+    expect(options.join(' ')).toContain('2002');
+    expect(options.join(' ')).toContain('2003');
+  });
+
+  it('permite conservar el número actual aunque la SIM nueva tenga otra compañía', async () => {
+    const oldSim = { id: 'old-sim', codigoInventario: 2004, iccidCodigoFabrica: '8956000000000000004', compania: 'CLARO', estado: { codigo: 'ASIGNADA', nombre: 'Asignada' }, lineaMovil: { id: 'line-4', numeroTelefonico: '56912345678', estado: 'ACTIVA', dispositivoId: '22', simId: 'old-sim' } };
+    const oldDevice = { id: '22', codigoInventario: 2002, tipo: { id: '1', nombre: 'Smartphone' }, marca: 'Samsung', modelo: 'A13', estado: { codigo: 'ASIGNADO', nombre: 'Asignado' }, simAsociada: oldSim };
+    api.listar.mockReturnValue(of([oldDevice]));
+    component.states.set([{ id: '1', codigo: 'DISPONIBLE', nombre: 'Disponible', esTerminal: false, activo: true }]);
+    component.selectCollaborator(person);
+    await component.execute(); fixture.detectChanges();
+    fixture.nativeElement.querySelectorAll('input[name="assignment-resolution"]')[1].click(); fixture.detectChanges();
+    component.chooseReplacementDelivery(true);
+    component.replacementStateId.set('1');
+    fixture.detectChanges();
+    fixture.nativeElement.querySelector('.replacement-new-sim-toggle input').click(); fixture.detectChanges();
+    const keepNumber = fixture.nativeElement.querySelectorAll('input[name="replacement-new-line"]')[0] as HTMLInputElement;
+    expect(keepNumber.disabled).toBe(false);
+    expect(fixture.nativeElement.textContent).toContain('+56 9 1234 5678');
+    component.replacementNewCompany.set('WOM'); fixture.detectChanges();
+    keepNumber.click(); fixture.detectChanges();
+    expect(component.replacementNewLine()).toBe('CONSERVAR_NUMERO');
+    expect(fixture.nativeElement.textContent).toContain('se mantendrá y será asociado a la nueva SIM WOM');
+  });
+
+  it('muestra validación inline cuando falta decidir la entrega física del equipo anterior', async () => {
+    api.listar.mockReturnValue(of([{ id: '22', codigoInventario: 2002, tipo: { id: '1', nombre: 'Smartphone' }, marca: 'Samsung', modelo: 'A13', estado: { codigo: 'ASIGNADO', nombre: 'Asignado' } }]));
+    component.selectCollaborator(person);
+    await component.execute(); fixture.detectChanges();
+    fixture.nativeElement.querySelectorAll('input[name="assignment-resolution"]')[1].click(); fixture.detectChanges();
+    await component.confirmReplacement(); fixture.detectChanges();
+    expect(component.actionError()).toBe('');
+    expect(fixture.nativeElement.querySelector('.replacement-delivery-question .field-error').textContent.trim()).toBe('Debes indicar si el equipo anterior fue entregado físicamente.');
+    expect(replacementApi.crear).not.toHaveBeenCalled();
   });
 
   it('reemplazo inmediato usa el endpoint transaccional y no el flujo genérico', async () => {
@@ -149,7 +195,7 @@ describe('Registrar entrega: formulario', () => {
     component.states.set([{ id: '1', codigo: 'DISPONIBLE', nombre: 'Disponible', esTerminal: false, activo: true }]);
     component.selectCollaborator(person);
     await component.execute(); fixture.detectChanges();
-    fixture.nativeElement.querySelector('.assignment-warning .btn--secondary').click();
+    fixture.nativeElement.querySelectorAll('input[name="assignment-resolution"]')[1].click();
     component.chooseReplacementDelivery(true);
     component.replacementStateId.set('1');
     await component.confirmReplacement();
@@ -159,6 +205,7 @@ describe('Registrar entrega: formulario', () => {
       entregaAnterior: true,
       destinoDispositivoAnterior: 'DISPONIBLE'
     }));
+    expect(replacementApi.crear.mock.calls[0][0]).not.toHaveProperty('simNueva');
     expect(api.devolver).not.toHaveBeenCalled();
     expect(api.asignarColaborador).not.toHaveBeenCalled();
   });
@@ -168,7 +215,7 @@ describe('Registrar entrega: formulario', () => {
     api.asignarColaborador.mockReturnValue(of({ ...component.item(), codigoInventario: 1445 }));
     component.selectCollaborator(person);
     await component.execute(); fixture.detectChanges();
-    fixture.nativeElement.querySelector('.assignment-warning .btn--primary').click();
+    fixture.nativeElement.querySelectorAll('input[name="assignment-resolution"]')[0].click();
     await component.execute();
     expect(api.asignarColaborador).toHaveBeenCalledOnce();
     expect(replacementApi.crear).not.toHaveBeenCalled();
@@ -178,7 +225,7 @@ describe('Registrar entrega: formulario', () => {
     api.listar.mockReturnValue(of([{ id: '22', codigoInventario: 2002, tipo: { id: '1', nombre: 'Smartphone' }, marca: 'Samsung', modelo: 'A13', estado: { codigo: 'ASIGNADO', nombre: 'Asignado' } }]));
     component.selectCollaborator(person);
     await component.execute(); fixture.detectChanges();
-    fixture.nativeElement.querySelector('.assignment-warning .btn--ghost').click();
+    component.cancelAssignmentDecision(); fixture.detectChanges();
     expect(replacementApi.crear).not.toHaveBeenCalled();
     expect(api.asignarColaborador).not.toHaveBeenCalled();
     expect(component.assignmentResolution()).toBeNull();
@@ -188,7 +235,7 @@ describe('Registrar entrega: formulario', () => {
     api.listar.mockReturnValue(of([{ id: '22', codigoInventario: 2002, tipo: { id: '1', nombre: 'Smartphone' }, marca: 'Samsung', modelo: 'A13', estado: { codigo: 'ASIGNADO', nombre: 'Asignado' } }]));
     component.selectCollaborator(person);
     await component.execute(); fixture.detectChanges();
-    fixture.nativeElement.querySelector('.assignment-warning .btn--secondary').click(); fixture.detectChanges();
+    fixture.nativeElement.querySelectorAll('input[name="assignment-resolution"]')[1].click(); fixture.detectChanges();
     component.chooseReplacementDelivery(false);
     fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('El dispositivo anterior no ha sido entregado');
@@ -234,7 +281,7 @@ describe('Registrar entrega: formulario', () => {
     api.listar.mockReturnValue(of([{ id: '22', codigoInventario: 2002, tipo: { id: '1', nombre: 'Smartphone' }, marca: 'Samsung', modelo: 'A13', estado: { codigo: 'ASIGNADO', nombre: 'Asignado' }, simAsociada: oldSim, lineaMovil: oldSim.lineaMovil }]));
     component.selectCollaborator(person);
     await component.execute(); fixture.detectChanges();
-    fixture.nativeElement.querySelector('.assignment-warning .btn--secondary').click(); fixture.detectChanges();
+    fixture.nativeElement.querySelectorAll('input[name="assignment-resolution"]')[1].click(); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('SIM: ITAM 777');
     expect(fixture.nativeElement.textContent).toContain('Mover SIM actual al dispositivo nuevo');
     expect(fixture.nativeElement.textContent).toContain('Utilizar otra SIM registrada');
@@ -273,7 +320,7 @@ describe('Registrar entrega: formulario', () => {
       entregaAnterior: true
     }));
   });
-  it('confirma una verificaciÃ³n manual pendiente y evita mostrarla despuÃ©s', async () => {
+  it('confirma una verificación manual pendiente y evita mostrarla después', async () => {
     component.item.update((device: any) => ({ ...device, verificacionFisica: { resultado: 'PENDIENTE' } }));
     await component.verifyManually();
     expect(confirmation.confirm).toHaveBeenCalledOnce();
@@ -344,16 +391,38 @@ describe('Registrar entrega: formulario', () => {
     component.states.set([{ id: '1', codigo: 'DISPONIBLE', nombre: 'Disponible', esTerminal: false, activo: true }]);
     component.selectCollaborator(person);
     await component.execute(); fixture.detectChanges();
-    fixture.nativeElement.querySelector('.assignment-warning .btn--secondary').click(); fixture.detectChanges();
+    fixture.nativeElement.querySelectorAll('input[name="assignment-resolution"]')[1].click(); fixture.detectChanges();
     component.chooseReplacementDelivery(true);
     component.replacementStateId.set('1');
     fixture.detectChanges();
-    fixture.nativeElement.querySelector('input[name="replacement-sim-action"]').click(); fixture.detectChanges();
+    expect(component.replacementSimAction()).toBeNull();
+    expect(fixture.nativeElement.querySelector('#replacement-new-iccid')).toBeNull();
+    fixture.nativeElement.querySelector('.replacement-new-sim-toggle input').click(); fixture.detectChanges();
+    expect(component.replacementSimAction()).toBe('REGISTRAR_SIM_NUEVA');
+    expect(fixture.nativeElement.querySelector('#replacement-new-iccid')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('#replacement-new-company')).not.toBeNull();
+    fixture.nativeElement.querySelector('.replacement-new-sim-toggle input').click(); fixture.detectChanges();
+    expect(component.replacementSimAction()).toBeNull();
+    expect(fixture.nativeElement.querySelector('#replacement-new-iccid')).toBeNull();
+    fixture.nativeElement.querySelector('.replacement-new-sim-toggle input').click(); fixture.detectChanges();
     type('#replacement-new-iccid', '8956000000000000099');
     fixture.nativeElement.querySelector('#replacement-new-iccid + button').click(); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('ICCID disponible');
+    const noLineRadio = fixture.nativeElement.querySelectorAll('input[name="replacement-new-line"]')[2];
+    noLineRadio.click(); fixture.detectChanges();
+    expect(component.replacementNewLine()).toBe('SIN_LINEA');
+    noLineRadio.click(); fixture.detectChanges();
+    expect(component.replacementNewLine()).toBeNull();
+    noLineRadio.click(); fixture.detectChanges();
+    expect(component.replacementNewLine()).toBe('SIN_LINEA');
+    const newLineRadio = fixture.nativeElement.querySelectorAll('input[name="replacement-new-line"]')[1];
+    newLineRadio.click(); fixture.detectChanges();
+    expect(component.replacementNewLine()).toBe('NUMERO_NUEVO');
+    newLineRadio.click(); fixture.detectChanges();
+    expect(component.replacementNewLine()).toBeNull();
     component.chooseReplacementNewLine('NUMERO_NUEVO');
     component.replacementNewPhone.set('+56 9 1234 5678');
+    component.replacementNewCompany.set('Operador');
     await component.confirmReplacement();
     expect(replacementApi.crear).toHaveBeenCalledWith(expect.objectContaining({
       accionSim: 'REGISTRAR_SIM_NUEVA',
@@ -367,5 +436,18 @@ describe('Registrar entrega: formulario', () => {
     component.checkReplacementNewIccid();
     expect(component.replacementExistingSim()).toEqual(sim);
     expect(component.replacementNewIccidStatus()).toBe('existing');
+  });
+  it('calcula opciones de línea de una SIM existente sin duplicar números y permite deseleccionarlas', () => {
+    const oldDevice = { codigoInventario: 2002, numeroTelefonico: '5697000000', simAsociada: null };
+    component.replacementSimAction.set('USAR_SIM_EXISTENTE');
+    component.replacementSimCode.set('555');
+    component.replacementSims.set([{ ...sim, numeroAsociado: '5698000000', lineaMovil: { id: 'line-2', numeroTelefonico: '5698000000' } }]);
+    expect(component.replacementExistingLineOptions(oldDevice).map((option: any) => option.value)).toEqual(['CONSERVAR_NUMERO', 'USAR_NUMERO_SIM', 'NUMERO_NUEVO', 'SIN_LINEA']);
+    component.chooseReplacementExistingLine('USAR_NUMERO_SIM');
+    expect(component.replacementEffectiveExistingLineChoice()).toBe('USAR_NUMERO_SIM');
+    component.chooseReplacementExistingLine(null);
+    expect(component.replacementEffectiveExistingLineChoice()).toBeNull();
+    component.replacementSims.set([{ ...sim, numeroAsociado: null, lineaMovil: null }]);
+    expect(component.replacementExistingLineOptions(oldDevice).map((option: any) => option.value)).toEqual(['CONSERVAR_NUMERO', 'NUMERO_NUEVO', 'SIN_LINEA']);
   });
 });

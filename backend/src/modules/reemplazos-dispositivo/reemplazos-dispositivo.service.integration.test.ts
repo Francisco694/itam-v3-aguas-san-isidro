@@ -887,6 +887,7 @@ test("3C2: conserva el número y deja la SIM anterior sin línea cuando la devol
   await withIsolatedDatabase(async () => {
     const fixture = await createFixture();
     const oldSim = await attachCurrentSim(fixture);
+    await dbQuery("UPDATE itam.sim SET compania = 'CLARO' WHERE id = $1", [oldSim.simId]);
     const oldIccid = await dbQuery<{ iccid: string }>("SELECT iccid_codigo_fabrica AS iccid FROM itam.sim WHERE id = $1", [oldSim.simId]);
     const suffix = (Date.now() % 100000) * 2 + fixtureCounter++;
     const newIccid = `895600000000${String(suffix).padStart(7, "0").slice(-7)}`;
@@ -896,7 +897,7 @@ test("3C2: conserva el número y deja la SIM anterior sin línea cuando la devol
       dispositivoNuevoCodigo: fixture.newCode,
       entregaAnterior: false,
       accionSim: "REGISTRAR_SIM_NUEVA",
-      simNueva: { iccidCodigoFabrica: newIccid, linea: "CONSERVAR_NUMERO" },
+      simNueva: { iccidCodigoFabrica: newIccid, linea: "CONSERVAR_NUMERO", compania: "WOM" },
       responsable: "Prueba SIM nueva"
     }));
 

@@ -27,6 +27,7 @@ import {
   gestionarLineaPorExtravio,
   vincularLineaMovilADispositivo
 } from "../lineas-moviles/lineas-moviles.service";
+import { obtenerLineaPorDispositivo } from "../lineas-moviles/lineas-moviles.repository";
 import type { LineaMovilRow } from "../lineas-moviles/lineas-moviles.types";
 import { toIsoDate, toIsoDateTime } from "../../shared/dates";
 import {
@@ -265,16 +266,23 @@ export const validarIdentificadorDispositivo = async (
 };
 import {
   tipoDispositivoPermiteSim,
+  tipoDispositivoRequiereImei,
+  type CampoEspecificoFormulario,
   type ConfiguracionFormularioTipo
 } from "../tipos-dispositivo/tipos-dispositivo.types";
 
 export const normalizeSpecificAttributes = (
-  attributes: Record<string, string | number | null> | undefined,
-  configuration: ConfiguracionFormularioTipo
-): Record<string, string | number | null> => {
+  attributes: Record<string, string | number | boolean | null> | undefined,
+  configuration: ConfiguracionFormularioTipo,
+  tipoNombre?: string
+): Record<string, string | number | boolean | null> => {
   const provided = attributes ?? {};
+  const fields: CampoEspecificoFormulario[] = [...configuration.camposEspecificos];
+  if (tipoNombre?.trim().toUpperCase() === "ROUTER" && !fields.some((field) => field.clave === "utilizaRedMovil")) {
+    fields.push({ clave: "utilizaRedMovil", etiqueta: "Utiliza red móvil / SIM", tipo: "boolean", requerido: false });
+  }
   const allowed = new Map(
-    configuration.camposEspecificos.map((field) => [field.clave, field])
+    fields.map((field) => [field.clave, field])
   );
   const unknown = Object.keys(provided).find((key) => !allowed.has(key));
   if (unknown) {
@@ -283,14 +291,22 @@ export const normalizeSpecificAttributes = (
     );
   }
 
-  const normalized: Record<string, string | number | null> = {};
-  for (const field of configuration.camposEspecificos) {
+  const normalized: Record<string, string | number | boolean | null> = {};
+  for (const field of fields) {
     const value = provided[field.clave];
     const empty = value === undefined || value === null || value === "";
     if (field.requerido && empty) {
       throw new ValidationError(`${field.etiqueta} es obligatorio.`);
     }
     if (empty) continue;
+
+    if (field.tipo === "boolean") {
+      if (typeof value !== "boolean") {
+        throw new ValidationError(`${field.etiqueta} debe ser verdadero o falso.`);
+      }
+      normalized[field.clave] = value;
+      continue;
+    }
 
     if (field.tipo === "number") {
       if (typeof value !== "number" || !Number.isFinite(value)) {
@@ -421,7 +437,8 @@ const mapDispositivo = (
     configuracionFormulario: row.tipo_dispositivo_configuracion_formulario,
     permiteSim: tipoDispositivoPermiteSim(
       row.tipo_dispositivo_nombre,
-      row.tipo_dispositivo_configuracion_formulario
+      row.tipo_dispositivo_configuracion_formulario,
+      row.atributos_especificos
     ),
     familiaCodigoInventario:
       row.tipo_familia_id &&
@@ -629,7 +646,8 @@ export const asociarLineaADispositivo = async (
     });
     if (!tipoDispositivoPermiteSim(
       dispositivo.tipo_dispositivo_nombre,
-      dispositivo.tipo_dispositivo_configuracion_formulario
+      dispositivo.tipo_dispositivo_configuracion_formulario,
+      dispositivo.atributos_especificos
     )) {
       throw new ValidationError("El tipo de dispositivo no está configurado para llevar SIM.");
     }
@@ -816,15 +834,25 @@ export const crearNuevoDispositivo = async (
     );
     const atributosEspecificos = normalizeSpecificAttributes(
       input.atributosEspecificos,
-      tipo.configuracion_formulario
+      tipo.configuracion_formulario,
+      tipo.nombre
     );
+    const requiereImei = tipoDispositivoRequiereImei(
+      tipo.nombre,
+      tipo.requiere_imei,
+      atributosEspecificos
+    );
+    const imei = input.imei?.trim() || null;
+    if (requiereImei && !imei) {
+      throw new ValidationError("El IMEI es obligatorio para este tipo de dispositivo.");
+    }
     const codigoInventario = await generateInventoryCodeByFamilyId(
       tipo.familia_codigo_inventario_id!,
       "DISPOSITIVO",
       client
     );
     const dispositivo = await crearDispositivo(
-      { ...input, atributosEspecificos },
+      { ...input, imei: tipo.nombre.trim().toUpperCase() === "ROUTER" && !atributosEspecificos.utilizaRedMovil ? null : imei, atributosEspecificos },
       codigoInventario,
       estadoDisponible.id,
       client
@@ -957,12 +985,37 @@ export const actualizarDispositivoExistente = async (
         );
       }
     }
+    const tipoFinalNombre = nuevoTipo?.nombre ?? anterior.tipo_dispositivo_nombre;
+    const tipoFinalConfig = nuevoTipo?.configuracion_formulario ?? anterior.tipo_dispositivo_configuracion_formulario;
+    const tipoFinalRequiereImei = nuevoTipo?.requiere_imei ?? anterior.tipo_dispositivo_requiere_imei;
     if (input.atributosEspecificos !== undefined || nuevoTipo) {
       input.atributosEspecificos = normalizeSpecificAttributes(
         input.atributosEspecificos,
-        nuevoTipo?.configuracion_formulario ??
-          anterior.tipo_dispositivo_configuracion_formulario
+        tipoFinalConfig,
+        tipoFinalNombre
       );
+    }
+    const atributosFinales = input.atributosEspecificos ?? anterior.atributos_especificos;
+    const requiereImei = tipoDispositivoRequiereImei(
+      tipoFinalNombre,
+      tipoFinalRequiereImei,
+      atributosFinales
+    );
+    const imeiFinal = input.imei !== undefined ? input.imei?.trim() || null : anterior.imei;
+    if (requiereImei && !imeiFinal) {
+      throw new ValidationError("El IMEI es obligatorio para este tipo de dispositivo.");
+    }
+    if (tipoFinalNombre.trim().toUpperCase() === "ROUTER" && atributosFinales.utilizaRedMovil !== true) {
+      const simAsociada = anterior.sim_id
+        ? await obtenerSimPorId(anterior.sim_id, client, true)
+        : await obtenerSimPorDispositivoId(anterior.dispositivo_id, client);
+      const lineaAsociada = await obtenerLineaPorDispositivo(anterior.dispositivo_id, client, true);
+      if (simAsociada || lineaAsociada) {
+        throw new ConflictError("No puede desactivar la conectividad móvil mientras exista una SIM o línea móvil asociada al dispositivo.");
+      }
+      input.imei = null;
+    } else if (input.imei !== undefined) {
+      input.imei = imeiFinal;
     }
     const dispositivo = await actualizarDispositivo(
       codigoInventario,
@@ -1154,7 +1207,8 @@ export const asignarAColaborador = async (
 
     const permiteSim = tipoDispositivoPermiteSim(
       anterior.tipo_dispositivo_nombre,
-      anterior.tipo_dispositivo_configuracion_formulario
+      anterior.tipo_dispositivo_configuracion_formulario,
+      anterior.atributos_especificos
     );
     const numeroEntregaNormalizado = input.numeroTelefonico?.trim()
       ? normalizarNumeroTelefonicoChileno(input.numeroTelefonico)
@@ -1729,7 +1783,8 @@ export const cambiarEstadoDispositivoExistente = async (
       && estado.codigo === "EXTRAVIADO"
       && tipoDispositivoPermiteSim(
         anterior.tipo_dispositivo_nombre,
-        anterior.tipo_dispositivo_configuracion_formulario
+        anterior.tipo_dispositivo_configuracion_formulario,
+        anterior.atributos_especificos
       )
     ) {
       const sim = anterior.sim_codigo_inventario === null

@@ -1,6 +1,7 @@
 import type { PoolClient } from "pg";
 import { pool } from "../../config/database";
 import { currentUserId } from "../../shared/auth-context";
+import { AppError } from "../../shared/errors";
 import type {
   EstadoLineaMovil,
   LineaMovilRow,
@@ -266,7 +267,7 @@ export const sincronizarVinculoLineaSim = async (
   simAnteriorId: string | null = null
 ): Promise<void> => {
   const linea = await obtenerLineaPorId(lineaId, client, true);
-  if (!linea) return;
+  if (!linea) throw new AppError(500, "SIM_LINE_SAVE_UNCONFIRMED", "No se encontró la línea que se debía asociar.");
 
   const simAnterior = simAnteriorId && simAnteriorId !== simId
     ? simAnteriorId
@@ -317,16 +318,19 @@ export const sincronizarVinculoLineaSim = async (
     return;
   }
 
-  await client.query(
+  const lineaUpdate = await client.query(
     `UPDATE itam.lineas_moviles SET sim_id = $2, actualizado_en = NOW() WHERE id = $1`,
     [lineaId, simId]
   );
-  await client.query(
+  const simUpdate = await client.query(
     `UPDATE itam.sim
         SET linea_movil_id = $2, numero_asociado = $3
       WHERE id = $1`,
     [simId, lineaId, linea.numero_telefonico]
   );
+  if (lineaUpdate.rowCount !== 1 || simUpdate.rowCount !== 1) {
+    throw new AppError(500, "SIM_LINE_SAVE_UNCONFIRMED", "No se actualizaron ambas referencias de la asociación SIM y línea.");
+  }
   await client.query(
     `INSERT INTO itam.lineas_moviles_sim_historial
        (linea_movil_id, sim_id, motivo, usuario_id)

@@ -68,6 +68,14 @@ describe('SimService Fase 2/3B', () => {
     request.flush({ success: true, data: { id: '8', numeroTelefonico: '56911112222', estado: 'ACTIVA', sim: null, dispositivo: null, colaborador: null, departamento: null } });
   });
 
+  it('envia el cambio de numero de una SIM por el endpoint oficial de ficha', () => {
+    service.actualizar(2014, { numeroAsociado: '56976708988' }).subscribe();
+    const request = http.expectOne(`${environment.apiUrl}/sim/2014`);
+    expect(request.request.method).toBe('PATCH');
+    expect(request.request.body).toEqual({ numeroAsociado: '56976708988' });
+    request.flush({ success: true, data: { codigoInventario: 2014, lineaMovil: { numeroTelefonico: '56976708988' } } });
+  });
+
   it('envia el registro inline de SIM como una unica operacion compuesta', () => {
     devices.registrarSimNueva(1450, {
       iccidCodigoFabrica: '8956032262763686246',

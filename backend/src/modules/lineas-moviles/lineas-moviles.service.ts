@@ -1,7 +1,7 @@
 import type { PoolClient } from "pg";
 import { AppError, ConflictError, ValidationError } from "../../shared/errors";
 import { normalizarNumeroTelefonicoChileno } from "../sim/sim-phone";
-import { insertarHistorialSim, obtenerEstadoSimPorCodigo } from "../sim/sim.repository";
+import { insertarHistorialSim, obtenerEstadoSimPorCodigo, obtenerSimPorId } from "../sim/sim.repository";
 import type { SimRow } from "../sim/sim.types";
 import {
   actualizarLineaPorExtravio,
@@ -11,6 +11,7 @@ import {
   guardarLineaMovilDeDispositivo,
   insertarHistorialLineaMovil,
   liberarLineaActualDeSim,
+  actualizarNumeroLineaMovil,
   obtenerLineaPorDispositivo,
   obtenerLineaPorNumero,
   obtenerLineaPorNumeroConContexto,
@@ -197,6 +198,105 @@ export const vincularLineaMovil = async (
     client
   );
   return { linea, creada, reemplazo };
+};
+
+/**
+ * Registra o asocia una línea a una SIM sin convertir a la SIM en un
+ * dispositivo. La línea móvil es la fuente oficial del número; la SIM solo
+ * mantiene el vínculo físico actual.
+ */
+export const vincularLineaMovilASim = async (
+  numeroTelefonico: string,
+  sim: SimRow,
+  responsable: string,
+  observaciones: string | null | undefined,
+  client: PoolClient
+): Promise<{ linea: LineaMovilRow; creada: boolean; numeroActualizado: boolean }> => {
+  const numero = normalizarNumeroTelefonicoChileno(numeroTelefonico);
+  const lineaActualDeSim = await obtenerLineaPorSim(sim.sim_id, client, true);
+  const lineaDelNumero = await obtenerLineaPorNumero(numero, client, true);
+
+  if (lineaActualDeSim && lineaDelNumero && lineaActualDeSim.id !== lineaDelNumero.id) {
+    throw new ConflictError("El número telefónico ya está asociado a otra línea móvil.");
+  }
+
+  const lineaObjetivo = lineaActualDeSim ?? lineaDelNumero;
+  if (lineaObjetivo?.estado === "DADA_BAJA") {
+    throw new ConflictError("La línea móvil está dada de baja y requiere reactivación administrativa.");
+  }
+  if (lineaObjetivo?.sim_id && lineaObjetivo.sim_id !== sim.sim_id) {
+    const otraSim = await obtenerSimPorId(lineaObjetivo.sim_id, client);
+    throw new ConflictError(`Esta línea ya se encuentra asociada a la SIM ITAM ${otraSim?.sim_codigo_inventario ?? lineaObjetivo.sim_id}.`);
+  }
+  if (lineaObjetivo?.dispositivo_id && lineaObjetivo.dispositivo_id !== sim.dispositivo_id) {
+    throw new ConflictError("Esta línea ya se encuentra asociada a otro dispositivo.");
+  }
+  if (lineaObjetivo?.colaborador_id && lineaObjetivo.colaborador_id !== sim.colaborador_id) {
+    throw new ConflictError("Esta línea ya tiene otro colaborador asociado.");
+  }
+
+  let linea = lineaObjetivo;
+  const creada = !linea;
+  const numeroAnterior = linea?.numero_telefonico ?? null;
+
+  if (!linea) {
+    linea = await crearLineaMovil(numero, sim.colaborador_id, sim.dispositivo_id, sim.sim_id, client);
+  } else if (linea.numero_telefonico !== numero) {
+    linea = await actualizarNumeroLineaMovil(linea.id, numero, client);
+  }
+
+  await sincronizarVinculoLineaSim(
+    linea.id,
+    sim.sim_id,
+    "ASOCIACION_LINEA_SIM_DESDE_FICHA",
+    client
+  );
+
+  if (creada) {
+    await insertarHistorialLineaMovil(
+      linea.id,
+      "LINEA_MOVIL_CREADA",
+      responsable,
+      observaciones,
+      {
+        numeroTelefonico: numero,
+        simId: sim.sim_id,
+        simCodigoInventario: sim.sim_codigo_inventario,
+        descripcion: "Línea móvil corporativa creada desde la ficha de la SIM."
+      },
+      client
+    );
+  } else if (numeroAnterior && numeroAnterior !== numero) {
+    await insertarHistorialLineaMovil(
+      linea.id,
+      "LINEA_MOVIL_NUMERO_ACTUALIZADO",
+      responsable,
+      observaciones,
+      {
+        numeroAnterior,
+        numeroNuevo: numero,
+        simId: sim.sim_id,
+        simCodigoInventario: sim.sim_codigo_inventario,
+        descripcion: "Número telefónico actualizado desde la ficha de la SIM."
+      },
+      client
+    );
+  }
+
+  await insertarHistorialLineaMovil(
+    linea.id,
+    "LINEA_MOVIL_ASOCIADA_A_SIM",
+    responsable,
+    observaciones,
+    {
+      simId: sim.sim_id,
+      simCodigoInventario: sim.sim_codigo_inventario,
+      descripcion: "Línea móvil registrada o asociada a una SIM física sin exigir dispositivo."
+    },
+    client
+  );
+
+  return { linea, creada, numeroActualizado: numeroAnterior !== null && numeroAnterior !== numero };
 };
 
 export const vincularLineaMovilADispositivo = async (

@@ -63,6 +63,7 @@ import type {
   AccionSimReemplazo,
   CrearReemplazoInput,
   DestinoDispositivoAnterior,
+  LineaSimExistenteReemplazo,
   RecibirReemplazoInput,
   ReemplazoDispositivo,
   ReemplazoDispositivoRow
@@ -97,12 +98,6 @@ const assertColaboradorActivoLocal = (collaborator: { activo: boolean } | null):
 const assertCustodiaLibre = (device: DispositivoRow): void => {
   if (device.colaborador_id || device.departamento_id) {
     throw new ConflictError("El dispositivo nuevo ya tiene un custodio vigente.");
-  }
-};
-
-const assertSameType = (anterior: DispositivoRow, nuevo: DispositivoRow): void => {
-  if (anterior.tipo_dispositivo_id !== nuevo.tipo_dispositivo_id) {
-    throw new ValidationError("El dispositivo anterior debe ser del mismo tipo que el nuevo.");
   }
 };
 
@@ -402,12 +397,12 @@ const crearLineaNuevaParaReemplazo = async (
   const existente = await obtenerLineaPorNumero(numero, client, true);
   if (existente) {
     throw new ConflictError(
-      `El nÃºmero telefÃ³nico ya existe en una lÃ­nea con estado ${existente.estado}; no se reutiliza automÃ¡ticamente.`
+      `El número telefónico ya existe en una línea con estado ${existente.estado}; no se reutiliza automáticamente.`
     );
   }
   const delDispositivo = await obtenerLineaPorDispositivo(nuevo.dispositivo_id, client, true);
   if (delDispositivo) {
-    throw new ConflictError("El dispositivo nuevo ya tiene una lÃ­nea mÃ³vil registrada.");
+    throw new ConflictError("El dispositivo nuevo ya tiene una línea móvil registrada.");
   }
   const linea = await crearLineaMovil(
     numero,
@@ -449,21 +444,21 @@ const crearSimNuevaEnReemplazo = async (
   const spec = input.simNueva;
   if (!spec) throw new ValidationError("Debe informar los datos de la SIM nueva.");
   if (!nuevo.colaborador_id) {
-    throw new ConflictError("La custodia de SIM en dispositivos asignados a departamentos aÃºn no estÃ¡ modelada.");
+    throw new ConflictError("La custodia de SIM en dispositivos asignados a departamentos aún no está modelada.");
   }
 
   let linea: Awaited<ReturnType<typeof obtenerLineaPorId>> = null;
   if (spec.linea === "CONSERVAR_NUMERO") {
-    if (!oldLine) throw new ConflictError("No existe una lÃ­nea actual para conservar el nÃºmero.");
+    if (!oldLine) throw new ConflictError("No existe una línea actual para conservar el número.");
     if (oldLine.estado !== "ACTIVA") {
-      throw new ConflictError(`La lÃ­nea actual estÃ¡ en estado ${oldLine.estado} y no puede transferirse automÃ¡ticamente.`);
+      throw new ConflictError(`La línea actual está en estado ${oldLine.estado} y no puede transferirse automáticamente.`);
     }
     if (oldLine.sim_id && oldSim && oldLine.sim_id !== oldSim.sim_id) {
-      throw new ConflictError("La lÃ­nea actual y la SIM anterior son inconsistentes.");
+      throw new ConflictError("La línea actual y la SIM anterior son inconsistentes.");
     }
     linea = oldLine;
   } else if (spec.linea === "NUMERO_NUEVO") {
-    if (!spec.numeroTelefonico?.trim()) throw new ValidationError("Debe informar el nÃºmero telefÃ³nico nuevo.");
+    if (!spec.numeroTelefonico?.trim()) throw new ValidationError("Debe informar el número telefónico nuevo.");
     linea = await crearLineaNuevaParaReemplazo(spec.numeroTelefonico, nuevo, input, replacementId, client);
   }
 
@@ -567,6 +562,7 @@ const resolverSimReemplazo = async (
 
   let targetSim: Awaited<ReturnType<typeof obtenerSimPorCodigo>> = null;
   let targetLine: Awaited<ReturnType<typeof obtenerLineaPorId>> = null;
+  let lineaSimExistente: LineaSimExistenteReemplazo | null = null;
   if (accion === "USAR_SIM_EXISTENTE") {
     targetSim = await obtenerSimPorCodigo(input.simDestinoCodigo!, client, true);
     if (!targetSim) throw new NotFoundError("SIM destino no encontrada.");
@@ -578,11 +574,19 @@ const resolverSimReemplazo = async (
     if (targetLine && (targetLine.dispositivo_id || (targetLine.colaborador_id && targetLine.colaborador_id !== nuevo.colaborador_id))) {
       throw new ConflictError("La línea de la SIM seleccionada ya está bajo otra custodia.");
     }
-    if (input.conservarNumero === true && targetLine) {
-      throw new ConflictError("La SIM seleccionada ya tiene una línea; no es seguro conservar el número actual.");
+    lineaSimExistente = input.lineaSimExistente
+      ?? (input.conservarNumero === true ? "CONSERVAR_NUMERO" : targetLine ? "USAR_NUMERO_SIM" : "SIN_LINEA");
+    if (lineaSimExistente === "CONSERVAR_NUMERO" && !oldLine) {
+      throw new ConflictError("No existe una línea actual para conservar el número.");
     }
-    if (input.conservarNumero === false && !targetLine) {
+    if (lineaSimExistente === "USAR_NUMERO_SIM" && !targetLine) {
       throw new ConflictError("La SIM seleccionada no tiene una línea/número que pueda utilizarse.");
+    }
+    if (lineaSimExistente === "NUMERO_NUEVO" && !input.numeroTelefonicoNuevo?.trim()) {
+      throw new ValidationError("Debe informar el número telefónico nuevo.");
+    }
+    if (!input.entregaAnterior && lineaSimExistente === "CONSERVAR_NUMERO") {
+      throw new ConflictError("No se puede mover el número del equipo anterior mientras su devolución esté pendiente.");
     }
   }
 
@@ -611,7 +615,7 @@ const resolverSimReemplazo = async (
     lineaDestinoId: targetLine?.id ?? null
   };
 
-  const lineaTransferida = nuevaSimTransfiereLinea || (accion === "USAR_SIM_EXISTENTE" && input.conservarNumero === true);
+  const lineaTransferida = nuevaSimTransfiereLinea || (accion === "USAR_SIM_EXISTENTE" && lineaSimExistente === "CONSERVAR_NUMERO");
   const simReceiptContext = oldSim && input.entregaAnterior && accion !== "MOVER_SIM_ACTUAL"
     ? {
         simId: oldSim.sim_id,
@@ -629,8 +633,16 @@ const resolverSimReemplazo = async (
 
   if (!input.entregaAnterior) {
     if (accion === "USAR_SIM_EXISTENTE") {
+      if ((lineaSimExistente === "NUMERO_NUEVO" || lineaSimExistente === "SIN_LINEA") && targetLine?.sim_id) {
+        await desasociarVinculoLineaSim(targetLine.id, targetLine.sim_id, client);
+        await insertarHistorialLineaMovil(targetLine.id, "REEMPLAZO_SIM_LINEA_DESVINCULADA", input.responsable, input.observaciones, detalle, client);
+      }
       await asociarSimAReemplazo(targetSim!, nuevo, input, client);
-      if (targetLine) {
+      if (lineaSimExistente === "NUMERO_NUEVO") {
+        const nuevaLinea = await crearLineaNuevaParaReemplazo(input.numeroTelefonicoNuevo!, nuevo, input, replacementId, client);
+        await sincronizarVinculoLineaSim(nuevaLinea!.id, targetSim!.sim_id, "REEMPLAZO_SIM_NUMERO_NUEVO", client);
+        await insertarHistorialLineaMovil(nuevaLinea!.id, "REEMPLAZO_SIM_ASOCIADA", input.responsable, input.observaciones, detalle, client);
+      } else if (lineaSimExistente === "USAR_NUMERO_SIM" && targetLine) {
         await actualizarVinculosLinea(targetLine.id, nuevo.dispositivo_id, nuevo.colaborador_id, client);
         await insertarHistorialLineaMovil(targetLine.id, "REEMPLAZO_SIM_ASOCIADA", input.responsable, input.observaciones, detalle, client);
       }
@@ -665,23 +677,33 @@ const resolverSimReemplazo = async (
     await insertarHistorialSim(oldSim!.sim_id, "REEMPLAZO_MOVER_SIM", oldSim!.estado_id, assignedState.id, input.responsable, input.observaciones, detalle, client);
   } else if (accion === "REGISTRAR_SIM_NUEVA") {
     // La SIM y la línea ya fueron creadas/resueltas dentro de la transacción.
-  } else if (input.conservarNumero === true) {
+  } else if (accion === "USAR_SIM_EXISTENTE" && lineaSimExistente === "CONSERVAR_NUMERO") {
     if (!oldLine) throw new ConflictError("No existe una línea actual para conservar el número.");
     if (oldSim) await desasociarSimDeDispositivo(oldSim.sim_codigo_inventario, client);
     await sincronizarVinculoLineaSim(oldLine.id, targetSim!.sim_id, "REEMPLAZO_USAR_SIM_CONSERVAR_NUMERO", client, oldSim?.sim_id ?? null);
     await actualizarVinculosLinea(oldLine.id, nuevo.dispositivo_id, nuevo.colaborador_id, client);
     await asociarSimAReemplazo(targetSim!, nuevo, input, client);
     await insertarHistorialLineaMovil(oldLine.id, "REEMPLAZO_USAR_SIM_CONSERVAR_NUMERO", input.responsable, input.observaciones, detalle, client);
-  } else {
-    if (!targetLine) throw new ConflictError("La SIM seleccionada no tiene una línea/número que pueda utilizarse.");
+  } else if (accion === "USAR_SIM_EXISTENTE") {
+    if (lineaSimExistente === "USAR_NUMERO_SIM" && !targetLine) throw new ConflictError("La SIM seleccionada no tiene una línea/número que pueda utilizarse.");
     if (oldLine) {
       await actualizarVinculosLinea(oldLine.id, null, null, client);
       await insertarHistorialLineaMovil(oldLine.id, "REEMPLAZO_SIM_RECEPCIONADA", input.responsable, input.observaciones, detalle, client);
     }
     if (oldSim) await desasociarSimDeDispositivo(oldSim.sim_codigo_inventario, client);
+    if ((lineaSimExistente === "NUMERO_NUEVO" || lineaSimExistente === "SIN_LINEA") && targetLine?.sim_id) {
+      await desasociarVinculoLineaSim(targetLine.id, targetLine.sim_id, client);
+      await insertarHistorialLineaMovil(targetLine.id, "REEMPLAZO_SIM_LINEA_DESVINCULADA", input.responsable, input.observaciones, detalle, client);
+    }
     await asociarSimAReemplazo(targetSim!, nuevo, input, client);
-    await actualizarVinculosLinea(targetLine.id, nuevo.dispositivo_id, nuevo.colaborador_id, client);
-    await insertarHistorialLineaMovil(targetLine.id, "REEMPLAZO_USAR_SIM_LINEA_DESTINO", input.responsable, input.observaciones, detalle, client);
+    if (lineaSimExistente === "NUMERO_NUEVO") {
+      const nuevaLinea = await crearLineaNuevaParaReemplazo(input.numeroTelefonicoNuevo!, nuevo, input, replacementId, client);
+      await sincronizarVinculoLineaSim(nuevaLinea!.id, targetSim!.sim_id, "REEMPLAZO_SIM_NUMERO_NUEVO", client);
+      await insertarHistorialLineaMovil(nuevaLinea!.id, "REEMPLAZO_SIM_ASOCIADA", input.responsable, input.observaciones, detalle, client);
+    } else if (lineaSimExistente === "USAR_NUMERO_SIM") {
+      await actualizarVinculosLinea(targetLine!.id, nuevo.dispositivo_id, nuevo.colaborador_id, client);
+      await insertarHistorialLineaMovil(targetLine!.id, "REEMPLAZO_USAR_SIM_LINEA_DESTINO", input.responsable, input.observaciones, detalle, client);
+    }
   }
 
   await insertarHistorialDispositivo(nuevo.dispositivo_id, "REEMPLAZO_SIM_RESUELTA", nuevo.estado_id, nuevo.estado_id, input.responsable, input.observaciones, detalle, client);
@@ -811,7 +833,7 @@ export const crearReemplazoDispositivo = async (input: CrearReemplazoInput): Pro
   if (input.dispositivoAnteriorCodigo === input.dispositivoNuevoCodigo) throw new ValidationError("El dispositivo anterior y el nuevo deben ser distintos.");
   if (input.entregaAnterior) assertDestinoValido(input.destinoDispositivoAnterior);
   const actorId = currentUserId();
-  if (!actorId) throw new ConflictError("La sesiÃ³n no permite identificar al usuario ejecutor.");
+  if (!actorId) throw new ConflictError("La sesión no permite identificar al usuario ejecutor.");
 
   const client = await pool.connect();
   try {
@@ -826,7 +848,6 @@ export const crearReemplazoDispositivo = async (input: CrearReemplazoInput): Pro
     const anterior = await obtenerDispositivoPorCodigo(input.dispositivoAnteriorCodigo, client, true);
     const nuevo = await obtenerDispositivoPorCodigo(input.dispositivoNuevoCodigo, client, true);
     if (!anterior || !nuevo) throw new NotFoundError("No se encontró uno de los dispositivos del reemplazo.");
-    assertSameType(anterior, nuevo);
     assertNoTerminal(anterior);
     assertNoTerminal(nuevo);
     if (anterior.colaborador_id !== String(input.colaboradorId) || anterior.departamento_id) {
@@ -951,7 +972,7 @@ export const crearReemplazoDispositivo = async (input: CrearReemplazoInput): Pro
 
 export const recibirReemplazoPendiente = async (id: string, input: RecibirReemplazoInput): Promise<ReemplazoDispositivo> => {
   const actorId = currentUserId();
-  if (!actorId) throw new ConflictError("La sesiÃ³n no permite identificar al usuario ejecutor.");
+  if (!actorId) throw new ConflictError("La sesión no permite identificar al usuario ejecutor.");
   assertDestinoValido(input.destinoDispositivoAnterior);
   const client = await pool.connect();
   try {

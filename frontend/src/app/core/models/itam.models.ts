@@ -13,7 +13,7 @@ export interface InventoryCodeFamily {
 }
 export interface InventoryCodeFamilyInput { nombreFamilia: string; prefijo: string; estrategiaCodigo: InventoryCodeStrategy; activo?: boolean; }
 export interface PrefixSuggestion { prefijo: string | null; disponible: boolean; mensaje: string; }
-export type TipoCampoFormulario = 'text' | 'select' | 'number';
+export type TipoCampoFormulario = 'text' | 'select' | 'number' | 'boolean';
 export interface CampoEspecificoFormulario { clave: string; etiqueta: string; tipo: TipoCampoFormulario; requerido: boolean; maxLength?: number; min?: number; max?: number; opciones?: string[]; }
 export interface ConfiguracionFormularioTipo { mostrarMarca: boolean; mostrarModelo: boolean; mostrarNumeroSerie: boolean; mostrarImei?: boolean; camposEspecificos: CampoEspecificoFormulario[]; permiteSim?: boolean; }
 export interface FamiliaCodigoTipoDispositivo { id: string; nombre: string; prefijo: string; activo: boolean; estrategiaCodigo: InventoryCodeStrategy; agrupaTipos: boolean; etiquetaOperativa: string | null; }
@@ -54,7 +54,7 @@ export interface Dispositivo {
   tipo: TipoDispositivo;
   numeroSerie: string | null; imei: string | null; localidad: string | null; ubicacionDetalle: string | null;
   observaciones: string | null; fechaRegistro: string; fechaIngresoInventario: string; creadoEn: string; actualizadoEn: string; estado: EstadoResumen;
-  atributosEspecificos: Record<string, string | number | null>;
+  atributosEspecificos: Record<string, string | number | boolean | null>;
   valorComercial: number;
   facturaAdquisicion:{id:string;numeroFactura:string;fechaFactura:string|null;proveedor:string|null;montoTotal:number|null;observaciones:string|null;referenciaDocumental:string|null;documento:FacturaDocumento|null}|null;
   colaborador: ColaboradorResumen | null; departamento: DepartamentoResumen | null; recibidoPor: ColaboradorResumen | null; simAsociada: SimAsociadaResumen | null; lineaMovil: LineaMovilResumen | null; numeroTelefonico: string | null; labelPhone?: string | null; tipoCustodia: 'NONE'|'COLABORADOR'|'DEPARTAMENTO';
@@ -133,7 +133,7 @@ export interface ReporteInventario {
   movimientos:{registrados:number;asignaciones:number;devoluciones:number;enviosServicioTecnico:number;retornosServicioTecnico:number;bajas:number};
   organizacion:Array<{departamentoId:string;departamento:string;dependencia:string|null;cantidad:number;valor:number}>;
 }
-export interface DispositivoInput { codigoInventario?: number; tipoDispositivoId: number; marca?: string | null; modelo?: string | null; numeroSerie?: string | null; imei?: string | null; valorComercial?: number; localidad?: string | null; ubicacionDetalle?: string | null; observaciones?: string | null; atributosEspecificos?: Record<string, string | number | null>; responsable?: string; }
+export interface DispositivoInput { codigoInventario?: number; tipoDispositivoId: number; marca?: string | null; modelo?: string | null; numeroSerie?: string | null; imei?: string | null; valorComercial?: number; localidad?: string | null; ubicacionDetalle?: string | null; observaciones?: string | null; atributosEspecificos?: Record<string, string | number | boolean | null>; responsable?: string; }
 export interface ResponsableInput { responsable: string; observaciones?: string | null; }
 export interface AsignarDispositivoColaboradorInput extends ResponsableInput { colaboradorId: number; simCodigoInventario?: number; numeroTelefonico?: string | null; }
 export interface AsignarDispositivoDepartamentoInput extends ResponsableInput { departamentoId: number; recibidoPorId: number; localidad?: string | null; ubicacionDetalle?: string | null; }
@@ -144,6 +144,7 @@ export interface ResultadoDevolucion {dispositivo:Dispositivo;comprobante:Compro
 export type EstadoReemplazo = 'PENDIENTE_DEVOLUCION'|'COMPLETADO'|'CANCELADO';
 export type DestinoDispositivoAnterior = 'DISPONIBLE'|'RETENIDO_REVISION'|'DADO_BAJA';
 export type AccionSimReemplazo = 'MOVER_SIM_ACTUAL'|'USAR_SIM_EXISTENTE'|'REGISTRAR_SIM_NUEVA'|'SIN_SIM';
+export type LineaSimExistenteReemplazo = 'CONSERVAR_NUMERO'|'USAR_NUMERO_SIM'|'NUMERO_NUEVO'|'SIN_LINEA';
 export type LineaSimNuevaReemplazo = 'CONSERVAR_NUMERO'|'NUMERO_NUEVO'|'SIN_LINEA';
 export interface RegistrarSimNuevaReemplazoInput {
   iccidCodigoFabrica: string;
@@ -181,6 +182,8 @@ export interface CrearReemplazoDispositivoInput {
   accionSim?:AccionSimReemplazo;
   simDestinoCodigo?:number;
   conservarNumero?:boolean;
+  lineaSimExistente?:LineaSimExistenteReemplazo;
+  numeroTelefonicoNuevo?:string|null;
   simNueva?:RegistrarSimNuevaReemplazoInput;
   observaciones?:string|null;
 }

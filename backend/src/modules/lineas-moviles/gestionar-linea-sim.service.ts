@@ -138,7 +138,8 @@ export const gestionarLineaSimEnTransaccion = async (
 
   const permiteSim = tipoDispositivoPermiteSim(
     dispositivo.tipo_dispositivo_nombre,
-    dispositivo.tipo_dispositivo_configuracion_formulario
+    dispositivo.tipo_dispositivo_configuracion_formulario,
+    dispositivo.atributos_especificos
   );
   if (!permiteSim) {
     throw new ValidationError(

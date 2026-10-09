@@ -59,7 +59,7 @@ export interface DispositivoResumen {
   localidad: string | null;
   ubicacionDetalle: string | null;
   observaciones: string | null;
-  atributosEspecificos: Record<string, string | number | null>;
+  atributosEspecificos: Record<string, string | number | boolean | null>;
   valorComercial: number;
   facturaAdquisicion:{id:string;numeroFactura:string;fechaFactura:string|null;proveedor:string|null;montoTotal:number|null;observaciones:string|null;referenciaDocumental:string|null;documento:{nombreOriginal:string;mimeType:string;tamanoBytes:number}|null}|null;
   fechaRegistro: string;
@@ -116,7 +116,7 @@ export interface DispositivoRow {
   localidad: string | null;
   ubicacion_detalle: string | null;
   observaciones: string | null;
-  atributos_especificos: Record<string, string | number | null>;
+  atributos_especificos: Record<string, string | number | boolean | null>;
   valor_comercial: string | number;
   factura_adquisicion_id:string|null;
   numero_factura:string|null;
@@ -208,7 +208,7 @@ export interface CrearDispositivoInput {
   localidad?: string | null;
   ubicacionDetalle?: string | null;
   observaciones?: string | null;
-  atributosEspecificos?: Record<string, string | number | null>;
+  atributosEspecificos?: Record<string, string | number | boolean | null>;
   valorComercial?: number;
   responsable: string;
 }
@@ -222,7 +222,7 @@ export interface ActualizarDispositivoInput {
   localidad?: string | null;
   ubicacionDetalle?: string | null;
   observaciones?: string | null;
-  atributosEspecificos?: Record<string, string | number | null>;
+  atributosEspecificos?: Record<string, string | number | boolean | null>;
   valorComercial?: number;
   responsable: string;
 }

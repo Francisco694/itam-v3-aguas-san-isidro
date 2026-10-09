@@ -3,8 +3,10 @@ import test from "node:test";
 import type { PoolClient } from "pg";
 import { pool } from "../../config/database";
 import { gestionarLineaSimEnTransaccion } from "./gestionar-linea-sim.service";
+import { vincularLineaMovilASim } from "./lineas-moviles.service";
 import { registrarSimNuevaEnTransaccion } from "./registrar-sim-linea.service";
 import { obtenerLineaPorNumeroConContexto } from "./lineas-moviles.repository";
+import { obtenerSimPorCodigo } from "../sim/sim.repository";
 
 type Fixture = {
   deviceCode: number;
@@ -357,6 +359,61 @@ test("búsqueda oficial devuelve contexto aunque la línea no tenga SIM", async 
     assert.equal(row.numero_telefonico, number);
     assert.equal(row.sim_id, null);
     assert.equal(row.dispositivo_id, null);
+  });
+});
+
+test("registra una línea en una SIM disponible sin dispositivo ni colaborador", async () => {
+  await withTransaction(async (client) => {
+    const suffix = `${Date.now()}${sequence++}`.slice(-7);
+    const simCode = 895000 + Number(suffix);
+    const number = `569${String(10000000 + Number(suffix)).slice(-8)}`;
+    const state = await client.query<{ id: string }>(
+      "SELECT id FROM itam.estados WHERE tipo_entidad = 'SIM' AND codigo = 'DISPONIBLE' LIMIT 1"
+    );
+    assert.ok(state.rows[0]?.id);
+    const inserted = await client.query<{ id: string }>(
+      `INSERT INTO itam.sim (codigo_inventario, iccid_codigo_fabrica, estado_id)
+       VALUES ($1, $2, $3) RETURNING id`,
+      [simCode, `895603111111${suffix}`, state.rows[0]!.id]
+    );
+    const sim = await obtenerSimPorCodigo(simCode, client, true);
+    assert.ok(sim);
+    assert.equal(sim.dispositivo_id, null);
+    assert.equal(sim.colaborador_id, null);
+
+    const result = await vincularLineaMovilASim(
+      number,
+      sim,
+      "TEST_SIM_SIN_DISPOSITIVO",
+      null,
+      client
+    );
+    const refs = await client.query<{
+      line_device: string | null;
+      line_collaborator: string | null;
+      line_sim: string | null;
+      sim_line: string | null;
+      history_active: string;
+    }>(
+      `SELECT
+         linea.dispositivo_id::text AS line_device,
+         linea.colaborador_id::text AS line_collaborator,
+         linea.sim_id::text AS line_sim,
+         sim.linea_movil_id::text AS sim_line,
+         (SELECT COUNT(*)::text FROM itam.lineas_moviles_sim_historial h
+           WHERE h.linea_movil_id = linea.id AND h.sim_id = sim.id AND h.fecha_fin IS NULL) AS history_active
+       FROM itam.lineas_moviles linea
+       JOIN itam.sim sim ON sim.id = $1
+      WHERE linea.id = $2`,
+      [inserted.rows[0]!.id, result.linea.id]
+    );
+
+    assert.equal(result.linea.numero_telefonico, number);
+    assert.equal(refs.rows[0]!.line_device, null);
+    assert.equal(refs.rows[0]!.line_collaborator, null);
+    assert.equal(refs.rows[0]!.line_sim, inserted.rows[0]!.id);
+    assert.equal(refs.rows[0]!.sim_line, result.linea.id);
+    assert.equal(refs.rows[0]!.history_active, "1");
   });
 });
 

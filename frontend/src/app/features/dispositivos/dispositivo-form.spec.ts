@@ -1,6 +1,6 @@
 import { ConfiguracionFormularioTipo, TipoDispositivo } from '../../core/models/itam.models';
 import { ApiError } from '../../core/models/api.models';
-import { allowsDeviceCreation, assetFieldVisibility, deviceConflictMessage, operationalTypeOptions, typesForOperationalGroup } from './dispositivo-form';
+import { allowsDeviceCreation, assetFieldVisibility, deviceConflictMessage, operationalTypeOptions, requiresImeiForDevice, typesForOperationalGroup } from './dispositivo-form';
 
 const defaultConfig: ConfiguracionFormularioTipo = {
   mostrarMarca: true, mostrarModelo: true, mostrarNumeroSerie: true,
@@ -35,16 +35,23 @@ describe('formulario dinámico de activos', () => {
 
   it('muestra un conflicto claro para IMEI duplicado', () => {
     expect(deviceConflictMessage(
-      new ApiError('CONFLICT', 'Ya existe un recurso con alguno de los identificadores informados.', 409),
+      new ApiError('CONFLICT', 'Este IMEI ya está registrado en ITAM.', 409),
       { imei: '123456789012345', numeroSerie: '' },
     )).toBe('Ya existe un dispositivo registrado con este IMEI.');
   });
 
   it('muestra un conflicto claro para número de serie duplicado', () => {
     expect(deviceConflictMessage(
-      new ApiError('CONFLICT', 'Ya existe un recurso con alguno de los identificadores informados.', 409),
+      new ApiError('CONFLICT', 'Este número de serie ya está registrado en ITAM.', 409),
       { imei: '', numeroSerie: 'SERIE-001' },
     )).toBe('Ya existe un dispositivo registrado con este número de serie.');
+  });
+
+  it('no convierte un 409 genérico en duplicado solo porque hay una serie escrita', () => {
+    expect(deviceConflictMessage(
+      new ApiError('CONFLICT', 'La operación no pudo completarse.', 409),
+      { imei: '', numeroSerie: 'SERIE-001' },
+    )).toBe('La operación no pudo completarse.');
   });
 
   it('conserva visible el tipo legado del equipo durante su edición', () => {
@@ -68,6 +75,13 @@ describe('formulario dinámico de activos', () => {
     for (const name of ['Notebook', 'Monitor', 'PC']) {
       expect(assetFieldVisibility(type(name))).toMatchObject({ numeroSerie: true, imei: false });
     }
+  });
+
+  it('exige IMEI para Router solo cuando usa red móvil', () => {
+    const router = type('Router');
+    expect(assetFieldVisibility(router).imei).toBe(false);
+    expect(requiresImeiForDevice(router, false)).toBe(false);
+    expect(requiresImeiForDevice(router, true)).toBe(true);
   });
 
   it('el selector operacional no muestra prefijos ni familias técnicas', () => {

@@ -117,7 +117,7 @@ const assertNoProtectedPatchFields = (
 
 const parseOptionalSpecificAttributes = (
   value: unknown
-): Record<string, string | number | null> | undefined => {
+): Record<string, string | number | boolean | null> | undefined => {
   if (value === undefined) return undefined;
   if (
     value === null ||
@@ -132,7 +132,7 @@ const parseOptionalSpecificAttributes = (
     throw new ValidationError("atributosEspecificos admite hasta 20 campos.");
   }
 
-  const parsed: Record<string, string | number | null> = {};
+  const parsed: Record<string, string | number | boolean | null> = {};
   for (const [key, attribute] of entries) {
     if (!/^[a-z][A-Za-z0-9]{0,49}$/.test(key)) {
       throw new ValidationError(`La clave ${key} no es válida.`);
@@ -140,7 +140,8 @@ const parseOptionalSpecificAttributes = (
     if (
       attribute !== null &&
       typeof attribute !== "string" &&
-      typeof attribute !== "number"
+      typeof attribute !== "number" &&
+      typeof attribute !== "boolean"
     ) {
       throw new ValidationError(`El atributo ${key} tiene un tipo no válido.`);
     }

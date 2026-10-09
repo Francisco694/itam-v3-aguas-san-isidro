@@ -2,7 +2,7 @@ import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { LucideDownload, LucideExternalLink, LucideFileText, LucideMapPin, LucidePackagePlus, LucideSave, LucideTrash2 } from '@lucide/angular';
-import { Subject, catchError, debounceTime, distinctUntilChanged, forkJoin, map, of, switchMap, takeUntil, tap } from 'rxjs';
+import { Subject, catchError, debounceTime, distinctUntilChanged, forkJoin, map, of, switchMap, takeUntil, tap, throwError } from 'rxjs';
 import { ApiError } from '../../core/models/api.models';
 import { CampoEspecificoFormulario, Dispositivo, FacturaDocumento, TipoDispositivo, TipoIdentificadorDispositivo, ValidacionIdentificadorDispositivo } from '../../core/models/itam.models';
 import { DispositivosService } from '../../core/services/dispositivos.service';
@@ -13,6 +13,7 @@ import { AssetCreatedDialog } from '../../shared/components/asset-created-dialog
 import { PageHeader } from '../../shared/components/page-header/page-header';
 import { ViewState } from '../../shared/components/view-state/view-state';
 import { errorMessage } from '../../shared/utils/error-message';
+import { isRouterType } from '../../core/utils/device-capabilities';
 
 export const COMMERCIAL_VALUE_PATTERN = /^\d+$/;
 
@@ -22,6 +23,28 @@ export interface IdentifierValidationState {
   existing?: ValidacionIdentificadorDispositivo;
 }
 
+interface PartialCreationState {
+  device: Dispositivo;
+  message: string;
+}
+
+interface InvoiceSaveFailure {
+  kind: 'invoice';
+  device: Dispositivo;
+  error: unknown;
+}
+
+const isInvoiceSaveFailure = (error: unknown): error is InvoiceSaveFailure =>
+  !!error && typeof error === 'object' && (error as { kind?: unknown }).kind === 'invoice';
+
+export const identifierConflictKind = (error: unknown): TipoIdentificadorDispositivo | null => {
+  if (!(error instanceof ApiError) || error.status !== 409) return null;
+  const backendMessage = error.message.toLowerCase();
+  if (backendMessage.includes('imei')) return 'imei';
+  if (backendMessage.includes('serie')) return 'serie';
+  return null;
+};
+
 export const normalizeDeviceIdentifier = (value: string): string => value.trim().toUpperCase();
 
 export const allowsDeviceCreation = (type: TipoDispositivo): boolean =>
@@ -29,23 +52,17 @@ export const allowsDeviceCreation = (type: TipoDispositivo): boolean =>
 
 export const deviceConflictMessage = (
   error: unknown,
-  identifiers: Pick<{ imei: string; numeroSerie: string }, 'imei' | 'numeroSerie'>,
+  _identifiers: Pick<{ imei: string; numeroSerie: string }, 'imei' | 'numeroSerie'>,
 ): string => {
   if (!(error instanceof ApiError) || error.status !== 409) {
     return errorMessage(error);
   }
 
-  const backendMessage = error.message.toLowerCase();
-  if (backendMessage.includes('imei')) {
+  const conflictKind = identifierConflictKind(error);
+  if (conflictKind === 'imei') {
     return 'Ya existe un dispositivo registrado con este IMEI.';
   }
-  if (backendMessage.includes('serie')) {
-    return 'Ya existe un dispositivo registrado con este número de serie.';
-  }
-  if (identifiers.imei.trim()) {
-    return 'Ya existe un dispositivo registrado con este IMEI.';
-  }
-  if (identifiers.numeroSerie.trim()) {
+  if (conflictKind === 'serie') {
     return 'Ya existe un dispositivo registrado con este número de serie.';
   }
   return errorMessage(error);
@@ -53,6 +70,11 @@ export const deviceConflictMessage = (
 
 export const requiresImei = (type: TipoDispositivo | null): boolean =>
   type?.requiereImei ?? false;
+
+export const requiresImeiForDevice = (
+  type: TipoDispositivo | null,
+  usesMobileNetwork = false,
+): boolean => requiresImei(type) || (isRouterType(type) && usesMobileNetwork);
 
 export const assetFieldVisibility = (type: TipoDispositivo | null) => ({
   marca: type?.configuracionFormulario.mostrarMarca ?? false,
@@ -102,6 +124,7 @@ export const typesForOperationalGroup = (
           <h2>Identificación del activo</h2><p>El código ITAM se asigna automáticamente al guardar.</p>
         </div></header>
         @if (apiError()) { <div class="notice notice--error">{{ apiError() }}</div> }
+        @if (partialCreation(); as partial) { <div class="notice notice--warning"><strong>Dispositivo creado correctamente</strong><span>ITAM {{ partial.device.codigoInventario }} fue creado, pero no se pudieron guardar los antecedentes de adquisición: {{ partial.message }}</span><a [routerLink]="['/dispositivos', partial.device.codigoInventario]">Ver dispositivo creado</a></div> }
         <div class="form-grid">
           <div class="field"><label>Código ITAM</label><input class="code" value="Se generará automáticamente al guardar" disabled /></div>
           <div class="field"><label for="asset-type">Tipo de activo *</label>
@@ -124,7 +147,8 @@ export const typesForOperationalGroup = (
             @if (visibility().marca) { <div class="field"><label for="marca">Marca</label><input id="marca" maxlength="100" formControlName="marca" /></div> }
             @if (visibility().modelo) { <div class="field"><label for="modelo">Modelo</label><input id="modelo" maxlength="150" formControlName="modelo" /></div> }
             @if (visibility().numeroSerie) { <div class="field"><label for="serie">Número de serie</label><input class="code" id="serie" maxlength="150" formControlName="numeroSerie" [class.invalid]="identifierInvalid('serie')" />@if (identifierState('serie'); as state) { @switch (state.status) { @case ('validating') { <p class="hint identifier-status">Validando disponibilidad...</p> } @case ('available') { <p class="hint identifier-status identifier-status--available">Disponible para registrar.</p> } @case ('duplicate') { <p class="field-error identifier-status">Este número de serie ya está registrado en ITAM.</p> @if (state.existing; as existing) { <p class="hint">Equipo existente: ITAM {{ existing.codigoInventario }} · {{ existing.marca || '' }}{{ existing.marca && existing.modelo ? ' ' : '' }}{{ existing.modelo || '' }}</p><a class="identifier-link" [routerLink]="['/dispositivos', existing.codigoInventario]">Ver equipo registrado</a> } } @case ('error') { <p class="field-error identifier-status">No se pudo validar el número de serie. Intente nuevamente.</p> } } }</div> }
-            @if (visibility().imei) { <div class="field"><label for="imei">IMEI</label><input class="code" id="imei" maxlength="30" formControlName="imei" [class.invalid]="identifierInvalid('imei')" />@if (identifierState('imei'); as state) { @switch (state.status) { @case ('validating') { <p class="hint identifier-status">Validando disponibilidad...</p> } @case ('available') { <p class="hint identifier-status identifier-status--available">Disponible para registrar.</p> } @case ('duplicate') { <p class="field-error identifier-status">Este IMEI ya está registrado en ITAM.</p> @if (state.existing; as existing) { <p class="hint">Equipo existente: ITAM {{ existing.codigoInventario }} · {{ existing.marca || '' }}{{ existing.marca && existing.modelo ? ' ' : '' }}{{ existing.modelo || '' }}</p><a class="identifier-link" [routerLink]="['/dispositivos', existing.codigoInventario]">Ver equipo registrado</a> } } @case ('error') { <p class="field-error identifier-status">No se pudo validar el IMEI. Intente nuevamente.</p> } } }</div> }
+            @if (isRouter(selectedType())) { <div class="field span-2 router-mobile-toggle"><label><input type="checkbox" [formControl]="attributesForm.controls.utilizaRedMovil" (change)="onMobileConnectivityChange()" /> Utiliza red móvil / SIM</label><p class="hint">Active esta opción si el router incorpora módem celular 4G, LTE o 5G.</p></div> }
+            @if (imeiVisible()) { <div class="field"><label for="imei">IMEI{{ imeiRequired() ? ' *' : '' }}</label><input class="code" id="imei" maxlength="30" formControlName="imei" [class.invalid]="identifierInvalid('imei')" />@if (isRouter(selectedType())) { <p class="hint">Identificador del módem celular del router.</p> }@if (identifierState('imei'); as state) { @switch (state.status) { @case ('validating') { <p class="hint identifier-status">Validando disponibilidad...</p> } @case ('available') { <p class="hint identifier-status identifier-status--available">Disponible para registrar.</p> } @case ('duplicate') { <p class="field-error identifier-status">Este IMEI ya está registrado en ITAM.</p> @if (state.existing; as existing) { <p class="hint">Equipo existente: ITAM {{ existing.codigoInventario }} · {{ existing.marca || '' }}{{ existing.marca && existing.modelo ? ' ' : '' }}{{ existing.modelo || '' }}</p><a class="identifier-link" [routerLink]="['/dispositivos', existing.codigoInventario]">Ver equipo registrado</a> } } @case ('error') { <p class="field-error identifier-status">No se pudo validar el IMEI. Intente nuevamente.</p> } } } @if (imeiRequired() && form.controls.imei.invalid && form.controls.imei.touched) { <p class="field-error">El IMEI es obligatorio para un router con conectividad móvil.</p> }</div> }
             @if (selectedType()?.nombre === 'Impresora') { <div class="field"><label for="printer-state">Estado</label><input id="printer-state" value="Disponible (automático)" disabled /></div> }
             <div class="field"><label for="commercial-value">Valor comercial (CLP)</label><input id="commercial-value" type="number" min="0" step="1" formControlName="valorComercial" /><p class="hint">Ingrese solamente el valor numérico, sin puntos ni signo peso.</p>@if(form.controls.valorComercial.invalid&&form.controls.valorComercial.touched){<p class="field-error">Debe ser un valor entero mayor o igual a cero.</p>}</div>
             <ng-container formGroupName="atributosEspecificos">
@@ -133,6 +157,7 @@ export const typesForOperationalGroup = (
                   @switch (field.tipo) {
                     @case ('select') { <select [id]="'specific-' + field.clave" [formControlName]="field.clave"><option value="">Seleccionar</option>@for (option of field.opciones ?? []; track option) { <option [value]="option">{{ option }}</option> }</select> }
                     @case ('number') { <input type="number" [id]="'specific-' + field.clave" [attr.min]="field.min ?? null" [attr.max]="field.max ?? null" [formControlName]="field.clave" /> }
+                    @case ('boolean') { <label class="specific-toggle"><input type="checkbox" [id]="'specific-' + field.clave" [formControlName]="field.clave" /> {{ field.etiqueta }}</label> }
                     @default { <input [id]="'specific-' + field.clave" [attr.maxlength]="field.maxLength ?? 250" [formControlName]="field.clave" /> }
                   }
                   @if (specificInvalid(field)) { <p class="field-error">{{ field.etiqueta }} es obligatorio o contiene un valor inválido.</p> }
@@ -194,14 +219,18 @@ export class DispositivoForm implements OnInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly destroy$ = new Subject<void>();
+  private editingDevice: Dispositivo | null = null;
   protected id = '';
   protected codigo = 0;
   protected readonly loading = signal(false);
   protected readonly submitting = signal(false);
   protected readonly apiError = signal('');
+  protected readonly identifierConflict = signal<TipoIdentificadorDispositivo | null>(null);
+  protected readonly partialCreation = signal<PartialCreationState | null>(null);
   protected readonly types = signal<TipoDispositivo[]>([]);
   protected readonly editingTypeId = signal('');
   protected readonly created = signal<Dispositivo | null>(null);
+  protected readonly isRouter = isRouterType;
   protected readonly invoiceFile = signal<File | null>(null);
   protected readonly invoiceFileError = signal('');
   protected readonly existingInvoiceDocument = signal<FacturaDocumento | null>(null);
@@ -210,7 +239,8 @@ export class DispositivoForm implements OnInit, OnDestroy {
     serie: signal<IdentifierValidationState>({ status: 'idle' }),
     imei: signal<IdentifierValidationState>({ status: 'idle' })
   };
-  protected readonly attributesForm = this.fb.group({ partNumber: [''], tipoCable: [''], longitud: [''], potencia: [''], tipoAdaptador: [''], cantidadPuertos: [''], nombrePeriferico: [''], tamanoPulgadas: [''], hostname: [''], hostnameIp: [''], mac: [''], ip: [''] });
+  private identifierValidationGeneration = 0;
+  protected readonly attributesForm = this.fb.group({ partNumber: [''], tipoCable: [''], longitud: [''], potencia: [''], tipoAdaptador: [''], cantidadPuertos: [''], nombrePeriferico: [''], tamanoPulgadas: [''], hostname: [''], hostnameIp: [''], mac: [''], ip: [''], utilizaRedMovil: [false] });
   protected readonly form = this.fb.nonNullable.group({
     tipoPrincipal: ['', Validators.required], tipoDispositivoId: [''], marca: ['', Validators.maxLength(100)], modelo: ['', Validators.maxLength(150)],
     numeroSerie: ['', Validators.maxLength(150)], imei: ['', Validators.maxLength(30)], valorComercial: [0, [Validators.required,Validators.min(0),Validators.pattern(COMMERCIAL_VALUE_PATTERN)]], localidad: ['', Validators.maxLength(120)], ubicacionDetalle: ['', Validators.maxLength(250)],
@@ -222,6 +252,9 @@ export class DispositivoForm implements OnInit, OnDestroy {
     return value.startsWith('group:') ? value.slice(6) : '';
   }
   protected visibility() { return assetFieldVisibility(this.selectedType()); }
+  protected usesMobileNetwork(): boolean { return isRouterType(this.selectedType()) && this.attributesForm.controls.utilizaRedMovil.value === true; }
+  protected imeiVisible(): boolean { return this.visibility().imei || this.usesMobileNetwork(); }
+  protected imeiRequired(): boolean { return requiresImeiForDevice(this.selectedType(), this.usesMobileNetwork()); }
 
   protected primaryOptions(): { value: string; label: string }[] {
     return operationalTypeOptions(this.types(), this.editingTypeId());
@@ -245,20 +278,26 @@ export class DispositivoForm implements OnInit, OnDestroy {
       map((value) => normalizeDeviceIdentifier(value)),
       distinctUntilChanged(),
       tap((value) => {
+        this.identifierValidationGeneration += 1;
+        if (this.identifierConflict() === kind) {
+          this.identifierConflict.set(null);
+          this.apiError.set('');
+        }
         if (value.length < 4 || !this.identifierVisible(kind)) this.setIdentifierState(kind, { status: 'idle' });
         else this.setIdentifierState(kind, { status: 'validating' });
       }),
       debounceTime(400),
       switchMap((value) => {
+        const generation = this.identifierValidationGeneration;
         if (value.length < 4 || !this.identifierVisible(kind)) return of(null);
         return this.service.validarIdentificadorDispositivo(kind, value, this.codigo || undefined).pipe(
-          map((result) => ({ result })),
-          catchError(() => of({ result: null }))
+          map((result) => ({ result, generation })),
+          catchError(() => of({ result: null, generation }))
         );
       }),
       takeUntil(this.destroy$)
     ).subscribe((response) => {
-      if (!response) return;
+      if (!response || response.generation !== this.identifierValidationGeneration || this.created() || this.partialCreation()) return;
       if (!response.result) { this.setIdentifierState(kind, { status: 'error' }); return; }
       this.setIdentifierState(kind, response.result.disponible
         ? { status: 'available' }
@@ -266,10 +305,14 @@ export class DispositivoForm implements OnInit, OnDestroy {
     });
   }
   private identifierVisible(kind: TipoIdentificadorDispositivo): boolean {
-    return kind === 'imei' ? this.visibility().imei : this.visibility().numeroSerie;
+    return kind === 'imei' ? this.imeiVisible() : this.visibility().numeroSerie;
   }
   private setIdentifierState(kind: TipoIdentificadorDispositivo, state: IdentifierValidationState): void {
     this.identifierStates[kind].set(state);
+    if (state.status === 'available' && this.identifierConflict() === kind) {
+      this.identifierConflict.set(null);
+      this.apiError.set('');
+    }
     const control = kind === 'imei' ? this.form.controls.imei : this.form.controls.numeroSerie;
     const errors = { ...(control.errors ?? {}) };
     delete errors['duplicateIdentifier'];
@@ -282,13 +325,14 @@ export class DispositivoForm implements OnInit, OnDestroy {
     return this.identifierState(kind).status === 'duplicate' || (control.invalid && (control.dirty || control.touched));
   }
   protected saveDisabled(): boolean {
-    if (this.submitting()) return true;
+    if (this.submitting() || this.created() || this.partialCreation()) return true;
     return (['imei', 'serie'] as TipoIdentificadorDispositivo[]).some((kind) => {
       const state = this.identifierState(kind);
       return this.identifierVisible(kind) && (state.status === 'validating' || state.status === 'duplicate');
     });
   }
   private patchDevice(device: Dispositivo): void {
+    this.editingDevice = device;
     this.codigo = device.codigoInventario;
     this.editingTypeId.set(device.tipo.id);
     const grouped = device.tipo.familiaCodigoInventario?.agrupaTipos;
@@ -298,10 +342,22 @@ export class DispositivoForm implements OnInit, OnDestroy {
       marca: device.marca || '', modelo: device.modelo || '', numeroSerie: device.numeroSerie || '', imei: device.imei || '', localidad: device.localidad || '',
       ubicacionDetalle: device.ubicacionDetalle || '', valorComercial:device.valorComercial, observaciones: device.observaciones || '', atributosEspecificos: Object.fromEntries(Object.entries(device.atributosEspecificos).map(([key, value]) => [key, value === null ? '' : String(value)])),
       numeroFactura:device.facturaAdquisicion?.numeroFactura||'',fechaFactura:device.facturaAdquisicion?.fechaFactura||'',proveedorFactura:device.facturaAdquisicion?.proveedor||'',montoFactura:device.facturaAdquisicion?.montoTotal||0,observacionesFactura:device.facturaAdquisicion?.observaciones||'' });
+    this.attributesForm.controls.utilizaRedMovil.setValue(
+      isRouterType(device.tipo) && (device.atributosEspecificos['utilizaRedMovil'] === true || !!device.imei || !!device.simAsociada || !!device.lineaMovil),
+      { emitEvent: false }
+    );
     this.configureSpecificValidators();
   }
   protected onPrimarySelection(): void { const value = this.form.controls.tipoPrincipal.value; this.form.controls.tipoDispositivoId.setValue(value.startsWith('group:') ? '' : value); this.clearTechnicalFields(); this.configureSpecificValidators(); }
   protected onConcreteTypeSelection(): void { this.clearTechnicalFields(); this.configureSpecificValidators(); }
+  protected onMobileConnectivityChange(): void {
+    if (!this.usesMobileNetwork() && this.editingDevice && (this.editingDevice.simAsociada || this.editingDevice.lineaMovil)) {
+      this.attributesForm.controls.utilizaRedMovil.setValue(true, { emitEvent: false });
+      this.apiError.set('No puede desactivar la conectividad móvil mientras exista una SIM o línea móvil asociada al dispositivo.');
+    }
+    this.configureImeiValidator();
+    if (!this.usesMobileNetwork()) this.setIdentifierState('imei', { status: 'idle' });
+  }
   private clearTechnicalFields(): void { this.form.patchValue({ marca: '', modelo: '', numeroSerie: '', imei: '' }); this.attributesForm.reset(); }
   private configureSpecificValidators(): void {
     Object.values(this.attributesForm.controls).forEach((control) => { control.clearValidators(); control.updateValueAndValidity({ emitEvent: false }); });
@@ -309,13 +365,20 @@ export class DispositivoForm implements OnInit, OnDestroy {
       if (field.requerido) validators.push(Validators.required); if (field.maxLength) validators.push(Validators.maxLength(field.maxLength));
       if (field.min !== undefined) validators.push(Validators.min(field.min)); if (field.max !== undefined) validators.push(Validators.max(field.max));
       control.setValidators(validators); control.updateValueAndValidity({ emitEvent: false }); }
+    this.configureImeiValidator();
+  }
+  private configureImeiValidator(): void {
+    const control = this.form.controls.imei;
+    control.setValidators(this.imeiRequired() ? [Validators.required, Validators.maxLength(30)] : [Validators.maxLength(30)]);
+    control.updateValueAndValidity({ emitEvent: false });
   }
   protected invalid(name: 'tipoPrincipal' | 'responsable'): boolean { const control = this.form.controls[name]; return control.invalid && (control.dirty || control.touched); }
   protected typeSelectionInvalid(): boolean { const control = this.form.controls.tipoDispositivoId; return !control.value && (control.dirty || control.touched || this.form.touched); }
   protected specificInvalid(field: CampoEspecificoFormulario): boolean { const control = this.attributesForm.get(field.clave); return !!control?.invalid && (control.dirty || control.touched); }
-  private specificAttributes(): Record<string, string | number | null> {
-    const raw = this.attributesForm.getRawValue(); const result: Record<string, string | number | null> = {};
-    for (const field of this.visibility().camposEspecificos) { const value = raw[field.clave as keyof typeof raw]; if (value === null || value === undefined || String(value).trim() === '') continue; result[field.clave] = field.tipo === 'number' ? Number(value) : String(value).trim(); }
+  private specificAttributes(): Record<string, string | number | boolean | null> {
+    const raw = this.attributesForm.getRawValue(); const result: Record<string, string | number | boolean | null> = {};
+    for (const field of this.visibility().camposEspecificos) { const value = raw[field.clave as keyof typeof raw]; if (value === null || value === undefined || (field.tipo !== 'boolean' && String(value).trim() === '')) continue; result[field.clave] = field.tipo === 'number' ? Number(value) : field.tipo === 'boolean' ? Boolean(value) : String(value).trim(); }
+    if (isRouterType(this.selectedType())) result['utilizaRedMovil'] = !!raw['utilizaRedMovil'];
     return result;
   }
   protected onInvoiceFileSelected(event: Event): void {
@@ -349,15 +412,26 @@ export class DispositivoForm implements OnInit, OnDestroy {
     this.invoiceFileError.set('');
   }
   protected submit(): void {
+    if (this.submitting() || this.created() || this.partialCreation()) return;
     const selected = this.selectedType(); if (this.form.invalid || !selected || (!this.id && !allowsDeviceCreation(selected))) { this.form.markAllAsTouched(); this.form.controls.tipoDispositivoId.markAsTouched(); this.apiError.set(!selected ? 'Seleccione un tipo de activo válido.' : ''); return; }
+    const pendingIdentifier = (['imei', 'serie'] as TipoIdentificadorDispositivo[]).find((kind) => {
+      const state = this.identifierState(kind);
+      return this.identifierVisible(kind) && (state.status === 'validating' || state.status === 'duplicate');
+    });
+    if (pendingIdentifier) {
+      this.apiError.set(this.identifierState(pendingIdentifier).status === 'duplicate'
+        ? 'Corrija el identificador duplicado antes de guardar.'
+        : 'Espere a que termine la validación del identificador antes de guardar.');
+      return;
+    }
     const value = this.form.getRawValue();
     if (this.invoiceFile() && !value.numeroFactura.trim()) {
       this.invoiceFileError.set('Ingrese el número de factura para asociar el documento.');
       return;
     }
-    this.submitting.set(true); this.apiError.set(''); const visible = this.visibility();
+    this.submitting.set(true); this.apiError.set(''); this.identifierConflict.set(null); this.partialCreation.set(null); this.identifierValidationGeneration += 1; const visible = this.visibility();
     const base = { tipoDispositivoId: Number(selected.id), marca: visible.marca ? value.marca.trim() || null : null, modelo: visible.modelo ? value.modelo.trim() || null : null,
-      numeroSerie: visible.numeroSerie ? value.numeroSerie.trim() || null : null, imei: visible.imei ? value.imei.trim() || null : null,
+      numeroSerie: visible.numeroSerie ? value.numeroSerie.trim() || null : null, imei: this.imeiVisible() ? value.imei.trim() || null : null,
       valorComercial:Number(value.valorComercial),
       atributosEspecificos: this.specificAttributes(), localidad: value.localidad.trim() || null, ubicacionDetalle: value.ubicacionDetalle.trim() || null, observaciones: value.observaciones.trim() || null };
     const deviceRequest = this.id ? this.service.actualizar(this.codigo, base) : this.service.crear({ ...base, responsable: value.responsable.trim() });
@@ -365,9 +439,9 @@ export class DispositivoForm implements OnInit, OnDestroy {
       const numero=value.numeroFactura.trim();if(!numero)return of(item);
       const factura={numeroFactura:numero,fechaFactura:value.fechaFactura||null,proveedor:value.proveedorFactura.trim()||null,montoTotal:Number(value.montoFactura)||null,observaciones:value.observacionesFactura.trim()||null,referenciaDocumental:null,dispositivosCodigos:[item.codigoInventario]};
       const existing=item.facturaAdquisicion;
-      return(existing?this.facturas.actualizar(existing.id,factura,this.invoiceFile()??undefined):this.facturas.crear(factura,this.invoiceFile()??undefined)).pipe(map(()=>item));
+      return(existing?this.facturas.actualizar(existing.id,factura,this.invoiceFile()??undefined):this.facturas.crear(factura,this.invoiceFile()??undefined)).pipe(map(()=>item),catchError(error=>throwError((): InvoiceSaveFailure => ({ kind: 'invoice', device: item, error }))));
     }));
-    request.subscribe({ next: (item) => { this.submitting.set(false); if (this.id) void this.router.navigate(['/dispositivos', item.codigoInventario]); else this.created.set(item); }, error: (error) => { this.apiError.set(deviceConflictMessage(error, value)); this.submitting.set(false); } });
+    request.subscribe({ next: (item) => { this.submitting.set(false); this.apiError.set(''); this.identifierConflict.set(null); this.partialCreation.set(null); if (this.id) void this.router.navigate(['/dispositivos', item.codigoInventario]); else this.created.set(item); }, error: (error) => { this.submitting.set(false); if (isInvoiceSaveFailure(error)) { this.partialCreation.set({ device: error.device, message: errorMessage(error.error) }); this.apiError.set(''); return; } const conflictKind = identifierConflictKind(error); if (conflictKind) { this.identifierConflict.set(conflictKind); this.setIdentifierState(conflictKind, { status: 'duplicate' }); } this.apiError.set(deviceConflictMessage(error, value)); } });
   }
   protected finish(device: Dispositivo): void { void this.router.navigate(['/dispositivos', device.codigoInventario]); }
 }

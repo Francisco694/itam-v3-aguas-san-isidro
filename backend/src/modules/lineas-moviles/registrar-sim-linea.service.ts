@@ -76,7 +76,7 @@ export const registrarSimNuevaEnTransaccion = async (
 ): Promise<RegistrarSimNuevaResult> => {
     const dispositivo = await obtenerDispositivoPorCodigo(codigoInventario, client, true);
     if (!dispositivo) throw new NotFoundError("Dispositivo no encontrado.");
-    if (!tipoDispositivoPermiteSim(dispositivo.tipo_dispositivo_nombre, dispositivo.tipo_dispositivo_configuracion_formulario)) {
+    if (!tipoDispositivoPermiteSim(dispositivo.tipo_dispositivo_nombre, dispositivo.tipo_dispositivo_configuracion_formulario, dispositivo.atributos_especificos)) {
       throw new ValidationError("El tipo de dispositivo no está configurado para gestionar SIM.");
     }
     if (!dispositivo.colaborador_id) {

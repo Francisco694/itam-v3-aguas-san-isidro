@@ -28,6 +28,9 @@ import { ActaPreview } from '../../shared/components/acta-preview/acta-preview';
 import { ApiError } from '../../core/models/api.models';
 import { errorMessage } from '../../shared/utils/error-message';
 import { formatClp } from '../../shared/utils/currency';
+import { isCellularRouterDevice, isRouterType } from '../../core/utils/device-capabilities';
+
+type ReplacementExistingLineChoice = 'CONSERVAR_NUMERO' | 'USAR_NUMERO_SIM' | 'NUMERO_NUEVO' | 'SIN_LINEA';
 
 
 export const receiversForDepartment = (
@@ -41,8 +44,10 @@ export const isSmartphoneDevice = (device: Dispositivo): boolean =>
   device.tipo.nombre.trim().toLocaleLowerCase('es') === 'smartphone';
 
 export const canDeviceCarrySim = (device: Pick<Dispositivo, 'tipo'>): boolean =>
-  device.tipo.permiteSim ?? device.tipo.configuracionFormulario?.permiteSim
-    ?? isSmartphoneDevice(device as Dispositivo);
+  isRouterType(device.tipo)
+    ? isCellularRouterDevice(device as Dispositivo)
+    : device.tipo.permiteSim ?? device.tipo.configuracionFormulario?.permiteSim
+      ?? isSmartphoneDevice(device as Dispositivo);
 
 export interface DeviceTechnicalIdentifier {
   label: 'IMEI' | 'NÚMERO DE SERIE' | 'IDENTIFICADOR';
@@ -295,7 +300,13 @@ interface SimilarAssignedDevicePrompt {
             <div><dt>Ubicación</dt><dd>{{ device.localidad || '—' }} {{ device.ubicacionDetalle || '' }}</dd></div>
             <div><dt>Código</dt><dd class="code">{{ device.codigoInventario }}</dd></div>
             <div><dt>Tipo</dt><dd>{{ device.tipo.nombre }}</dd></div>
-            <div><dt>{{ deviceTechnicalIdentifier(device).label }}</dt><dd class="code">{{ deviceTechnicalIdentifier(device).value }}</dd></div>
+            @if (isRouter(device.tipo)) {
+              <div><dt>Número de serie</dt><dd class="code">{{ device.numeroSerie || '—' }}</dd></div>
+              @if (isCellularRouter(device)) { <div><dt>IMEI</dt><dd class="code">{{ device.imei || '—' }}</dd></div> }
+              <div><dt>Conectividad móvil</dt><dd>{{ isCellularRouter(device) ? 'Sí' : 'No' }}</dd></div>
+            } @else {
+              <div><dt>{{ deviceTechnicalIdentifier(device).label }}</dt><dd class="code">{{ deviceTechnicalIdentifier(device).value }}</dd></div>
+            }
             @if (isSmartphone(device)) {
               <div><dt>Número telefónico</dt><dd>{{ smartphonePhoneText(device) }}</dd></div>
               <div><dt>SIM</dt><dd class="code" [style.color]="!device.simAsociada ? 'var(--warning)' : null">{{ device.simAsociada ? device.simAsociada.codigoInventario : 'Pendiente de asociar' }}</dd></div>
@@ -336,7 +347,7 @@ interface SimilarAssignedDevicePrompt {
               @if(action()==='service'){<section class="technical-order-identity"><strong>Orden de Trabajo - Servicio Técnico</strong><span>Revisa los antecedentes del equipo antes de registrar el envío.</span><dl><div><dt>Código ITAM</dt><dd>{{device.codigoInventario}}</dd></div><div><dt>Tipo de equipo</dt><dd>{{device.tipo.nombre}}</dd></div><div><dt>Marca / modelo</dt><dd>{{device.marca || 'Sin marca'}} {{device.modelo || ''}}</dd></div><div><dt>IMEI / serie</dt><dd>{{device.imei || device.numeroSerie || 'No informado'}}</dd></div><div><dt>Usuario / área</dt><dd>{{device.colaborador?.nombre || device.departamento?.nombre || 'No informado'}}</dd></div></dl></section>}
               <header><div><small>OPERACIÓN EN CURSO</small><h4>{{ actionTitle() }}</h4></div><button class="icon-button" type="button" aria-label="Cancelar operación" [disabled]="submitting()" (click)="action.set(null)"><svg lucideX></svg></button></header>
               @if(actionError()){<div class="notice notice--error" role="alert"><strong>{{ actionErrorTitle() || 'No se pudo registrar la operación' }}</strong><span>{{ actionError() }}</span></div>}
-              @if(action()==='return' && pendingReplacement(); as pending){<div class="notice notice--warning"><strong>Recibir equipo pendiente</strong><span>Se cerrarÃ¡ el reemplazo iniciado el {{pending.fechaInicio | date:'dd/MM/yyyy HH:mm'}}.</span></div><div class="field"><label for="replacement-return-state">Destino del dispositivo recibido *</label><select id="replacement-return-state" [value]="replacementStateId()" (change)="replacementStateId.set($any($event.target).value)"><option value="">Seleccionar destino</option>@for(state of replacementStates(); track state.id){<option [value]="state.id">{{state.nombre}}</option>}</select></div>@if(replacementRequiresBajaReason()){<div class="field"><label for="replacement-return-reason">Motivo de baja *</label><select id="replacement-return-reason" [value]="replacementBajaMotivo()" (change)="replacementBajaMotivo.set($any($event.target).value)"><option value="">Seleccionar motivo</option><option value="IRREPARABLE">Irreparable</option><option value="REPARACION_NO_CONVENIENTE">ReparaciÃ³n no conveniente</option><option value="MULTIPLES_REPARACIONES">MÃºltiples reparaciones</option><option value="OBSOLESCENCIA">Obsolescencia</option><option value="DANO_FISICO">DaÃ±o fÃ­sico</option><option value="SIN_REPUESTOS">Sin repuestos</option><option value="OTRO">Otro</option></select></div>}
+              @if(action()==='return' && pendingReplacement(); as pending){<div class="notice notice--warning"><strong>Recibir equipo pendiente</strong><span>Se cerrará el reemplazo iniciado el {{pending.fechaInicio | date:'dd/MM/yyyy HH:mm'}}.</span></div><div class="field"><label for="replacement-return-state">Destino del dispositivo recibido *</label><select id="replacement-return-state" [value]="replacementStateId()" (change)="replacementStateId.set($any($event.target).value)"><option value="">Seleccionar destino</option>@for(state of replacementStates(); track state.id){<option [value]="state.id">{{state.nombre}}</option>}</select></div>@if(replacementRequiresBajaReason()){<div class="field"><label for="replacement-return-reason">Motivo de baja *</label><select id="replacement-return-reason" [value]="replacementBajaMotivo()" (change)="replacementBajaMotivo.set($any($event.target).value)"><option value="">Seleccionar motivo</option><option value="IRREPARABLE">Irreparable</option><option value="REPARACION_NO_CONVENIENTE">Reparación no conveniente</option><option value="MULTIPLES_REPARACIONES">Múltiples reparaciones</option><option value="OBSOLESCENCIA">Obsolescencia</option><option value="DANO_FISICO">Daño físico</option><option value="SIN_REPUESTOS">Sin repuestos</option><option value="OTRO">Otro</option></select></div>}
               }
               @if(action()==='return' && pendingReplacement() && item()?.simAsociada; as pendingSim){
                 <section class="replacement-sim-receipt" role="group" aria-label="Resolución de SIM en recepción posterior">
@@ -349,50 +360,55 @@ interface SimilarAssignedDevicePrompt {
                 </section>
               }
               @if(action()==='assign-person'){
-                @if(checkingAssignment()){<div class="notice notice--info" role="status">Verificando si el colaborador ya tiene un equipo del mismo tipo...</div>}
+                <div class="assignment-workflow">
+                @if(checkingAssignment()){<div class="notice notice--info" role="status">Consultando la custodia actual del colaborador...</div>}
                 @if(similarAssignedDevices(); as duplicate){
                   @if(!assignmentResolution()){
-                    <section class="assignment-warning" role="alert">
-                      <strong>El colaborador ya tiene un equipo del mismo tipo</strong>
-                      <span>{{duplicate.collaborator.nombre}} ya tiene {{duplicate.devices.length === 1 ? 'un equipo' : duplicate.devices.length + ' equipos'}} {{device.tipo.nombre}} asignado{{duplicate.devices.length === 1 ? '' : 's'}}.</span>
-                      <div class="assignment-warning__devices">@for(existing of duplicate.devices; track existing.codigoInventario){<span>ITAM {{existing.codigoInventario}} · {{existing.marca || 'Sin marca'}} {{existing.modelo || ''}}</span>}</div>
-                      <div class="assignment-warning__buttons">
-                        <button class="btn btn--primary" type="button" (click)="chooseAddAssignment()">Agregar</button>
-                        <button class="btn btn--secondary" type="button" (click)="chooseReplaceAssignment()">Reemplazar</button>
-                        <button class="btn btn--ghost" type="button" (click)="cancelAssignmentDecision()">Cancelar</button>
-                      </div>
+                    <section class="assignment-type" role="group" aria-labelledby="assignment-type-title">
+                      <strong id="assignment-type-title">TIPO DE ENTREGA</strong>
+                      <span>{{duplicate.collaborator.nombre}} tiene {{duplicate.devices.length}} {{duplicate.devices.length === 1 ? 'equipo' : duplicate.devices.length + ' equipos'}} actualmente bajo custodia.</span>
+                      <div class="assignment-warning__devices">@for(existing of duplicate.devices; track existing.codigoInventario){<span>ITAM {{existing.codigoInventario}} · {{existing.marca || 'Sin marca'}} {{existing.modelo || ''}} · {{existing.tipo.nombre}}</span>}</div>
+                      <span>¿Cómo desea registrar esta entrega?</span>
+                      <label class="radio-card"><input type="radio" name="assignment-resolution" [checked]="assignmentResolution()==='ADD'" (change)="chooseAddAssignment()" [disabled]="submitting()" /><span><strong>Agregar equipo</strong><small>El colaborador conservará todos sus equipos actuales.</small></span></label>
+                      <label class="radio-card"><input type="radio" name="assignment-resolution" [checked]="assignmentResolution()==='REPLACE'" (change)="chooseReplaceAssignment()" [disabled]="submitting()" /><span><strong>Reemplazar equipo</strong><small>Se reemplazará uno de los dispositivos que ya tiene bajo custodia.</small></span></label>
                     </section>
                   }
                   @if(assignmentResolution()==='REPLACE' && replacementDevice(); as oldDevice){
                     <section class="replacement-confirmation" role="alert">
+                      <div class="field replacement-device-field"><label for="replacement-device">Equipo que será reemplazado *</label><select id="replacement-device" [value]="replacementDevice()?.codigoInventario || ''" (change)="selectReplacementDevice($any($event.target).value, duplicate.devices)">@for(existing of duplicate.devices; track existing.codigoInventario){<option [value]="existing.codigoInventario">ITAM {{existing.codigoInventario}} · {{existing.marca || 'Sin marca'}} {{existing.modelo || ''}} · {{existing.tipo.nombre}}</option>}</select></div>
                       <div class="replacement-new-sim-action">
-                        <label><input type="radio" name="replacement-sim-action" [checked]="replacementSimAction()==='REGISTRAR_SIM_NUEVA'" (change)="chooseReplacementSimAction('REGISTRAR_SIM_NUEVA')" [disabled]="submitting()" /> Registrar SIM nueva</label>
+                        <label class="checkbox-card replacement-new-sim-toggle"><input type="checkbox" [checked]="replacementSimAction()==='REGISTRAR_SIM_NUEVA'" (change)="toggleReplacementNewSim($any($event.target).checked)" [disabled]="submitting()" /><span><strong>Registrar SIM nueva</strong><small>Se creará solamente al confirmar la operación.</small></span></label>
                         @if(replacementSimAction()==='REGISTRAR_SIM_NUEVA'){
                           <div class="replacement-new-sim-form">
-                            <div class="field"><label for="replacement-new-iccid">ICCID de la SIM nueva</label><div class="inline-field"><input id="replacement-new-iccid" type="text" [value]="replacementNewIccid()" (input)="replacementNewIccidChanged($any($event.target).value)" [disabled]="submitting()" maxlength="32" /><button class="btn btn--secondary" type="button" (click)="checkReplacementNewIccid()" [disabled]="submitting() || replacementNewIccidStatus()==='checking'">{{replacementNewIccidStatus()==='checking' ? 'Comprobando…' : 'Comprobar ICCID'}}</button></div>
-                              @if(replacementNewIccidStatus()==='available'){<small class="field-help">ICCID disponible. Se generará automáticamente el código ITAM.</small>}
-                              @if(replacementNewIccidStatus()==='existing' && replacementExistingSim(); as existingSim){<small class="field-help">Ya existe: ITAM {{existingSim.codigoInventario}} · {{existingSim.estado.nombre}} <button class="btn btn--link" type="button" (click)="useExistingReplacementSim()">Utilizar esta SIM</button></small>}
+                            <div class="field"><label for="replacement-new-iccid">ICCID de la SIM nueva *</label><div class="inline-field"><input id="replacement-new-iccid" type="text" [value]="replacementNewIccid()" (input)="replacementNewIccidChanged($any($event.target).value)" [disabled]="submitting()" maxlength="32" /><button class="btn btn--secondary" type="button" (click)="checkReplacementNewIccid()" [disabled]="submitting() || replacementNewIccidStatus()==='checking'">{{replacementNewIccidStatus()==='checking' ? 'Comprobando…' : 'Comprobar ICCID'}}</button></div>
+                              @if(replacementNewIccidStatus()==='available'){<small class="field-help">ICCID disponible. Se registrará durante la confirmación.</small>}
+                              @if(replacementNewIccidStatus()==='existing' && replacementExistingSim(); as existingSim){<section class="replacement-existing-sim-card" role="group" aria-label="SIM encontrada"><strong>SIM ENCONTRADA</strong><span>ITAM SIM {{existingSim.codigoInventario}} · ICCID {{existingSim.iccidCodigoFabrica || 'Pendiente de validación'}}</span><span>Compañía: {{existingSim.compania || 'Sin compañía'}}</span><span>Estado: {{existingSim.estado.nombre}}</span><span>Línea asociada: {{replacementSimPhoneText(existingSim)}}</span>@if(replacementSimIsAvailable(existingSim)){<button class="btn btn--secondary" type="button" (click)="useExistingReplacementSim()">Utilizar esta SIM</button>} @else {<small class="field-help">No se puede utilizar esta SIM en este momento. {{replacementSimAvailability(existingSim)}}</small>}</section>}
                             </div>
-                            <div class="field"><label for="replacement-new-company">Compañía</label><input id="replacement-new-company" type="text" [value]="replacementNewCompany()" (input)="replacementNewCompany.set($any($event.target).value)" [disabled]="submitting()" maxlength="100" /></div>
+                            @if(replacementNewIccidStatus() !== 'existing'){<div class="field"><label for="replacement-new-company">Compañía *</label><input id="replacement-new-company" type="text" [value]="replacementNewCompany()" (input)="replacementNewCompany.set($any($event.target).value); actionError.set('')" [disabled]="submitting()" maxlength="100" /></div>
                             <div class="field"><label for="replacement-new-observations">Observaciones</label><textarea id="replacement-new-observations" [value]="replacementNewObservations()" (input)="replacementNewObservations.set($any($event.target).value)" [disabled]="submitting()"></textarea></div>
-                            <div class="field"><label>Línea telefónica</label><label><input type="radio" name="replacement-new-line" [checked]="replacementNewLine()==='CONSERVAR_NUMERO'" (change)="chooseReplacementNewLine('CONSERVAR_NUMERO')" [disabled]="submitting() || !oldDevice.lineaMovil?.numeroTelefonico" /> Conservar número actual</label><label><input type="radio" name="replacement-new-line" [checked]="replacementNewLine()==='NUMERO_NUEVO'" (change)="chooseReplacementNewLine('NUMERO_NUEVO')" [disabled]="submitting()" /> Registrar número nuevo</label><label><input type="radio" name="replacement-new-line" [checked]="replacementNewLine()==='SIN_LINEA'" (change)="chooseReplacementNewLine('SIN_LINEA')" [disabled]="submitting()" /> Sin línea</label></div>
+                            <div class="field replacement-new-line-field"><label>Línea telefónica</label>@if(replacementCurrentPhone(oldDevice); as currentPhone){<small class="delivery-help">Número actual: <strong>{{replacementCurrentPhoneText(oldDevice)}}</strong></small>}<label><input type="radio" name="replacement-new-line" [checked]="replacementNewLine()==='CONSERVAR_NUMERO'" (click)="chooseReplacementNewLine(replacementNewLine()==='CONSERVAR_NUMERO' ? null : 'CONSERVAR_NUMERO')" [disabled]="submitting() || !replacementCurrentPhone(oldDevice)" /> Conservar número actual</label><label><input type="radio" name="replacement-new-line" [checked]="replacementNewLine()==='NUMERO_NUEVO'" (click)="chooseReplacementNewLine(replacementNewLine()==='NUMERO_NUEVO' ? null : 'NUMERO_NUEVO')" [disabled]="submitting()" /> Registrar número nuevo</label><label><input type="radio" name="replacement-new-line" [checked]="replacementNewLine()==='SIN_LINEA'" (click)="chooseReplacementNewLine(replacementNewLine()==='SIN_LINEA' ? null : 'SIN_LINEA')" [disabled]="submitting()" /> Sin línea</label>@if(replacementNewLine()==='CONSERVAR_NUMERO' && replacementCurrentPhone(oldDevice)){<small class="delivery-help">El número {{replacementCurrentPhoneText(oldDevice)}} se mantendrá y será asociado a la nueva SIM{{replacementNewCompany().trim() ? ' ' + replacementNewCompany().trim() : ''}}.</small>}</div>
                             @if(replacementNewLine()==='NUMERO_NUEVO'){<div class="field"><label for="replacement-new-phone">Número telefónico nuevo</label><input id="replacement-new-phone" type="tel" [value]="replacementNewPhone()" (input)="replacementNewPhone.set($any($event.target).value)" [disabled]="submitting()" placeholder="+56 9 1234 5678" /></div>}
-                          </div>
-                        }
+                            }
+                       </div>
+                      }
                       </div>
-                      @if(oldDevice.simAsociada; as oldSim){<div class="replacement-sim-resolution"><strong>Este dispositivo tiene una SIM asociada.</strong><span>SIM: ITAM {{oldSim.codigoInventario}} · ICCID {{oldSim.iccidCodigoFabrica || 'Pendiente de validación'}} · Número {{oldDevice.lineaMovil?.numeroTelefonico || 'Sin número'}}</span><label><input type="radio" name="replacement-sim-action" [checked]="replacementSimAction()==='MOVER_SIM_ACTUAL'" (change)="chooseReplacementSimAction('MOVER_SIM_ACTUAL')" [disabled]="submitting() || replacementDelivered()===false" /> Mover SIM actual al dispositivo nuevo</label><label><input type="radio" name="replacement-sim-action" [checked]="replacementSimAction()==='USAR_SIM_EXISTENTE'" (change)="chooseReplacementSimAction('USAR_SIM_EXISTENTE')" [disabled]="submitting()" /> Utilizar otra SIM registrada</label><label><input type="radio" name="replacement-sim-action" [checked]="replacementSimAction()==='SIN_SIM'" (change)="chooseReplacementSimAction('SIN_SIM')" [disabled]="submitting()" /> Entregar dispositivo nuevo sin SIM</label><label><input type="radio" name="replacement-sim-action" [checked]="replacementSimAction()===null" (change)="chooseReplacementSimAction(null)" [disabled]="submitting()" /> Cancelar resolución SIM</label>@if(replacementSimAction()==='USAR_SIM_EXISTENTE'){<select id="replacement-sim" [value]="replacementSimCode()" (change)="replacementSimCode.set($any($event.target).value)" [disabled]="submitting()"><option value="">Seleccionar SIM disponible</option>@for(candidate of replacementSims(); track candidate.id){<option [value]="candidate.codigoInventario">ITAM {{candidate.codigoInventario}} · ICCID {{candidate.iccidCodigoFabrica || 'Pendiente'}} · {{candidate.estado.nombre}} · {{candidate.lineaMovil?.numeroTelefonico || 'Sin línea'}}</option>}</select><div class="field"><label>¿Deseas conservar el número actual?</label><label><input type="radio" name="replacement-keep-number" [checked]="replacementKeepNumber()===true" (change)="replacementKeepNumber.set(true)" [disabled]="submitting() || replacementDelivered()===false" /> Sí, conservar línea/número actual</label><label><input type="radio" name="replacement-keep-number" [checked]="replacementKeepNumber()===false" (change)="replacementKeepNumber.set(false)" [disabled]="submitting()" /> Utilizar la línea/número de la SIM seleccionada</label></div>}</div>}
+                      <section class="replacement-old-sim-context" role="group" aria-label="SIM y línea del equipo anterior"><strong>SIM Y LÍNEA DEL EQUIPO ANTERIOR</strong>@if(oldDevice.simAsociada; as previousSim){<span>SIM ITAM {{previousSim.codigoInventario}} · ICCID {{previousSim.iccidCodigoFabrica || 'Pendiente de validación'}} · Compañía {{previousSim.compania || 'Sin compañía'}}</span>} @else {<span>SIM actual: Sin SIM asociada.</span>}<span>Número actual: {{replacementCurrentPhoneText(oldDevice) || 'Sin número asociado'}}</span></section>
+                      @if(oldDevice.simAsociada; as oldSim){<div class="replacement-sim-resolution"><strong>Este dispositivo tiene una SIM asociada.</strong><span>SIM: ITAM {{oldSim.codigoInventario}} · ICCID {{oldSim.iccidCodigoFabrica || 'Pendiente de validación'}} · Número {{replacementCurrentPhoneText(oldDevice) || 'Sin número'}}</span><label><input type="radio" name="replacement-sim-action" [checked]="replacementSimAction()==='MOVER_SIM_ACTUAL'" (change)="chooseReplacementSimAction('MOVER_SIM_ACTUAL')" [disabled]="submitting() || replacementDelivered()===false" /> Mover SIM actual al dispositivo nuevo</label><label><input type="radio" name="replacement-sim-action" [checked]="replacementSimAction()==='USAR_SIM_EXISTENTE'" (change)="chooseReplacementSimAction('USAR_SIM_EXISTENTE')" [disabled]="submitting()" /> Utilizar otra SIM registrada</label><label><input type="radio" name="replacement-sim-action" [checked]="replacementSimAction()==='SIN_SIM'" (change)="chooseReplacementSimAction('SIN_SIM')" [disabled]="submitting()" /> Entregar dispositivo nuevo sin SIM</label><label><input type="radio" name="replacement-sim-action" [checked]="replacementSimAction()===null" (change)="chooseReplacementSimAction(null)" [disabled]="submitting()" /> Cancelar resolución SIM</label></div>}
+                      <section class="replacement-selected-sim" role="group" aria-label="SIM seleccionada">@if(replacementSimAction()==='USAR_SIM_EXISTENTE'){<select id="replacement-sim" [value]="replacementSimCode()" (change)="replacementSimCode.set($any($event.target).value); replacementExistingLineChoice.set(null); replacementKeepNumber.set(null)" [disabled]="submitting()"><option value="">Seleccionar SIM disponible</option>@for(candidate of replacementSims(); track candidate.id){<option [value]="candidate.codigoInventario">ITAM {{candidate.codigoInventario}} · ICCID {{candidate.iccidCodigoFabrica || 'Pendiente'}} · {{candidate.compania || 'Sin compañía'}} · {{replacementSimPhoneText(candidate)}}</option>}</select>}@if(replacementSimAction()==='USAR_SIM_EXISTENTE' && replacementSelectedSim(); as selectedSim){<strong>UTILIZAR SIM EXISTENTE</strong><span>ITAM SIM {{selectedSim.codigoInventario}} · ICCID {{selectedSim.iccidCodigoFabrica || 'Pendiente de validación'}}</span><span>Compañía: {{selectedSim.compania || 'Sin compañía'}} · Estado: {{selectedSim.estado.nombre}}</span><span>Línea asociada: {{replacementSimPhoneText(selectedSim)}}</span><button class="btn btn--link" type="button" (click)="changeExistingReplacementSim()">Cambiar SIM</button><div class="field replacement-existing-line-field"><label>Línea telefónica</label>@for(option of replacementExistingLineOptions(oldDevice); track option.value){<label><input type="radio" name="replacement-existing-line" [checked]="replacementExistingLineChoice()===option.value" (click)="chooseReplacementExistingLine(replacementExistingLineChoice()===option.value ? null : option.value)" [disabled]="submitting()" /> {{option.label}}</label>}@if(replacementExistingLineChoice()==='NUMERO_NUEVO'){<div class="field"><label for="replacement-existing-new-phone">Número telefónico nuevo</label><input id="replacement-existing-new-phone" type="tel" [value]="replacementNewPhone()" (input)="replacementNewPhone.set($any($event.target).value)" [disabled]="submitting()" placeholder="+56 9 1234 5678" /></div>} @if(replacementExistingLineWarning(oldDevice)){<small class="delivery-help">{{replacementExistingLineWarning(oldDevice)}}</small>}</div>}
+                            </section>
                       <strong>{{ replacementDelivered()===false ? 'Continuar con devolución pendiente' : 'Reemplazar equipo' }}</strong>
-                      <div class="field"><label>Â¿El colaborador entregÃ³ fÃ­sicamente el dispositivo anterior?</label><div class="assignment-warning__buttons"><button class="btn btn--secondary" type="button" [class.btn--primary]="replacementDelivered()===true" (click)="chooseReplacementDelivery(true)">SÃ­, fue entregado</button><button class="btn btn--secondary" type="button" [class.btn--primary]="replacementDelivered()===false" (click)="chooseReplacementDelivery(false)">No fue entregado</button></div></div>
+                      <div class="field replacement-delivery-question"><strong>¿El colaborador entregó físicamente el dispositivo anterior?</strong><div class="radio-card-group"><label class="radio-card"><input type="radio" name="replacement-delivery" [checked]="replacementDelivered()===true" (change)="chooseReplacementDelivery(true)" [disabled]="submitting()" /><span>Sí, lo entregó</span></label><label class="radio-card"><input type="radio" name="replacement-delivery" [checked]="replacementDelivered()===false" (change)="chooseReplacementDelivery(false)" [disabled]="submitting()" /><span>No, no lo entregó</span></label></div>@if(replacementDeliveryError()){<small class="field-error" role="alert">{{replacementDeliveryError()}}</small>}</div>
                       @if(replacementDelivered()===false){<div class="notice notice--warning"><strong>El dispositivo anterior no ha sido entregado.</strong><span>Continuará bajo responsabilidad del colaborador. Si continúa, el nuevo equipo será entregado y el anterior quedará pendiente de devolución.</span></div>}
                       @if(replacementDelivered()===true){<span>El equipo ITAM {{oldDevice.codigoInventario}} será recibido en bodega antes de entregar el nuevo equipo.</span>}
-                      @if(duplicate.devices.length > 1){<div class="field"><label for="replacement-device">Equipo que será reemplazado *</label><select id="replacement-device" [value]="replacementDevice()?.codigoInventario || ''" (change)="selectReplacementDevice($any($event.target).value, duplicate.devices)">@for(existing of duplicate.devices; track existing.codigoInventario){<option [value]="existing.codigoInventario">ITAM {{existing.codigoInventario}} · {{existing.marca || 'Sin marca'}} {{existing.modelo || ''}}</option>}</select></div>}
+
                       @if(replacementDelivered()===true){<div class="field"><label for="replacement-state">Estado del equipo recibido *</label><select id="replacement-state" [value]="replacementStateId()" (change)="replacementStateId.set($any($event.target).value)"><option value="">Seleccionar estado</option>@for(state of replacementStates(); track state.id){<option [value]="state.id">{{state.nombre}}</option>}</select><small class="delivery-help">Disponible, retenido para revisión o dado de baja.</small></div>}
                       @if(replacementDelivered()===true && replacementRequiresBajaReason()){<div class="field"><label for="replacement-baja-reason">Motivo de baja *</label><select id="replacement-baja-reason" [value]="replacementBajaMotivo()" (change)="replacementBajaMotivo.set($any($event.target).value)"><option value="">Seleccionar motivo</option><option value="IRREPARABLE">Irreparable</option><option value="REPARACION_NO_CONVENIENTE">Reparación no conveniente</option><option value="MULTIPLES_REPARACIONES">Múltiples reparaciones</option><option value="OBSOLESCENCIA">Obsolescencia</option><option value="DANO_FISICO">Daño físico</option><option value="SIN_REPUESTOS">Sin repuestos</option><option value="OTRO">Otro</option></select></div>}
-                      @if(replacementDelivered() !== null){<section class="replacement-summary" aria-label="Resumen del reemplazo"><strong>Resumen del reemplazo</strong><span>Equipo anterior: ITAM {{oldDevice.codigoInventario}} · {{oldDevice.marca || 'Sin marca'}} {{oldDevice.modelo || ''}}</span><span>Equipo nuevo: ITAM {{item()?.codigoInventario}}</span>@if(oldDevice.simAsociada){<span>SIM: @switch(replacementSimAction()){ @case('MOVER_SIM_ACTUAL'){Se moverá la SIM actual al equipo nuevo.} @case('USAR_SIM_EXISTENTE'){Se utilizará la SIM registrada ITAM {{replacementSimCode()}}.} @case('SIN_SIM'){El equipo nuevo se entregará sin SIM.} @default{Pendiente de resolver.} }</span>}@if(oldDevice.simAsociada && replacementSimAction()==='USAR_SIM_EXISTENTE' && replacementKeepNumber() !== null){<span>Número: {{replacementKeepNumber() ? 'Se conservará la línea/número actual.' : 'Se utilizará la línea/número de la SIM seleccionada.'}}</span>}@if(oldDevice.simAsociada && replacementDelivered()===true && replacementSimAction()!=='MOVER_SIM_ACTUAL'){<span>SIM anterior: será recibida por TI y quedará DISPONIBLE.</span>}@if(oldDevice.simAsociada && replacementDelivered()===false){<span>SIM anterior: permanecerá con el dispositivo anterior.</span>}<span>Equipo anterior: {{replacementDelivered() ? 'Será recibido y enviado al destino seleccionado.' : 'Continuará bajo responsabilidad del colaborador y quedará pendiente de devolución.'}}</span></section>}
+                      @if(replacementDelivered() !== null){<section class="replacement-summary" aria-label="Resumen del reemplazo"><strong>Resumen del reemplazo</strong><span>Equipo anterior: ITAM {{oldDevice.codigoInventario}} · {{oldDevice.marca || 'Sin marca'}} {{oldDevice.modelo || ''}}</span><span>Equipo nuevo: ITAM {{item()?.codigoInventario}}</span><span>SIM: {{replacementSummarySim(oldDevice)}}</span><span>Línea: {{replacementSummaryLine(oldDevice)}}</span><span>Equipo anterior: {{replacementDelivered() ? 'Será recibido y enviado al destino seleccionado.' : 'Continuará bajo responsabilidad del colaborador y quedará pendiente de devolución.'}}</span></section>}
                       <div class="assignment-warning__buttons"><button class="btn btn--primary" type="button" [disabled]="submitting()" (click)="confirmReplacement()">{{ replacementDelivered()===false ? 'Continuar' : 'Reemplazar equipo' }}</button><button class="btn btn--ghost" type="button" [disabled]="submitting()" (click)="cancelAssignmentDecision()">Cancelar</button></div>
                     </section>
                   }
                 }
+                </div>
                 <div class="delivery-form">
                   <div class="field delivery-field">
                     <label for="colaborador">Colaborador responsable *</label>
@@ -473,7 +489,7 @@ interface SimilarAssignedDevicePrompt {
               @if(action()==='service'){<div class="field"><label for="service-date">Fecha de envío *</label><input id="service-date" type="date" formControlName="fechaEnvio" /></div><div class="field"><label for="provider">Proveedor / técnico / destino *</label><input id="provider" formControlName="proveedor" maxlength="180" /></div><div class="field"><label for="service-type">Tipo de servicio *</label><select id="service-type" formControlName="tipoServicio"><option value="">Seleccionar</option><option value="GARANTIA">Garantía</option><option value="REPARACION">Reparación</option><option value="MANTENCION">Mantención</option><option value="DIAGNOSTICO">Diagnóstico</option></select></div><div class="field"><label for="failure">Falla reportada *</label><textarea id="failure" formControlName="fallaReportada"></textarea></div><div class="field"><label for="accessories">Accesorios entregados</label><textarea id="accessories" formControlName="accesoriosEntregados"></textarea></div>}
               @if(action()==='retire'){<div class="notice notice--info">La baja conservará el motivo, el valor comercial vigente y el responsable TI en la trazabilidad.</div><div class="field"><label for="retire-reason">Motivo *</label><select id="retire-reason" formControlName="motivoBaja"><option value="">Seleccionar</option><option value="IRREPARABLE">Irreparable</option><option value="REPARACION_NO_CONVENIENTE">Reparación no conveniente</option><option value="MULTIPLES_REPARACIONES">Múltiples reparaciones</option><option value="OBSOLESCENCIA">Obsolescencia</option><option value="DANO_FISICO">Daño físico</option><option value="SIN_REPUESTOS">Sin repuestos</option><option value="OTRO">Otro</option></select></div>}
               <div class="field action-notes"><label for="action-notes">Observaciones</label><textarea id="action-notes" formControlName="observaciones" placeholder="Motivo, condición o antecedentes relevantes"></textarea></div>
-              <div class="action-form__buttons"><button class="btn btn--ghost" type="button" (click)="action.set(null)">Cancelar</button><button class="btn btn--primary" type="submit" [disabled]="submitting()">{{ submitting() ? 'Procesando…' : (action()==='service' ? 'Registrar envío' : (action()==='assign-person' && assignmentResolution()==='ADD' ? 'Agregar equipo' : (action()==='assign-person' && assignmentResolution()==='REPLACE' ? 'Reemplazar equipo' : 'Confirmar operación'))) }}</button></div>
+              <div class="action-form__buttons"><button class="btn btn--ghost" type="button" (click)="action.set(null)">Cancelar</button><button class="btn btn--primary" type="submit" [disabled]="submitting()">{{ submitting() ? 'Procesando…' : (action()==='service' ? 'Registrar envío' : (action()==='assign-person' && assignmentResolution()==='ADD' && similarAssignedDevices() ? 'Agregar equipo' : (action()==='assign-person' && assignmentResolution()==='REPLACE' ? 'Confirmar reemplazo' : 'Confirmar operación'))) }}</button></div>
               @if(action()==='service'){<div class="form-grid"><div class="field"><label for="service-area">Área solicitante</label><input id="service-area" formControlName="areaSolicitante" maxlength="180" /></div><div class="field"><label for="service-contact">Contacto del servicio técnico</label><input id="service-contact" formControlName="contactoServicio" maxlength="180" /></div></div><div class="field"><label for="service-responsible">Responsable TI *</label><input id="service-responsible" formControlName="responsable" maxlength="150" /></div>}
             </form>
           }
@@ -613,6 +629,7 @@ export class DispositivoDetail implements OnInit {
   protected readonly checkingAssignment = signal(false);
   protected readonly replacementConfirmed = signal(false);
   protected readonly replacementDelivered = signal<boolean | null>(null);
+  protected readonly replacementDeliveryError = signal('');
   protected readonly pendingSimDelivered = signal<boolean | null>(null);
   protected readonly replacementSimAction = signal<'MOVER_SIM_ACTUAL' | 'USAR_SIM_EXISTENTE' | 'REGISTRAR_SIM_NUEVA' | 'SIN_SIM' | null>(null);
   protected readonly replacementSimCode = signal('');
@@ -625,6 +642,7 @@ export class DispositivoDetail implements OnInit {
   protected readonly replacementNewPhone = signal('');
   protected readonly replacementNewIccidStatus = signal<'idle' | 'checking' | 'available' | 'existing' | 'error'>('idle');
   protected readonly replacementExistingSim = signal<Sim | null>(null);
+  protected readonly replacementExistingLineChoice = signal<ReplacementExistingLineChoice | null>(null);
   protected readonly jointDelivery = signal(false);
   protected readonly simQuery = signal('');
   protected readonly selectedSim = signal<Sim | null>(null);
@@ -680,9 +698,11 @@ export class DispositivoDetail implements OnInit {
     this.replacementBajaMotivo.set('');
     this.replacementConfirmed.set(false);
     this.replacementDelivered.set(null);
+    this.replacementDeliveryError.set('');
     this.replacementSimAction.set(null);
     this.replacementSimCode.set('');
     this.replacementKeepNumber.set(null);
+    this.replacementExistingLineChoice.set(null);
     this.resetReplacementNewSim();
     this.actionError.set('');
   }
@@ -707,6 +727,7 @@ export class DispositivoDetail implements OnInit {
   }
   protected chooseReplacementDelivery(delivered: boolean): void {
     this.replacementDelivered.set(delivered);
+    this.replacementDeliveryError.set('');
     this.replacementStateId.set('');
     this.replacementBajaMotivo.set('');
     this.replacementConfirmed.set(false);
@@ -720,6 +741,7 @@ export class DispositivoDetail implements OnInit {
     this.replacementSimAction.set(action);
     this.replacementSimCode.set('');
     this.replacementKeepNumber.set(null);
+    this.replacementExistingLineChoice.set(null);
     if (action !== 'REGISTRAR_SIM_NUEVA') this.resetReplacementNewSim();
     this.actionError.set('');
     if (action === 'USAR_SIM_EXISTENTE' && !this.replacementSims().length) {
@@ -728,6 +750,14 @@ export class DispositivoDetail implements OnInit {
         error: error => this.actionError.set(errorMessage(error))
       });
     }
+  }
+  protected toggleReplacementNewSim(enabled: boolean): void {
+    if (enabled) {
+      this.chooseReplacementSimAction('REGISTRAR_SIM_NUEVA');
+      return;
+    }
+    this.replacementSimAction.set(null);
+    this.actionError.set('');
   }
   protected replacementNewIccidChanged(value: string): void {
     this.replacementNewIccid.set(value);
@@ -770,8 +800,108 @@ export class DispositivoDetail implements OnInit {
     }
     this.chooseReplacementSimAction('USAR_SIM_EXISTENTE');
     this.replacementSimCode.set(String(sim.codigoInventario));
+    this.replacementExistingSim.set(sim);
+    this.replacementNewIccid.set(sim.iccidCodigoFabrica || '');
   }
-  protected chooseReplacementNewLine(line: 'CONSERVAR_NUMERO' | 'NUMERO_NUEVO' | 'SIN_LINEA'): void {
+  protected changeExistingReplacementSim(): void {
+    this.replacementSimAction.set('REGISTRAR_SIM_NUEVA');
+    this.replacementSimCode.set('');
+    this.replacementKeepNumber.set(null);
+    this.replacementExistingLineChoice.set(null);
+    this.replacementExistingSim.set(null);
+    this.replacementNewIccidStatus.set('idle');
+    this.actionError.set('');
+  }
+  protected replacementSimPhone(sim: Sim | null): string | null {
+    return sim?.lineaMovil?.numeroTelefonico?.trim() || sim?.numeroAsociado?.trim() || null;
+  }
+  protected replacementSimPhoneText(sim: Sim | null): string {
+    const phone = this.replacementSimPhone(sim);
+    if (!phone) return 'Sin número asociado';
+    const normalized = normalizeChileanPhoneInput(phone);
+    return /^56\d{9}$/.test(normalized)
+      ? `+${normalized.slice(0, 2)} ${normalized.slice(2, 3)} ${normalized.slice(3, 7)} ${normalized.slice(7)}`
+      : phone;
+  }
+  protected replacementSimAvailability(sim: Sim): string {
+    if (sim.dispositivo) return `Está instalada en ITAM ${sim.dispositivo.codigoInventario}.`;
+    if (sim.colaborador) return `Está bajo custodia de ${sim.colaborador.nombre}.`;
+    return `No está disponible: estado ${sim.estado.nombre}.`;
+  }
+  protected replacementSimIsAvailable(sim: Sim): boolean { return isSimAvailableForJointDelivery(sim); }
+  protected replacementSelectedSim(): Sim | null {
+    const code = Number(this.replacementSimCode());
+    if (!code) return null;
+    const lookedUp = this.replacementExistingSim();
+    return lookedUp?.codigoInventario === code
+      ? lookedUp
+      : this.replacementSims().find(sim => sim.codigoInventario === code) || null;
+  }
+  protected replacementExistingLineOptions(device: Dispositivo): Array<{ value: ReplacementExistingLineChoice; label: string }> {
+    const oldPhone = this.replacementCurrentPhone(device);
+    const simPhone = this.replacementSimPhone(this.replacementSelectedSim());
+    const options: Array<{ value: ReplacementExistingLineChoice; label: string }> = [];
+    if (oldPhone) {
+      options.push({
+        value: 'CONSERVAR_NUMERO',
+        label: simPhone && normalizeChileanPhoneInput(simPhone) === normalizeChileanPhoneInput(oldPhone)
+          ? 'Mantener número actual'
+          : 'Conservar número anterior'
+      });
+    }
+    if (simPhone && normalizeChileanPhoneInput(simPhone) !== normalizeChileanPhoneInput(oldPhone || '')) {
+      options.push({ value: 'USAR_NUMERO_SIM', label: 'Utilizar número de la SIM' });
+    }
+    options.push({ value: 'NUMERO_NUEVO', label: 'Registrar número nuevo' });
+    options.push({ value: 'SIN_LINEA', label: 'Sin línea' });
+    return options;
+  }
+  protected chooseReplacementExistingLine(choice: ReplacementExistingLineChoice | null): void {
+    this.replacementExistingLineChoice.set(choice);
+    this.replacementKeepNumber.set(choice === 'CONSERVAR_NUMERO' ? true : choice === 'USAR_NUMERO_SIM' ? false : null);
+    if (choice !== 'NUMERO_NUEVO') this.replacementNewPhone.set('');
+    this.actionError.set('');
+  }
+  protected replacementEffectiveExistingLineChoice(): ReplacementExistingLineChoice | null {
+    return this.replacementExistingLineChoice()
+      ?? (this.replacementKeepNumber() === true ? 'CONSERVAR_NUMERO' : this.replacementKeepNumber() === false ? 'USAR_NUMERO_SIM' : null);
+  }
+  protected replacementExistingLineWarning(device: Dispositivo): string {
+    const selected = this.replacementSelectedSim();
+    const oldPhone = this.replacementCurrentPhone(device);
+    const simPhone = this.replacementSimPhone(selected);
+    if (this.replacementExistingLineChoice() !== 'CONSERVAR_NUMERO' || !oldPhone || !simPhone) return '';
+    if (normalizeChileanPhoneInput(oldPhone) === normalizeChileanPhoneInput(simPhone)) return '';
+    return `La SIM seleccionada tiene el número ${this.replacementSimPhoneText(selected)}. Al conservar ${this.replacementCurrentPhoneText(device)}, esa línea quedará sin SIM asociada.`;
+  }
+  protected replacementSummarySim(device: Dispositivo): string {
+    const action = this.replacementSimAction();
+    if (action === 'REGISTRAR_SIM_NUEVA') return `SIM nueva · ICCID ${this.replacementNewIccid() || 'pendiente'} · ${this.replacementNewCompany() || 'compañía pendiente'}`;
+    if (action === 'USAR_SIM_EXISTENTE') {
+      const sim = this.replacementSelectedSim();
+      return sim ? `SIM ITAM ${sim.codigoInventario} · ICCID ${sim.iccidCodigoFabrica || 'pendiente'} · ${sim.compania || 'sin compañía'}` : 'SIM existente pendiente de selección';
+    }
+    if (action === 'MOVER_SIM_ACTUAL' && device.simAsociada) return `SIM ITAM ${device.simAsociada.codigoInventario} · ICCID ${device.simAsociada.iccidCodigoFabrica || 'pendiente'} · ${device.simAsociada.compania || 'sin compañía'}`;
+    return 'Sin SIM';
+  }
+  protected replacementSummaryLine(device: Dispositivo): string {
+    const action = this.replacementSimAction();
+    if (action === 'REGISTRAR_SIM_NUEVA') {
+      if (this.replacementNewLine() === 'CONSERVAR_NUMERO') return `Conservar ${this.replacementCurrentPhoneText(device)}`;
+      if (this.replacementNewLine() === 'NUMERO_NUEVO') return `Número nuevo: ${this.replacementNewPhone() || 'pendiente'}`;
+      return 'Sin línea';
+    }
+    if (action === 'USAR_SIM_EXISTENTE') {
+      const choice = this.replacementExistingLineChoice();
+      if (choice === 'CONSERVAR_NUMERO') return `Conservar ${this.replacementCurrentPhoneText(device)}`;
+      if (choice === 'USAR_NUMERO_SIM') return `Número de la SIM: ${this.replacementSimPhoneText(this.replacementSelectedSim())}`;
+      if (choice === 'NUMERO_NUEVO') return `Número nuevo: ${this.replacementNewPhone() || 'pendiente'}`;
+      if (choice === 'SIN_LINEA') return 'Sin línea';
+    }
+    if (action === 'MOVER_SIM_ACTUAL') return this.replacementCurrentPhoneText(device) || 'Sin número asociado';
+    return 'Sin línea';
+  }
+  protected chooseReplacementNewLine(line: 'CONSERVAR_NUMERO' | 'NUMERO_NUEVO' | 'SIN_LINEA' | null): void {
     this.replacementNewLine.set(line);
     if (line !== 'NUMERO_NUEVO') this.replacementNewPhone.set('');
     this.actionError.set('');
@@ -785,7 +915,8 @@ export class DispositivoDetail implements OnInit {
     const oldDevice = this.replacementDevice();
     if (!oldDevice) return;
     if (this.replacementDelivered() === null) {
-      this.actionError.set('Confirma si el dispositivo anterior fue entregado físicamente.');
+      this.replacementDeliveryError.set('Debes indicar si el equipo anterior fue entregado físicamente.');
+      this.actionError.set('');
       return;
     }
     if (this.replacementDelivered() && !this.replacementStateId()) {
@@ -796,7 +927,7 @@ export class DispositivoDetail implements OnInit {
       this.actionError.set('Selecciona el motivo de baja del equipo reemplazado.');
       return;
     }
-    if (oldDevice.simAsociada) {
+    if (oldDevice.simAsociada || this.replacementSimAction() === 'USAR_SIM_EXISTENTE') {
       const simAction = this.replacementSimAction();
       if (!simAction) {
         this.actionError.set('Indica qué deseas hacer con la SIM asociada.');
@@ -810,9 +941,24 @@ export class DispositivoDetail implements OnInit {
         this.actionError.set('Selecciona la SIM registrada que utilizarás.');
         return;
       }
-      if (simAction === 'USAR_SIM_EXISTENTE' && this.replacementKeepNumber() === null) {
-        this.actionError.set('Indica si deseas conservar el número actual.');
+      if (simAction === 'USAR_SIM_EXISTENTE' && !this.replacementEffectiveExistingLineChoice()) {
+        this.actionError.set('Selecciona qué ocurrirá con la línea telefónica de la SIM.');
         return;
+      }
+      if (simAction === 'USAR_SIM_EXISTENTE' && this.replacementEffectiveExistingLineChoice() === 'NUMERO_NUEVO' && !isChileanPhoneInputValid(this.replacementNewPhone())) {
+        this.actionError.set('Ingresa un número telefónico chileno válido.');
+        return;
+      }
+      if (simAction === 'USAR_SIM_EXISTENTE' && this.replacementEffectiveExistingLineChoice() === 'CONSERVAR_NUMERO' && !this.replacementCurrentPhone(oldDevice)) {
+        this.actionError.set('El dispositivo anterior no tiene una línea que pueda conservarse.');
+        return;
+      }
+      if (simAction === 'USAR_SIM_EXISTENTE' && this.replacementEffectiveExistingLineChoice() === 'CONSERVAR_NUMERO' && this.replacementDelivered() === false) {
+        const confirmed = await this.confirmation.confirm(
+          'El número anterior se transferirá a la SIM seleccionada. La devolución del equipo anterior quedará pendiente.',
+          { title: 'Transferir línea con devolución pendiente', confirmLabel: 'Continuar' }
+        );
+        if (!confirmed) return;
       }
     }
     if (this.replacementSimAction() === 'REGISTRAR_SIM_NUEVA') {
@@ -822,6 +968,10 @@ export class DispositivoDetail implements OnInit {
       }
       if (!this.replacementNewIccid().trim()) {
         this.actionError.set('Ingresa el ICCID de la SIM nueva.');
+        return;
+      }
+      if (!this.replacementNewCompany().trim()) {
+        this.actionError.set('Debe seleccionar una compañía.');
         return;
       }
       if (this.replacementNewIccidStatus() === 'idle') {
@@ -841,7 +991,7 @@ export class DispositivoDetail implements OnInit {
         this.actionError.set('Selecciona qué ocurrirá con la línea telefónica.');
         return;
       }
-      if (newLine === 'CONSERVAR_NUMERO' && !oldDevice.lineaMovil?.numeroTelefonico) {
+      if (newLine === 'CONSERVAR_NUMERO' && !this.replacementCurrentPhone(oldDevice)) {
         this.actionError.set('El dispositivo anterior no tiene una línea que pueda conservarse.');
         return;
       }
@@ -895,6 +1045,7 @@ export class DispositivoDetail implements OnInit {
     this.replacementBajaMotivo.set('');
     this.replacementConfirmed.set(false);
     this.replacementDelivered.set(null);
+    this.replacementDeliveryError.set('');
     this.pendingSimDelivered.set(null);
     this.replacementSimAction.set(null);
     this.replacementSimCode.set('');
@@ -911,6 +1062,7 @@ export class DispositivoDetail implements OnInit {
     this.replacementNewPhone.set('');
     this.replacementNewIccidStatus.set('idle');
     this.replacementExistingSim.set(null);
+    this.replacementExistingLineChoice.set(null);
   }
   private resetDetailStateForRoute(): void {
     this.submitting.set(false);
@@ -961,12 +1113,23 @@ export class DispositivoDetail implements OnInit {
   protected readonly createdActa=signal<ActaEntrega|null>(null);
   protected readonly clp=formatClp;
   protected readonly isSmartphone=isSmartphoneDevice;
+  protected readonly isRouter=isRouterType;
+  protected readonly isCellularRouter=isCellularRouterDevice;
   protected readonly canCarrySim=canDeviceCarrySim;
   protected readonly deviceTechnicalIdentifier=deviceTechnicalIdentifier;
   protected readonly isPhoneValid=isChileanPhoneInputValid;
   protected readonly normalizePhone=normalizeChileanPhoneInput;
   protected readonly smartphonePhoneText=smartphonePhoneText;
   protected readonly smartphonePhonePending=smartphonePhonePending;
+  protected replacementCurrentPhone(device: Dispositivo): string | null { return smartphonePhoneValue(device); }
+  protected replacementCurrentPhoneText(device: Dispositivo): string {
+    const phone = this.replacementCurrentPhone(device);
+    if (!phone) return '';
+    const normalized = normalizeChileanPhoneInput(phone);
+    return /^56\d{9}$/.test(normalized)
+      ? `+${normalized.slice(0, 2)} ${normalized.slice(2, 3)} ${normalized.slice(3, 7)} ${normalized.slice(7)}`
+      : phone;
+  }
   protected readonly lineActionCopy=smartphoneLineActionCopy;
   protected readonly technicalServiceStatusLabel=technicalServiceOrderStatusLabel;
   protected latestServiceOrder(): OrdenServicio | null { return latestTechnicalServiceOrder(this.serviceOrders()); }
@@ -1271,15 +1434,13 @@ export class DispositivoDetail implements OnInit {
       .subscribe({
         next: devices => {
           this.checkingAssignment.set(false);
-          const similar = devices.filter(device =>
-            device.codigoInventario !== current.codigoInventario
-            && device.tipo.id === current.tipo.id
-          );
-          if (!similar.length) {
+          const currentCustody = devices.filter(device => device.codigoInventario !== current.codigoInventario);
+          if (!currentCustody.length) {
             this.assignmentResolution.set('ADD');
             return;
           }
-          this.similarAssignedDevices.set({ collaborator, devices: similar });
+          this.assignmentResolution.set(null);
+          this.similarAssignedDevices.set({ collaborator, devices: currentCustody });
         },
         error: error => {
           this.checkingAssignment.set(false);
@@ -1300,14 +1461,12 @@ export class DispositivoDetail implements OnInit {
       ? this.replacementStates().find(state => state.id === this.replacementStateId())
       : null;
     if (!oldDevice || !newDevice || (delivered && !targetState)) {
-      this.actionError.set('Completa la informaciÃ³n del reemplazo antes de continuar.');
+      this.actionError.set('Completa la información del reemplazo antes de continuar.');
       return;
     }
     const simAction = this.replacementSimAction() === 'REGISTRAR_SIM_NUEVA'
       ? 'REGISTRAR_SIM_NUEVA'
-      : oldDevice.simAsociada
-        ? this.replacementSimAction()
-        : 'SIN_SIM';
+      : this.replacementSimAction() || 'SIN_SIM';
     if (oldDevice.simAsociada && !simAction) {
       this.actionError.set('Resuelve primero qué ocurrirá con la SIM asociada.');
       return;
@@ -1322,7 +1481,12 @@ export class DispositivoDetail implements OnInit {
       entregaAnterior: delivered,
       ...(targetState ? { destinoDispositivoAnterior: targetState.codigo as 'DISPONIBLE' | 'RETENIDO_REVISION' | 'DADO_BAJA' } : {}),
       accionSim: simAction as 'MOVER_SIM_ACTUAL' | 'USAR_SIM_EXISTENTE' | 'REGISTRAR_SIM_NUEVA' | 'SIN_SIM',
-      ...(simAction === 'USAR_SIM_EXISTENTE' ? { simDestinoCodigo: Number(this.replacementSimCode()), conservarNumero: this.replacementKeepNumber() === true } : {}),
+      ...(simAction === 'USAR_SIM_EXISTENTE' ? {
+        simDestinoCodigo: Number(this.replacementSimCode()),
+        conservarNumero: this.replacementEffectiveExistingLineChoice() === 'CONSERVAR_NUMERO',
+        lineaSimExistente: this.replacementEffectiveExistingLineChoice()!,
+        ...(this.replacementEffectiveExistingLineChoice() === 'NUMERO_NUEVO' ? { numeroTelefonicoNuevo: this.replacementNewPhone().trim() } : {})
+      } : {}),
       ...(simAction === 'REGISTRAR_SIM_NUEVA' ? {
         simNueva: {
           iccidCodigoFabrica: this.replacementNewIccid().trim(),
@@ -1340,12 +1504,12 @@ export class DispositivoDetail implements OnInit {
         this.submitting.set(false);
         this.resetAssignmentDecision();
         const detail = delivered
-          ? `ITAM ${oldDevice.codigoInventario} quedÃ³ en ${targetState!.nombre}.`
-          : `ITAM ${oldDevice.codigoInventario} continÃºa bajo custodia y queda pendiente de devoluciÃ³n.`;
+          ? `ITAM ${oldDevice.codigoInventario} quedó en ${targetState!.nombre}.`
+          : `ITAM ${oldDevice.codigoInventario} continúa bajo custodia y queda pendiente de devolución.`;
         this.toast.success('Reemplazo registrado', `El nuevo equipo fue asignado. ${detail}`);
         this.showFeedback({
           type: delivered ? 'success' : 'warning',
-          title: delivered ? 'Reemplazo registrado correctamente' : 'Reemplazo con devoluciÃ³n pendiente',
+          title: delivered ? 'Reemplazo registrado correctamente' : 'Reemplazo con devolución pendiente',
           detail
         });
         this.actasService.crear({
@@ -1478,7 +1642,12 @@ export class DispositivoDetail implements OnInit {
       return;
     }
     if (action === 'assign-person' && this.assignmentResolution() === 'REPLACE' && !this.replacementConfirmed()) {
-      this.actionError.set('Confirma el reemplazo y el estado final del equipo anterior.');
+      if (this.replacementDelivered() === null) {
+        this.replacementDeliveryError.set('Debes indicar si el equipo anterior fue entregado físicamente.');
+        this.actionError.set('');
+      } else {
+        this.actionError.set('Confirma el reemplazo y el estado final del equipo anterior.');
+      }
       return;
     }
     const deliveryPhoneValue = this.deliveryPhone().trim();

@@ -1,4 +1,5 @@
 import { DatePipe } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { Component, OnDestroy, OnInit, inject, input, output, signal } from '@angular/core';
 import { forkJoin } from 'rxjs';
 import { LineaMovilLookup, Sim, SimLineaHistorial } from '../../core/models/itam.models';
@@ -89,7 +90,7 @@ const phoneOf = (sim: Sim | null | undefined): string | null =>
 
 @Component({
   selector: 'app-sim-line-management',
-  imports: [DatePipe],
+  imports: [DatePipe, FormsModule],
   template: `
     <section class="card sim-line-panel">
       <div class="panel-heading">
@@ -102,7 +103,7 @@ const phoneOf = (sim: Sim | null | undefined): string | null =>
         <div><span>SIM física</span><strong>ITAM {{ sim().codigoInventario }}</strong><small>Estado: {{ sim().estado.nombre }}</small></div>
         <div><span>ICCID</span><strong class="mono">{{ iccidLabel(sim()) }}</strong><small>{{ sim().compania || 'Compañía no informada' }}</small></div>
       </div>
-      @if (!sim().lineaMovil) { <p class="empty-state">Sin línea asociada. Puedes registrar una línea desde este panel cuando exista un dispositivo compatible.</p> }
+      @if (!sim().lineaMovil) { <p class="empty-state">Sin línea asociada. Puedes registrar una línea desde este panel aunque la SIM todavía no esté instalada en un dispositivo.</p> }
       @if (auth.user()?.rol !== 'SOLO_LECTURA') {
         <div class="panel-actions">
           <button class="btn btn--primary btn--small" type="button" (click)="open()">Gestionar línea / SIM</button>
@@ -182,7 +183,7 @@ const phoneOf = (sim: Sim | null | undefined): string | null =>
 
       <section class="operation-step result-step">
         <div class="step-heading"><span>3</span><div><h3>Resultado de la operación</h3><p>Revisa el efecto antes de confirmar.</p></div></div>
-        <div class="result-summary"><div><small>EQUIPO</small><strong>{{ sim().dispositivo ? ('ITAM ' + sim().dispositivo!.codigoInventario) : 'Sin equipo asociado' }}</strong></div><div><small>NÚMERO</small><strong>{{ withoutLine() ? 'Sin línea' : normalizedNewNumber() || 'Sin línea' }}</strong><span>{{ withoutLine() ? 'No se creará línea' : numberMode() === 'KEEP' ? 'Se conservará' : normalizedNewNumber() ? 'Se registrará / actualizará' : 'Requiere un número válido' }}</span></div><div><small>SIM</small><strong>{{ simMode() === 'NEW' ? 'Nueva SIM' : simMode() === 'EXISTING' ? ('ITAM ' + (selectedSim()?.codigoInventario || '—')) : ('ITAM ' + sim().codigoInventario) }}</strong><span>{{ simMode() === 'NEW' ? 'Se registrará y recibirá código automático' : simMode() === 'EXISTING' ? 'Se asociará al equipo' : 'Se conservará' }}</span></div></div>
+        <div class="result-summary"><div><small>EQUIPO</small><strong>{{ sim().dispositivo ? ('ITAM ' + sim().dispositivo!.codigoInventario) : 'Sin equipo asociado' }}</strong></div><div><small>NÚMERO</small><strong>{{ proposedNumber() || 'Sin línea' }}</strong><span>{{ withoutLine() ? 'No se creará línea' : numberMode() === 'KEEP' ? 'Se conservará' : proposedNumber() ? 'Se registrará / actualizará' : 'Requiere un número móvil válido' }}</span></div><div><small>SIM</small><strong>{{ simMode() === 'NEW' ? 'Nueva SIM' : simMode() === 'EXISTING' ? ('ITAM ' + (selectedSim()?.codigoInventario || '—')) : ('ITAM ' + sim().codigoInventario) }}</strong><span>{{ simMode() === 'NEW' ? 'Se registrará y recibirá código automático' : simMode() === 'EXISTING' ? 'Se asociará al equipo' : 'Se conservará' }}</span></div></div>
       </section>
 
       <div class="form-actions"><button class="btn btn--secondary" type="button" (click)="close()">Cancelar</button><button class="btn btn--primary" type="submit" [disabled]="!canSubmit()">{{ submitting() ? 'Procesando…' : finalButtonLabel() }}</button></div>
@@ -198,7 +199,7 @@ export class SimLineManagement implements OnInit, OnDestroy {
   protected readonly iccidLabel = iccidLabel;
   protected readonly isValidIccidSearch = isValidIccidSearch;
   protected readonly normalizeIccidSearch = normalizeIccidSearch;
-  protected readonly changed = output<void>();
+  protected readonly changed = output<string>();
   protected readonly auth = inject(AuthService);
   private readonly service = inject(SimService);
   private readonly devices = inject(DispositivosService);
@@ -236,13 +237,27 @@ export class SimLineManagement implements OnInit, OnDestroy {
 
   protected normalizedNewNumber() { return normalizeChileanPhone(this.phoneQuery()); }
 
+  protected proposedNumber(): string | null {
+    if (this.withoutLine()) return null;
+    return this.numberMode() === 'CHANGE'
+      ? this.normalizedNewNumber()
+      : phoneOf(this.sim());
+  }
+
   protected simSearchResults(): Sim[] {
     return this.selectedSim() ? [] : simSearchMatches(this.allSims(), this.simQuery());
   }
 
   protected isSelectable(candidate: Sim) { return canSelectExistingSim(candidate, this.sim().codigoInventario); }
 
-  protected hasChanges() { return this.numberMode() === 'CHANGE' || this.simMode() !== 'KEEP'; }
+  protected hasChanges() {
+    const current = phoneOf(this.sim());
+    const proposed = this.normalizedNewNumber();
+    const lineChanged = this.withoutLine()
+      ? current !== null
+      : proposed !== null && proposed !== current;
+    return lineChanged || this.simMode() !== 'KEEP';
+  }
 
   protected finalButtonLabel() {
     if (this.simMode() === 'NEW') return 'Registrar SIM y asociar';
@@ -365,7 +380,7 @@ export class SimLineManagement implements OnInit, OnDestroy {
   protected async detach() {
     if (!this.sim().lineaMovil || !(await this.confirmation.confirm('La SIM quedará sin línea asociada. La línea móvil no será eliminada.', { title: 'Desasociar línea', confirmLabel: 'Desasociar' }))) return;
     this.submitting.set(true);
-    this.service.desasociarLinea(this.sim().codigoInventario, { responsable: this.auth.user()?.nombre || 'Usuario autenticado' }).subscribe({ next: () => { this.submitting.set(false); this.changed.emit(); this.loadHistory(); }, error: error => this.fail(error) });
+    this.service.desasociarLinea(this.sim().codigoInventario, { responsable: this.auth.user()?.nombre || 'Usuario autenticado' }).subscribe({ next: () => { this.submitting.set(false); this.changed.emit('Línea desasociada correctamente.'); this.loadHistory(); }, error: error => this.fail(error) });
   }
 
   protected save() {
@@ -382,7 +397,10 @@ export class SimLineManagement implements OnInit, OnDestroy {
     if (!deviceCode) {
       if (this.numberMode() === 'CHANGE' && this.simMode() === 'KEEP') {
         this.submitting.set(true);
-        this.service.actualizar(this.sim().codigoInventario, { numeroAsociado: normalizedNumber }).subscribe({ next: () => this.refreshAfterSuccess('Número actualizado correctamente.'), error: error => this.fail(error) });
+        this.service.actualizar(this.sim().codigoInventario, { numeroAsociado: normalizedNumber }).subscribe({
+          next: () => this.verifySavedNumber(normalizedNumber!),
+          error: error => this.fail(error)
+        });
         return;
       }
       this.error.set('La asociación de una SIM nueva o existente requiere que la SIM actual esté instalada en un dispositivo.');
@@ -429,7 +447,7 @@ export class SimLineManagement implements OnInit, OnDestroy {
     if (!normalized) { this.phoneLookupState.set('idle'); this.phoneLineMatch.set(null); return; }
     this.phoneLookupState.set('checking');
     this.service.buscarLineaPorNumero(normalized).subscribe({
-      next: line => { this.phoneLineMatch.set(line); this.phoneLookupState.set(this.lineBelongsToCurrentDevice(line) ? 'found' : line.dispositivo ? 'conflict' : 'found'); },
+      next: line => { this.phoneLineMatch.set(line); this.phoneLookupState.set(this.lineBelongsToCurrentSim(line) ? 'found' : line.dispositivo || line.sim ? 'conflict' : 'found'); },
       error: error => {
         if ((error as { status?: number })?.status === 404) { this.phoneLineMatch.set(null); this.phoneLookupState.set('available'); return; }
         this.fail(error);
@@ -439,11 +457,13 @@ export class SimLineManagement implements OnInit, OnDestroy {
 
   protected phoneConflict() {
     const line = this.phoneLineMatch();
-    return !!line?.dispositivo && !this.lineBelongsToCurrentDevice(line);
+    return !!line && !this.lineBelongsToCurrentSim(line) && (!!line.dispositivo || !!line.sim);
   }
 
-  private lineBelongsToCurrentDevice(line: LineaMovilLookup) {
-    return line.dispositivo?.id === this.sim().dispositivo?.id || line.sim?.id === this.sim().id;
+  private lineBelongsToCurrentSim(line: LineaMovilLookup) {
+    const currentDeviceId = this.sim().dispositivo?.id;
+    return (currentDeviceId !== undefined && currentDeviceId !== null && line.dispositivo?.id === currentDeviceId)
+      || line.sim?.id === this.sim().id;
   }
 
   private lookupIccid() {
@@ -471,23 +491,34 @@ export class SimLineManagement implements OnInit, OnDestroy {
 
   private refreshAfterSuccess(message: string) {
     forkJoin({ history: this.service.historialLineas(this.sim().codigoInventario) }).subscribe({ next: ({ history }) => this.lineHistory.set(history), error: () => undefined });
-    this.submitting.set(false); this.opened.set(false); this.notice.set(message); this.changed.emit();
+    this.submitting.set(false); this.opened.set(false); this.notice.set(message); this.changed.emit(message);
+  }
+
+  private verifySavedNumber(expectedNumber: string) {
+    const codigo = this.sim().codigoInventario;
+    forkJoin({ sim: this.service.obtener(codigo), history: this.service.historialLineas(codigo) }).subscribe({
+      next: ({ sim, history }) => {
+        if (phoneOf(sim) !== expectedNumber || sim.id !== this.sim().id) {
+          console.error('[SIM] Lectura posterior no confirma el número guardado', { codigo, expectedNumber, lineaMovil: sim.lineaMovil });
+          this.fail('No se pudo confirmar el número en la ficha recargada. Revisa la asociación antes de reintentar.');
+          return;
+        }
+        this.lineHistory.set(history);
+        this.submitting.set(false);
+        this.opened.set(false);
+        this.notice.set('Número asociado correctamente.');
+        this.changed.emit('Número asociado correctamente.');
+      },
+      error: () => this.fail('No se pudo confirmar el guardado al recargar la ficha y el historial. Vuelve a consultar la SIM antes de reintentar.')
+    });
   }
 
   private fail(error: unknown) {
     const raw = typeof error === 'string' ? error : errorMessage(error);
     const lower = raw.toLowerCase();
-    const message = lower.includes('número') || lower.includes('numero')
-      ? 'El número ya está utilizado por otra línea.'
-      : lower.includes('dada de baja')
-        ? 'La SIM seleccionada está dada de baja.'
-        : lower.includes('extraviada')
-          ? 'La SIM seleccionada está marcada como extraviada.'
-          : lower.includes('instalada') || lower.includes('otra línea') || lower.includes('otra custodia')
-            ? 'La SIM seleccionada ya está asociada a otro dispositivo o línea.'
-            : lower.includes('sql') || lower.includes('stack')
-              ? 'Ocurrió un error al actualizar la línea y la SIM.'
-              : raw;
+    const message = lower.includes('sql') || lower.includes('stack')
+      ? 'Ocurrió un error al actualizar la línea y la SIM.'
+      : raw;
     this.error.set(message); this.submitting.set(false);
   }
 }

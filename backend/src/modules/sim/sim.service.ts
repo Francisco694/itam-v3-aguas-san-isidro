@@ -5,6 +5,7 @@ import { insertarHistorialDispositivo, obtenerDispositivoPorCodigo } from "../di
 import { generateInventoryCode } from "../inventory-codes/inventory-code.service";
 import { toIsoDate, toIsoDateTime } from "../../shared/dates";
 import {
+  AppError,
   ConflictError,
   NotFoundError,
   ValidationError,
@@ -49,7 +50,7 @@ import type {
 } from "./sim.types";
 import { tipoDispositivoPermiteSim } from "../tipos-dispositivo/tipos-dispositivo.types";
 import { normalizarIccid, normalizarNumeroTelefonicoChileno } from "./sim-phone";
-import { vincularLineaMovil, vincularLineaMovilADispositivo } from "../lineas-moviles/lineas-moviles.service";
+import { vincularLineaMovil, vincularLineaMovilADispositivo, vincularLineaMovilASim } from "../lineas-moviles/lineas-moviles.service";
 import {
   actualizarVinculosLinea,
   desasociarVinculoLineaSim,
@@ -487,18 +488,9 @@ export const actualizarSimExistente = async (
       inputNormalizado.numeroAsociado = numeroIngresado
         ? normalizarNumeroTelefonicoChileno(numeroIngresado)
         : null;
-      if (
-        inputNormalizado.numeroAsociado
-        && await existeOtraSimOperableConNumero(
-          inputNormalizado.numeroAsociado,
-          actual.sim_id,
-          client
-        )
-      ) {
-        throw new ConflictError(
-          "El número telefónico ya está registrado en otra SIM activa."
-        );
-      }
+      // La función autoritativa distingue línea libre de línea ocupada.
+      // La mera existencia del número no es un conflicto.
+      if (inputNormalizado.numeroAsociado) validarSimOperable(actual);
     }
 
     let sim = await actualizarSim(codigoInventario, inputNormalizado, client);
@@ -508,15 +500,11 @@ export const actualizarSimExistente = async (
     }
 
     if (inputNormalizado.numeroAsociado) {
-      const vinculacion = await vincularLineaMovil(
-        {
-          numeroTelefonico: inputNormalizado.numeroAsociado,
-          sim: actual,
-          dispositivoId: actual.dispositivo_id,
-          colaboradorId: actual.colaborador_id,
-          responsable: "Actualización de ficha SIM",
-          observaciones: input.observaciones
-        },
+      const vinculacion = await vincularLineaMovilASim(
+        inputNormalizado.numeroAsociado,
+        actual,
+        "Actualización de ficha SIM",
+        input.observaciones,
         client
       );
       await insertarHistorialSim(
@@ -534,7 +522,17 @@ export const actualizarSimExistente = async (
         },
         client
       );
-      sim = await obtenerSimPorCodigo(codigoInventario, client) ?? sim;
+      const persisted = await client.query(
+        `SELECT 1 FROM itam.sim s
+         JOIN itam.lineas_moviles l ON l.id = s.linea_movil_id AND l.sim_id = s.id
+         WHERE s.id = $1 AND l.id = $2 AND l.numero_telefonico = $3`,
+        [actual.sim_id, vinculacion.linea.id, inputNormalizado.numeroAsociado]
+      );
+      const detalle = await obtenerSimPorCodigo(codigoInventario, client);
+      if (persisted.rowCount !== 1 || !detalle || detalle.linea_numero_telefonico !== inputNormalizado.numeroAsociado) {
+        throw new AppError(500, "SIM_LINE_SAVE_UNCONFIRMED", "No se pudo confirmar la asociación entre la SIM y la línea móvil.");
+      }
+      sim = detalle;
     }
 
     await client.query("COMMIT");
@@ -581,7 +579,8 @@ export const asociarDispositivo = async (
     }
     if (!tipoDispositivoPermiteSim(
       dispositivo.tipo_dispositivo_nombre,
-      dispositivo.tipo_dispositivo_configuracion_formulario
+      dispositivo.tipo_dispositivo_configuracion_formulario,
+      dispositivo.atributos_especificos
     )) {
       throw new ValidationError("El tipo de dispositivo no está configurado para llevar SIM.");
     }
