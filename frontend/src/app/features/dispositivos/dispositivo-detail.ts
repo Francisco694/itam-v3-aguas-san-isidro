@@ -1,5 +1,5 @@
 import { DatePipe } from '@angular/common';
-import { Component, DestroyRef, OnInit, inject, signal } from '@angular/core';
+import { Component, DestroyRef, HostListener, OnInit, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
@@ -37,8 +37,19 @@ export const receiversForDepartment = (
   collaborators: readonly Colaborador[],
   departmentId: string
 ): Colaborador[] => departmentId
-  ? collaborators.filter((person) => person.departamento?.id === departmentId)
+  ? collaborators.filter((person) => person.activo && person.departamento?.id === departmentId)
   : [];
+
+const normalizeAutocompleteText = (value: string): string =>
+  value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es').trim();
+
+export const departmentMatchesQuery = (department: Departamento, query: string): boolean => {
+  const normalizedQuery = normalizeAutocompleteText(query);
+  return !!normalizedQuery && (
+    normalizeAutocompleteText(department.nombre).includes(normalizedQuery)
+    || department.id.toLocaleLowerCase('es').includes(normalizedQuery)
+  );
+};
 
 export const isSmartphoneDevice = (device: Dispositivo): boolean =>
   device.tipo.nombre.trim().toLocaleLowerCase('es') === 'smartphone';
@@ -184,11 +195,11 @@ interface ModalErrorMessage {
 }
 
 export const collaboratorMatchesQuery = (person: Colaborador, query: string): boolean => {
-  const normalize = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es').trim();
-  const value = normalize(query);
+  const value = normalizeAutocompleteText(query);
   if (!value || !person.activo) return false;
   const rut = value.replace(/[.\s-]/g, '');
-  return normalize(person.nombre).includes(value)
+  return normalizeAutocompleteText(person.nombre).includes(value)
+    || normalizeAutocompleteText(person.cargo || '').includes(value)
     || (!!rut && /^[0-9k]+$/.test(rut) && person.rut.replace(/[.\s-]/g, '').toLowerCase().includes(rut));
 };
 
@@ -470,7 +481,59 @@ interface SimilarAssignedDevicePrompt {
                   }
                 </div>
               }
-              @if(action()==='assign-department'){<div class="notice notice--info">La responsabilidad será institucional; el colaborador que recibe confirma la entrega física.</div><div class="field"><label for="dept">Departamento *</label><select id="dept" formControlName="departamentoId"><option value="">Seleccionar</option>@for(department of departments(); track department.id){<option [value]="department.id">{{department.nombre}}</option>}</select></div><div class="field"><label for="receiver">Colaborador que recibe *</label><select id="receiver" formControlName="recibidoPorId"><option value="">Seleccionar colaborador del departamento</option>@for(person of departmentReceivers();track person.id){<option [value]="person.id">{{person.nombre}} · {{person.rut}} · {{person.cargo||'Sin cargo'}}</option>}</select></div><div class="field"><label for="location">Localidad</label><input id="location" formControlName="localidad" maxlength="120" /></div><div class="field"><label for="position">Ubicación</label><input id="position" formControlName="ubicacionDetalle" maxlength="250" /></div>}
+              @if(action()==='assign-department'){
+                <div class="notice notice--info">El equipo queda a cargo del departamento. La persona que lo recibe solo confirma que lo recibió.</div>
+                <div class="field department-autocomplete department-autocomplete--department">
+                  <label for="dept">Departamento *</label>
+                  <input id="dept" type="search" autocomplete="off" placeholder="Buscar departamento..."
+                    [value]="departmentQuery()" (input)="departmentQueryChanged($any($event.target).value)"
+                    (focus)="departmentResultsOpen.set(true)" (keydown)="departmentKeydown($event)"
+                    role="combobox" aria-autocomplete="list" aria-controls="department-results"
+                    [attr.aria-expanded]="departmentResultsOpen()" [disabled]="submitting()" />
+                  @if(departmentResultsOpen()){
+                    <div id="department-results" class="department-autocomplete__results" role="listbox" aria-label="Departamentos">
+                      @for(department of matchingDepartments(); track department.id; let index = $index){
+                        <button type="button" class="department-autocomplete__option" role="option"
+                          [id]="'department-option-' + index" [class.department-autocomplete__option--active]="index===departmentActiveIndex()"
+                          [attr.aria-selected]="actionForm.controls.departamentoId.value===department.id"
+                          (mouseenter)="departmentActiveIndex.set(index)" (click)="selectDepartment(department)">
+                          <strong>{{department.nombre}}</strong><small>ID {{department.id}}</small>
+                        </button>
+                      } @empty {
+                        @if(departmentQuery().trim()){<p class="department-autocomplete__empty">No se encontraron departamentos.</p>}
+                      }
+                    </div>
+                  }
+                  @if(departmentQuery().trim() && !actionForm.controls.departamentoId.value){<small class="field-error">Seleccione un departamento de los resultados.</small>}
+                </div>
+                <div class="field department-autocomplete department-autocomplete--receiver">
+                  <label for="receiver">Colaborador que recibe *</label>
+                  <input id="receiver" type="search" autocomplete="off" [value]="receiverQuery()"
+                    (input)="receiverQueryChanged($any($event.target).value)"
+                    (focus)="receiverResultsOpen.set(true)" (keydown)="receiverKeydown($event)"
+                    [placeholder]="actionForm.controls.departamentoId.value ? 'Buscar por nombre, apellido o RUT...' : 'Seleccione primero un departamento'"
+                    [disabled]="submitting() || !actionForm.controls.departamentoId.value"
+                    role="combobox" aria-autocomplete="list" aria-controls="receiver-results"
+                    [attr.aria-expanded]="receiverResultsOpen()" />
+                  @if(receiverResultsOpen() && actionForm.controls.departamentoId.value){
+                    <div id="receiver-results" class="department-autocomplete__results" role="listbox" aria-label="Colaboradores del departamento">
+                      @for(person of matchingDepartmentReceivers(); track person.id; let index = $index){
+                        <button type="button" class="department-autocomplete__option" role="option"
+                          [id]="'receiver-option-' + index" [class.department-autocomplete__option--active]="index===receiverActiveIndex()"
+                          [attr.aria-selected]="actionForm.controls.recibidoPorId.value===person.id"
+                          (mouseenter)="receiverActiveIndex.set(index)" (click)="selectDepartmentReceiver(person)">
+                          <strong>{{person.nombre}}</strong><small>{{person.rut}} · {{person.cargo || 'Sin cargo'}}</small>
+                        </button>
+                      } @empty {
+                        @if(receiverQuery().trim()){<p class="department-autocomplete__empty">No se encontraron colaboradores activos en este departamento.</p>}
+                      }
+                    </div>
+                  }
+                  @if(receiverQuery().trim() && !actionForm.controls.recibidoPorId.value){<small class="field-error">Seleccione un colaborador de los resultados.</small>}
+                </div>
+                <div class="field"><label for="location">Localidad</label><input id="location" formControlName="localidad" maxlength="120" /></div>
+                <div class="field"><label for="position">Ubicación</label><input id="position" formControlName="ubicacionDetalle" maxlength="250" /></div>
+              }
               @if(action()==='state' || action()==='recover'){@if(action()==='recover'){<div class="notice notice--info">No se borrará la historia del equipo. Se registrará que el equipo fue encontrado.</div>}<div class="field"><label for="new-state">Nuevo estado *</label><select id="new-state" formControlName="estadoId"><option value="">Seleccionar</option>@for(state of states(); track state.id){@if(action()==='state' || state.codigo==='DISPONIBLE' || state.codigo==='SERVICIO_TECNICO'){<option [value]="state.id">{{ state.nombre }}{{ state.esTerminal ? ' · terminal' : '' }}</option>}}</select></div>}
               @if(isReportingSmartphoneLost()){
                 <div class="notice notice--warning">El número pertenece a la línea móvil y puede conservarse aunque el equipo o la SIM se pierdan.</div>
@@ -1101,6 +1164,12 @@ export class DispositivoDetail implements OnInit {
   protected readonly states = signal<Estado[]>([]);
   protected readonly collaborators = signal<Colaborador[]>([]);
   protected readonly departments = signal<Departamento[]>([]);
+  protected readonly departmentQuery = signal('');
+  protected readonly departmentResultsOpen = signal(false);
+  protected readonly departmentActiveIndex = signal(-1);
+  protected readonly receiverQuery = signal('');
+  protected readonly receiverResultsOpen = signal(false);
+  protected readonly receiverActiveIndex = signal(-1);
   protected readonly loading = signal(true);
   protected readonly error = signal('');
   protected readonly actionError = signal('');
@@ -1405,12 +1474,111 @@ export class DispositivoDetail implements OnInit {
     this.showModalError('No se pudo completar el cambio', message);
     this.toast.error('No se pudo completar el cambio', message);
   }
-   protected open(action: DeviceAction): void { const actor=this.auth.user();if(!actor){this.actionError.set('La sesión no permite identificar al responsable TI.');this.toast.error('Sesión no válida','Vuelva a iniciar sesión antes de registrar una operación.');return;}if(action==='service'&&this.technicalServiceActive()){this.actionErrorTitle.set('No se pudo registrar el envío a servicio técnico');this.actionError.set('El equipo ya se encuentra en servicio técnico.');return;}this.actionForm.reset({ colaboradorId: '', departamentoId: '',recibidoPorId:'', localidad: this.item()?.localidad || '', ubicacionDetalle: this.item()?.ubicacionDetalle || '', estadoId: '',accionLineaExtravio:'',proveedor:'',fechaEnvio: action==='service' ? todayDateInputValue() : '',tipoServicio: action==='service' ? 'DIAGNOSTICO' : '',fallaReportada:'',accesoriosEntregados:'',motivoBaja:'',motivoRecuperacion:'', responsable: actor.nombre, observaciones: '' }); this.searchCollaborator(''); this.resetAssignmentDecision(); this.jointDelivery.set(false); this.deliveryPhone.set(action==='assign-person'&&this.item()&&canDeviceCarrySim(this.item()!) ? smartphonePhoneValue(this.item()!) || '' : ''); this.searchSim(''); this.actionError.set(''); this.actionErrorTitle.set(''); this.action.set(action); }
+   protected open(action: DeviceAction): void { const actor=this.auth.user();if(!actor){this.actionError.set('La sesión no permite identificar al responsable TI.');this.toast.error('Sesión no válida','Vuelva a iniciar sesión antes de registrar una operación.');return;}if(action==='service'&&this.technicalServiceActive()){this.actionErrorTitle.set('No se pudo registrar el envío a servicio técnico');this.actionError.set('El equipo ya se encuentra en servicio técnico.');return;}this.actionForm.reset({ colaboradorId: '', departamentoId: '',recibidoPorId:'', localidad: this.item()?.localidad || '', ubicacionDetalle: this.item()?.ubicacionDetalle || '', estadoId: '',accionLineaExtravio:'',proveedor:'',fechaEnvio: action==='service' ? todayDateInputValue() : '',tipoServicio: action==='service' ? 'DIAGNOSTICO' : '',fallaReportada:'',accesoriosEntregados:'',motivoBaja:'',motivoRecuperacion:'', responsable: actor.nombre, observaciones: '' }); this.resetDepartmentAutocomplete(); this.searchCollaborator(''); this.resetAssignmentDecision(); this.jointDelivery.set(false); this.deliveryPhone.set(action==='assign-person'&&this.item()&&canDeviceCarrySim(this.item()!) ? smartphonePhoneValue(this.item()!) || '' : ''); this.searchSim(''); this.actionError.set(''); this.actionErrorTitle.set(''); this.action.set(action); }
   protected openState(code: string): void { const state = this.states().find((item) => item.codigo === code); if (!state) return; this.open('state'); this.actionForm.controls.estadoId.setValue(state.id); if(code==='EXTRAVIADO'&&this.item()&&isSmartphoneDevice(this.item()!)&&!this.item()!.simAsociada)this.actionForm.controls.accionLineaExtravio.setValue('NO_APLICA'); }
   protected isReportingSmartphoneLost(): boolean { const target=this.states().find(state=>state.id===this.actionForm.controls.estadoId.value);const device=this.item();return this.action()==='state'&&!!device&&isSmartphoneDevice(device)&&target?.codigo==='EXTRAVIADO'; }
   protected actionTitle(): string { return { 'assign-person': 'Registrar entrega', 'assign-department': 'Entregar a departamento', return: 'Registrar recepción', state: 'Cambiar situación del equipo', recover: 'Registrar equipo encontrado', service:'Orden de Trabajo - Servicio Técnico',retire:'Retirar del inventario' }[this.action() || 'return']; }
   protected openServiceOrder(): void { this.open('service'); const device=this.item(); if(device)this.actionForm.controls.areaSolicitante.setValue(device.departamento?.nombre || 'Area TI - Aguas San Isidro'); }
-  protected departmentReceivers():Colaborador[]{return receiversForDepartment(this.collaborators(),this.actionForm.controls.departamentoId.value);}
+  protected matchingDepartments(): Departamento[] {
+    const query = this.departmentQuery();
+    return this.departments().filter((department) => !query.trim() || departmentMatchesQuery(department, query));
+  }
+  protected matchingDepartmentReceivers(): Colaborador[] {
+    const departmentId = this.actionForm.controls.departamentoId.value;
+    return receiversForDepartment(this.collaborators(), departmentId)
+      .filter((person) => !this.receiverQuery().trim() || collaboratorMatchesQuery(person, this.receiverQuery()));
+  }
+  protected departmentReceivers(): Colaborador[] {
+    return receiversForDepartment(this.collaborators(), this.actionForm.controls.departamentoId.value);
+  }
+  protected departmentQueryChanged(query: string): void {
+    this.departmentQuery.set(query);
+    this.departmentResultsOpen.set(true);
+    this.actionForm.controls.departamentoId.setValue('');
+    this.actionForm.controls.recibidoPorId.setValue('');
+    this.receiverQuery.set('');
+    this.receiverResultsOpen.set(false);
+    this.departmentActiveIndex.set(-1);
+    this.actionError.set('');
+  }
+  protected selectDepartment(department: Departamento): void {
+    this.actionForm.controls.departamentoId.setValue(department.id);
+    this.departmentQuery.set(department.nombre);
+    this.departmentResultsOpen.set(false);
+    this.departmentActiveIndex.set(-1);
+    this.actionForm.controls.recibidoPorId.setValue('');
+    this.receiverQuery.set('');
+    this.receiverResultsOpen.set(false);
+    this.receiverActiveIndex.set(-1);
+    this.actionError.set('');
+  }
+  protected receiverQueryChanged(query: string): void {
+    this.receiverQuery.set(query);
+    this.receiverResultsOpen.set(true);
+    this.actionForm.controls.recibidoPorId.setValue('');
+    this.receiverActiveIndex.set(-1);
+    this.actionError.set('');
+  }
+  protected selectDepartmentReceiver(person: Colaborador): void {
+    if (!this.departmentReceivers().some((candidate) => candidate.id === person.id)) return;
+    this.actionForm.controls.recibidoPorId.setValue(person.id);
+    this.receiverQuery.set(person.nombre);
+    this.receiverResultsOpen.set(false);
+    this.receiverActiveIndex.set(-1);
+    this.actionError.set('');
+  }
+  protected departmentKeydown(event: KeyboardEvent): void {
+    this.handleAutocompleteKeydown(event, this.matchingDepartments().length, this.departmentActiveIndex, this.departmentResultsOpen,
+      (index) => this.selectDepartment(this.matchingDepartments()[index]!));
+  }
+  protected receiverKeydown(event: KeyboardEvent): void {
+    const results = this.matchingDepartmentReceivers();
+    this.handleAutocompleteKeydown(event, results.length, this.receiverActiveIndex, this.receiverResultsOpen,
+      (index) => this.selectDepartmentReceiver(results[index]!));
+  }
+  @HostListener('document:click', ['$event'])
+  protected closeDepartmentAutocompleteOnOutsideClick(event: MouseEvent): void {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    if (!target.closest('.department-autocomplete--department')) this.departmentResultsOpen.set(false);
+    if (!target.closest('.department-autocomplete--receiver')) this.receiverResultsOpen.set(false);
+  }
+  private handleAutocompleteKeydown(
+    event: KeyboardEvent,
+    resultCount: number,
+    activeIndex: WritableSignal<number>,
+    isOpen: WritableSignal<boolean>,
+    select: (index: number) => void
+  ): void {
+    if (event.key === 'Escape') {
+      isOpen.set(false);
+      activeIndex.set(-1);
+      return;
+    }
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      if (!resultCount) return;
+      event.preventDefault();
+      isOpen.set(true);
+      const direction = event.key === 'ArrowDown' ? 1 : -1;
+      const current = activeIndex();
+      activeIndex.set(current < 0
+        ? (direction > 0 ? 0 : resultCount - 1)
+        : (current + direction + resultCount) % resultCount);
+      return;
+    }
+    if (event.key === 'Enter' && isOpen() && resultCount) {
+      event.preventDefault();
+      select(Math.max(0, activeIndex()));
+    }
+  }
+  private resetDepartmentAutocomplete(): void {
+    this.departmentQuery.set('');
+    this.departmentResultsOpen.set(false);
+    this.departmentActiveIndex.set(-1);
+    this.receiverQuery.set('');
+    this.receiverResultsOpen.set(false);
+    this.receiverActiveIndex.set(-1);
+  }
   protected custodyText(event: HistorialEvento, key: 'custodiaAnterior'|'custodiaNueva'): string {
     const value = event.detalle[key];
     if (!value || typeof value !== 'object') return '';
@@ -1651,7 +1819,8 @@ export class DispositivoDetail implements OnInit {
     if (action === 'assign-person' && this.assignmentResolution() !== 'REPLACE' && this.item() && canDeviceCarrySim(this.item()!) && deliveryPhoneValue && !isChileanPhoneInputValid(deliveryPhoneValue)) { this.actionError.set('Ingresa un número telefónico chileno válido.'); return; }
     if (action === 'assign-person' && this.assignmentResolution() !== 'REPLACE' && this.jointDelivery() && (!this.selectedSim() || !this.item() || !canDeviceCarrySim(this.item()!) || this.item()!.simAsociada)) { this.actionError.set('Selecciona una SIM disponible para este dispositivo.'); return; }
     if (action === 'assign-person' && this.assignmentResolution() !== 'REPLACE' && this.jointDelivery() && !isChileanPhoneInputValid(deliveryPhoneValue)) { this.actionError.set('Ingresa un número telefónico chileno válido para la SIM.'); return; }
-    if (action === 'assign-department' && (!value.departamentoId||!value.recibidoPorId)) { this.actionError.set('Selecciona el departamento y el colaborador que recibe.'); return; }
+    if (action === 'assign-department' && !value.departamentoId) { this.actionError.set('Seleccione un departamento de los resultados.'); return; }
+    if (action === 'assign-department' && !value.recibidoPorId) { this.actionError.set('Seleccione un colaborador de los resultados.'); return; }
     if (action === 'state' && !value.estadoId) { this.actionError.set('Selecciona un estado.'); return; }
     if (action === 'return' && this.pendingReplacement() && !this.replacementStateId()) { this.actionError.set('Selecciona el destino del dispositivo anterior.'); return; }
     if (action === 'return' && this.pendingReplacement() && this.item()?.simAsociada && this.pendingSimDelivered() === null) { this.actionError.set('Indica si la SIM también fue entregada físicamente.'); return; }
@@ -1712,3 +1881,4 @@ export class DispositivoDetail implements OnInit {
     });
   }
 }
+import type { WritableSignal } from '@angular/core';
