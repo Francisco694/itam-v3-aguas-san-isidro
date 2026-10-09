@@ -337,6 +337,45 @@ describe('Registrar entrega: formulario', () => {
     expect(simApi.asociarDispositivo).not.toHaveBeenCalled();
   });
 
+  it('habilita Asociar SIM sin línea en un Router celular y conserva el número vacío', async () => {
+    const targetSim = { ...sim, iccidCodigoFabrica: '8956032262763687244', numeroAsociado: null, lineaMovil: null };
+    simApi.listar.mockReturnValue(of([targetSim]));
+    component.item.update((device: any) => ({
+      ...device,
+      tipo: { id: 'router', nombre: 'Router', permiteSim: false, configuracionFormulario: { camposEspecificos: [] } },
+      atributosEspecificos: { utilizaRedMovil: true },
+      imei: '359158762297938',
+      lineaMovil: null,
+      simAsociada: null
+    }));
+    api.obtener.mockReturnValueOnce(of({
+      ...component.item(),
+      simAsociada: { id: targetSim.id, codigoInventario: targetSim.codigoInventario, iccidCodigoFabrica: targetSim.iccidCodigoFabrica, compania: targetSim.compania, numeroAsociado: null, lineaMovil: null },
+      lineaMovil: null
+    }));
+    component.openSimAssociation();
+    fixture.detectChanges();
+    component.chooseAssociationChange('SIM');
+    component.selectAssociationSim(targetSim);
+    fixture.detectChanges();
+
+    const submit = fixture.nativeElement.querySelector('.sim-association-dialog button[type="submit"]');
+    expect(submit.disabled).toBe(false);
+    expect(submit.textContent).toContain('Asociar SIM');
+    submit.click();
+    fixture.detectChanges();
+
+    expect(api.gestionarLineaSim).toHaveBeenCalledWith(1445, expect.objectContaining({
+      mantenerNumero: true,
+      mantenerSim: false,
+      simDestinoCodigo: 555,
+      numeroNuevo: null
+    }));
+    expect(api.obtener).toHaveBeenCalledWith(1445);
+    expect(component.item().simAsociada.codigoInventario).toBe(555);
+    expect(component.item().lineaMovil).toBeNull();
+  });
+
   it('oculta mantener configuración cuando el equipo no tiene línea', () => {
     component.item.update((device: any) => ({ ...device, lineaMovil: null, simAsociada: null }));
     component.openSimAssociation(); fixture.detectChanges();

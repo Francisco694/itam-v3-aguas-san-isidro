@@ -1,7 +1,7 @@
 import type { PoolClient } from "pg";
 import { AppError, ConflictError, ValidationError } from "../../shared/errors";
 import { normalizarNumeroTelefonicoChileno } from "../sim/sim-phone";
-import { insertarHistorialSim, obtenerEstadoSimPorCodigo, obtenerSimPorId } from "../sim/sim.repository";
+import { existeOtraLineaConNumero, insertarHistorialSim, obtenerEstadoSimPorCodigo, obtenerSimPorId } from "../sim/sim.repository";
 import type { SimRow } from "../sim/sim.types";
 import {
   actualizarLineaPorExtravio,
@@ -45,10 +45,21 @@ export const esReposicionLineaMovil = (
   && ["PENDIENTE_REPOSICION", "BLOQUEADA", "SUSPENDIDA"].includes(linea.estado)
   && linea.sim_id !== simObjetivoId;
 
-export const buscarLineaMovilPorNumero = async (numeroTelefonico: string) => {
+export const buscarLineaMovilPorNumero = async (
+  numeroTelefonico: string,
+  dispositivoId: string | null = null,
+  simId: string | null = null,
+  client?: PoolClient
+) => {
   const numero = normalizarNumeroTelefonicoChileno(numeroTelefonico);
-  const row = await obtenerLineaPorNumeroConContexto(numero);
-  if (!row) return null;
+  const row = await obtenerLineaPorNumeroConContexto(numero, client);
+  if (!row) {
+    const ocupado = await existeOtraLineaConNumero(numero, simId, client, null, dispositivoId);
+    if (ocupado) {
+      throw new ConflictError("El número telefónico ya está en uso por otra asociación vigente.");
+    }
+    return null;
+  }
   return {
     id: row.linea_id,
     numeroTelefonico: row.numero_telefonico,

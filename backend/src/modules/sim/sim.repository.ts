@@ -151,10 +151,11 @@ export const obtenerSimPorIccid = async (
 export const existeOtraLineaConNumero = async (
   numeroTelefonico: string,
   simId: string | null,
-  client: PoolClient,
-  simIdAdicionalExcluida: string | null = null
+  client?: PoolClient,
+  simIdAdicionalExcluida: string | null = null,
+  dispositivoId: string | null = null
 ): Promise<boolean> => {
-  const result = await client.query<{ existe: boolean }>(
+  const result = await getDb(client).query<{ existe: boolean }>(
     `
       SELECT EXISTS (
         SELECT 1
@@ -164,11 +165,22 @@ export const existeOtraLineaConNumero = async (
         WHERE REGEXP_REPLACE(linea.numero_telefonico, '[^0-9]', '', 'g') = $1
           AND ($2::bigint IS NULL OR sim.id IS NULL OR sim.id <> $2::bigint)
           AND ($3::bigint IS NULL OR sim.id IS NULL OR sim.id <> $3::bigint)
+          AND ($4::bigint IS NULL OR linea.dispositivo_id IS NULL OR linea.dispositivo_id <> $4::bigint)
           AND (sim.id IS NULL OR estado_sim.codigo IN ('DISPONIBLE', 'ASIGNADA'))
           AND linea.estado <> 'DADA_BAJA'
+      ) OR EXISTS (
+        SELECT 1
+        FROM itam.sim legacy_sim
+        JOIN itam.estados legacy_estado ON legacy_estado.id = legacy_sim.estado_id
+        WHERE REGEXP_REPLACE(COALESCE(legacy_sim.numero_asociado, ''), '[^0-9]', '', 'g') = $1
+          AND ($2::bigint IS NULL OR legacy_sim.id <> $2::bigint)
+          AND ($3::bigint IS NULL OR legacy_sim.id <> $3::bigint)
+          AND ($4::bigint IS NULL OR legacy_sim.dispositivo_id IS NULL OR legacy_sim.dispositivo_id <> $4::bigint)
+          AND legacy_estado.codigo IN ('DISPONIBLE', 'ASIGNADA')
+          AND (legacy_sim.dispositivo_id IS NOT NULL OR legacy_sim.colaborador_id IS NOT NULL OR legacy_estado.codigo = 'ASIGNADA')
       ) AS existe
     `,
-    [numeroTelefonico, simId, simIdAdicionalExcluida]
+    [numeroTelefonico, simId, simIdAdicionalExcluida, dispositivoId]
   );
   return result.rows[0]?.existe ?? false;
 };

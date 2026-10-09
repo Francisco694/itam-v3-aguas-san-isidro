@@ -3,7 +3,7 @@ import test from "node:test";
 import type { PoolClient } from "pg";
 import { pool } from "../../config/database";
 import { gestionarLineaSimEnTransaccion } from "./gestionar-linea-sim.service";
-import { vincularLineaMovilASim } from "./lineas-moviles.service";
+import { buscarLineaMovilPorNumero, vincularLineaMovilASim } from "./lineas-moviles.service";
 import { registrarSimNuevaEnTransaccion } from "./registrar-sim-linea.service";
 import { obtenerLineaPorNumeroConContexto } from "./lineas-moviles.repository";
 import { obtenerSimPorCodigo } from "../sim/sim.repository";
@@ -110,6 +110,21 @@ const createFixture = async (client: PoolClient): Promise<Fixture> => {
     currentNumber,
     currentIccid
   };
+};
+
+const removeDeviceLine = async (client: PoolClient, fixture: Fixture): Promise<void> => {
+  await client.query(
+    `UPDATE itam.lineas_moviles
+        SET dispositivo_id=NULL, colaborador_id=NULL, sim_id=NULL
+      WHERE id=$1`,
+    [fixture.lineId]
+  );
+  await client.query(
+    `UPDATE itam.sim SET linea_movil_id=NULL, numero_asociado=NULL,
+       dispositivo_id=NULL, colaborador_id=NULL
+      WHERE id=$1`,
+    [fixture.currentSimId]
+  );
 };
 
 test("mantener SIM + mantener número no escribe ni genera historial", async () => {
@@ -290,6 +305,103 @@ test("cambiar SIM + mantener número cierra la relación anterior y abre la nuev
   });
 });
 
+test("asociar SIM disponible a dispositivo sin custodio ni línea crea ambos historiales", async () => {
+  await withTransaction(async (client) => {
+    const fixture = await createFixture(client);
+    await removeDeviceLine(client, fixture);
+    await client.query(
+      `UPDATE itam.dispositivos
+          SET colaborador_id=NULL,
+              estado_id=(SELECT id FROM itam.estados WHERE tipo_entidad='DISPOSITIVO' AND codigo='DISPONIBLE' LIMIT 1)
+        WHERE id=$1`,
+      [fixture.deviceId]
+    );
+
+    const result = await gestionarLineaSimEnTransaccion(
+      fixture.deviceCode,
+      {
+        mantenerSim: false,
+        mantenerNumero: true,
+        simDestinoCodigo: fixture.targetSimCode,
+        numeroNuevo: null,
+        responsable: "TEST_SIM_SIN_LINEA"
+      },
+      client
+    );
+    const refs = await client.query<{
+      sim_dispositivo: string | null;
+      sim_linea: string | null;
+      sim_estado: string;
+      lineas_dispositivo: string;
+      eventos_sim: string;
+      eventos_dispositivo: string;
+    }>(
+      `SELECT s.dispositivo_id::text AS sim_dispositivo,
+              s.linea_movil_id::text AS sim_linea,
+              e.codigo AS sim_estado,
+              (SELECT COUNT(*)::text FROM itam.lineas_moviles l WHERE l.dispositivo_id=$2) AS lineas_dispositivo,
+              (SELECT COUNT(*)::text FROM itam.historial_eventos h WHERE h.sim_id=s.id AND h.tipo_evento='ASOCIAR_SIM_GESTION_ATOMICA') AS eventos_sim,
+              (SELECT COUNT(*)::text FROM itam.historial_eventos h WHERE h.dispositivo_id=$2 AND h.tipo_evento='GESTION_LINEA_SIM_ATOMICA') AS eventos_dispositivo
+         FROM itam.sim s JOIN itam.estados e ON e.id=s.estado_id WHERE s.id=$1`,
+      [fixture.targetSimId, fixture.deviceId]
+    );
+
+    assert.equal(result.linea, null);
+    assert.equal(result.numeroNuevo, null);
+    assert.equal(result.simActual?.codigoInventario, fixture.targetSimCode);
+    assert.equal(refs.rows[0]!.sim_dispositivo, fixture.deviceId);
+    assert.equal(refs.rows[0]!.sim_linea, null);
+    assert.equal(refs.rows[0]!.sim_estado, "ASIGNADA");
+    assert.equal(refs.rows[0]!.lineas_dispositivo, "0");
+    assert.equal(refs.rows[0]!.eventos_sim, "1");
+    assert.equal(refs.rows[0]!.eventos_dispositivo, "1");
+  });
+});
+
+test("asociar SIM con línea existente conserva el número y vincula la línea al dispositivo", async () => {
+  await withTransaction(async (client) => {
+    const fixture = await createFixture(client);
+    await removeDeviceLine(client, fixture);
+    const number = "56994443322";
+    const line = await client.query<{ id: string }>(
+      `INSERT INTO itam.lineas_moviles(numero_telefonico, estado, sim_id)
+       VALUES ($1, 'ACTIVA', $2) RETURNING id`,
+      [number, fixture.targetSimId]
+    );
+    await client.query("UPDATE itam.sim SET linea_movil_id=$2 WHERE id=$1", [fixture.targetSimId, line.rows[0]!.id]);
+
+    const result = await gestionarLineaSimEnTransaccion(
+      fixture.deviceCode,
+      {
+        mantenerSim: false,
+        mantenerNumero: true,
+        simDestinoCodigo: fixture.targetSimCode,
+        numeroNuevo: null,
+        responsable: "TEST_SIM_CON_LINEA"
+      },
+      client
+    );
+    const refs = await client.query<{ id: string; numero: string; line_sim: string; line_device: string; sim_line: string; historia_activa: string }>(
+      `SELECT l.id::text, l.numero_telefonico AS numero, l.sim_id::text AS line_sim,
+              l.dispositivo_id::text AS line_device, s.linea_movil_id::text AS sim_line
+              ,(SELECT COUNT(*)::text FROM itam.lineas_moviles_sim_historial h WHERE h.linea_movil_id=l.id AND h.sim_id=s.id AND h.fecha_fin IS NULL) AS historia_activa
+         FROM itam.lineas_moviles l JOIN itam.sim s ON s.id=l.sim_id
+        WHERE s.id=$1`,
+      [fixture.targetSimId]
+    );
+
+    assert.equal(result.linea?.id, line.rows[0]!.id);
+    assert.equal(result.linea?.numeroTelefonico, number);
+    assert.equal(refs.rowCount, 1);
+    assert.equal(refs.rows[0]!.id, line.rows[0]!.id);
+    assert.equal(refs.rows[0]!.numero, number);
+    assert.equal(refs.rows[0]!.line_sim, fixture.targetSimId);
+    assert.equal(refs.rows[0]!.line_device, fixture.deviceId);
+    assert.equal(refs.rows[0]!.sim_line, line.rows[0]!.id);
+    assert.equal(refs.rows[0]!.historia_activa, "1");
+  });
+});
+
 test("cambiar SIM + cambiar número se confirma como una sola operación", async () => {
   await withTransaction(async (client) => {
     const fixture = await createFixture(client);
@@ -347,6 +459,112 @@ test("número duplicado rechaza antes de modificar la línea o la SIM", async ()
   });
 });
 
+test("cambiar el número crea la línea oficial cuando el dispositivo conserva SIM pero no tiene línea", async () => {
+  await withTransaction(async (client) => {
+    const fixture = await createFixture(client);
+    await client.query(
+      `UPDATE itam.lineas_moviles SET dispositivo_id=NULL, colaborador_id=NULL, sim_id=NULL WHERE id=$1`,
+      [fixture.lineId]
+    );
+    await client.query(
+      `UPDATE itam.sim SET linea_movil_id=NULL, numero_asociado=NULL WHERE id=$1`,
+      [fixture.currentSimId]
+    );
+    const nextNumber = "+56 9 1122 3344";
+    const normalized = nextNumber.replace(/[^0-9]/g, '');
+
+    const result = await gestionarLineaSimEnTransaccion(
+      fixture.deviceCode,
+      {
+        mantenerSim: true,
+        mantenerNumero: false,
+        simDestinoCodigo: null,
+        numeroNuevo: nextNumber,
+        responsable: "TEST"
+      },
+      client
+    );
+    const refs = await client.query<{ device_id: string; sim_id: string; sim_line: string; sim_number: string }>(
+      `SELECT l.dispositivo_id::text AS device_id, l.sim_id::text AS sim_id,
+              s.linea_movil_id::text AS sim_line, s.numero_asociado AS sim_number
+         FROM itam.lineas_moviles l JOIN itam.sim s ON s.id=$1 WHERE l.id=$2`,
+      [fixture.currentSimId, result.linea!.id]
+    );
+
+    assert.equal(result.linea?.numeroTelefonico, normalized);
+    assert.equal(refs.rows[0]?.device_id, fixture.deviceId);
+    assert.equal(refs.rows[0]?.sim_id, fixture.currentSimId);
+    assert.equal(refs.rows[0]?.sim_line, result.linea?.id);
+    assert.equal(refs.rows[0]?.sim_number, normalized);
+
+    const secondNumber = `569${String(30000000 + Date.now() % 100000000).slice(-8)}`;
+    const secondResult = await gestionarLineaSimEnTransaccion(
+      fixture.deviceCode,
+      {
+        mantenerSim: true,
+        mantenerNumero: false,
+        simDestinoCodigo: null,
+        numeroNuevo: secondNumber,
+        responsable: "TEST_NUMERO_LIBRE_ADICIONAL"
+      },
+      client
+    );
+    assert.equal(secondResult.linea?.id, result.linea?.id);
+    assert.equal(secondResult.linea?.numeroTelefonico, secondNumber);
+  });
+});
+
+test("rechaza el número si ya pertenece a otra SIM/equipo y conserva ambos vínculos", async () => {
+  await withTransaction(async (client) => {
+    const fixture = await createFixture(client);
+    const otherDeviceCode = fixture.deviceCode + 1;
+    const otherDevice = await client.query<{ id: string }>(
+      `INSERT INTO itam.dispositivos
+         (codigo_inventario, tipo_dispositivo_id, tipo_dispositivo, estado_id, colaborador_id, valor_comercial)
+       SELECT $1, tipo_dispositivo_id, tipo_dispositivo, estado_id, colaborador_id, 0
+         FROM itam.dispositivos WHERE id=$2 RETURNING id`,
+      [otherDeviceCode, fixture.deviceId]
+    );
+    const assignedState = await client.query<{ id: string }>(
+      `SELECT id FROM itam.estados WHERE tipo_entidad='SIM' AND codigo='ASIGNADA' LIMIT 1`
+    );
+    assert.ok(otherDevice.rows[0]?.id && assignedState.rows[0]?.id);
+    const number = `569${String(40000000 + Date.now() % 100000000).slice(-8)}`;
+    const otherLine = await client.query<{ id: string }>(
+      `INSERT INTO itam.lineas_moviles(numero_telefonico, estado, dispositivo_id, sim_id)
+       VALUES ($1, 'ACTIVA', $2, $3) RETURNING id`,
+      [number, otherDevice.rows[0]!.id, fixture.targetSimId]
+    );
+    await client.query(
+      `UPDATE itam.sim SET estado_id=$2, dispositivo_id=$3, linea_movil_id=$4, numero_asociado=$5 WHERE id=$1`,
+      [fixture.targetSimId, assignedState.rows[0]!.id, otherDevice.rows[0]!.id, otherLine.rows[0]!.id, number]
+    );
+
+    await assert.rejects(
+      gestionarLineaSimEnTransaccion(
+        fixture.deviceCode,
+        {
+          mantenerSim: true,
+          mantenerNumero: false,
+          simDestinoCodigo: null,
+          numeroNuevo: number,
+          responsable: "TEST_CONFLICTO_REAL"
+        },
+        client
+      ),
+      (error: unknown) => (error as { statusCode?: number }).statusCode === 409
+    );
+    const unchanged = await client.query<{ number: string; device_id: string; sim_id: string }>(
+      `SELECT numero_telefonico AS number, dispositivo_id::text AS device_id, sim_id::text AS sim_id
+         FROM itam.lineas_moviles WHERE id=$1`,
+      [otherLine.rows[0]!.id]
+    );
+    assert.equal(unchanged.rows[0]?.number, number);
+    assert.equal(unchanged.rows[0]?.device_id, otherDevice.rows[0]!.id);
+    assert.equal(unchanged.rows[0]?.sim_id, fixture.targetSimId);
+  });
+});
+
 test("búsqueda oficial devuelve contexto aunque la línea no tenga SIM", async () => {
   await withTransaction(async (client) => {
     const number = "56998887777";
@@ -359,6 +577,23 @@ test("búsqueda oficial devuelve contexto aunque la línea no tenga SIM", async 
     assert.equal(row.numero_telefonico, number);
     assert.equal(row.sim_id, null);
     assert.equal(row.dispositivo_id, null);
+  });
+});
+
+test("la búsqueda no marca libre una asociación legacy vigente de otra SIM", async () => {
+  await withTransaction(async (client) => {
+    const fixture = await createFixture(client);
+    const number = `569${String(20000000 + sequence).slice(-8)}`;
+    await client.query(`UPDATE itam.sim SET numero_asociado=$2 WHERE id=$1`, [fixture.currentSimId, number]);
+
+    await assert.rejects(
+      buscarLineaMovilPorNumero(number, "999999999999", null, client),
+      (error: unknown) => (error as { statusCode?: number }).statusCode === 409
+    );
+    assert.equal(
+      await buscarLineaMovilPorNumero(`+56 9 ${number.slice(3, 7)} ${number.slice(7)}`, fixture.deviceId, fixture.currentSimId, client),
+      null
+    );
   });
 });
 

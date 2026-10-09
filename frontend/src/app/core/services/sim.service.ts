@@ -12,7 +12,15 @@ export class SimService {
   listar() { return this.http.get<ApiCollectionResponse<Sim>>(this.url).pipe(map((r) => r.data)); }
   obtener(codigo: number) { return this.item(this.http.get<ApiItemResponse<Sim>>(`${this.url}/${codigo}`)); }
   buscarPorIccid(iccid: string) { return this.item(this.http.get<ApiItemResponse<Sim>>(`${this.url}/iccid/${encodeURIComponent(iccid)}`)); }
-  buscarLineaPorNumero(numero: string) { return this.http.get<ApiItemResponse<LineaMovilLookup>>(`${environment.apiUrl}/lineas-moviles/numero/${encodeURIComponent(numero)}`).pipe(map((r) => r.data)); }
+  buscarLineaPorNumero(numero: string, dispositivoId?: string, simId?: string) {
+    const context = new URLSearchParams();
+    if (dispositivoId) context.set('dispositivoId', dispositivoId);
+    if (simId) context.set('simId', simId);
+    const query = context.toString();
+    return this.http.get<ApiItemResponse<LineaMovilLookup>>(
+      `${environment.apiUrl}/lineas-moviles/numero/${encodeURIComponent(numero)}${query ? `?${query}` : ''}`
+    ).pipe(map((r) => r.data));
+  }
   crear(input: SimInput) { return this.item(this.http.post<ApiItemResponse<Sim>>(this.url, input)); }
   actualizar(codigo: number, input: Partial<SimInput>) { return this.item(this.http.patch<ApiItemResponse<Sim>>(`${this.url}/${codigo}`, input)); }
   asociarDispositivo(codigo: number, input: AsociarDispositivoInput) { return this.item(this.http.post<ApiItemResponse<Sim>>(`${this.url}/${codigo}/asociar-dispositivo`, input)); }

@@ -166,7 +166,7 @@ const mobileLineErrorDetail = (error: unknown): string => {
     return 'Sesión no válida o sin autorización para guardar la línea móvil.';
   }
   if (error.status === 409) {
-    return 'El número telefónico ya está asociado a otro equipo.';
+    return error.message;
   }
   if (error.status >= 500) return 'Error interno al guardar la línea móvil.';
   return error.message;
@@ -535,7 +535,8 @@ interface SimilarAssignedDevicePrompt {
                 <input id="association-phone" type="tel" inputmode="tel" maxlength="20" placeholder="+56 9 9746 4529" [value]="associationNumber()" (input)="associationNumberChanged($any($event.target).value)" [disabled]="submitting()" required />
                 <small class="hint">Busca el número oficial registrado en ITAM.</small>
                 @if(associationLineState()==='checking'){<p class="association-lookup">Comprobando número oficial…</p>}
-                @if(associationLineState()==='available'){<div class="association-context association-context--success">✓ Número no registrado en ITAM. Se puede registrar como nueva línea.</div>}
+                @if(associationLineState()==='available'){<div class="association-context association-context--success">✓ Número disponible. Se puede registrar como nueva línea.</div>}
+                @if(associationLineState()==='conflict' && !associationLineLookup()){<div class="association-context association-context--warning">Este número ya está en uso por otra asociación vigente. No se puede confirmar el cambio.</div>}
                 @if(associationLineLookup(); as line){<div class="association-context" [class.association-context--warning]="associationLineState()==='conflict'"><strong>{{associationLineState()==='conflict' ? 'Número asociado a otro equipo' : ('Línea encontrada · ' + line.estado)}}</strong><span>{{line.numeroTelefonico}}</span><span>SIM {{line.sim ? ('ITAM ' + line.sim.codigoInventario + (line.sim.compania ? (' · ' + line.sim.compania) : '')) : 'Sin SIM'}}</span>@if(line.dispositivo){<span>Equipo ITAM {{line.dispositivo.codigoInventario}}</span>}@if(line.colaborador){<span>{{line.colaborador.nombre}}{{line.departamento ? (' · ' + line.departamento.nombre) : ''}}</span>}@if(associationLineState()==='conflict'){<strong class="association-conflict">No se trasladará silenciosamente.</strong>}</div>}
                 @if(associationNumber() && !isPhoneValid(associationNumber())){<small class="field-error" role="alert">Ingrese 9 dígitos o formato 56XXXXXXXXX.</small>}
               </section>
@@ -1232,7 +1233,8 @@ export class DispositivoDetail implements OnInit {
     }
     this.associationLineState.set('checking');
     this.associationLookupTimer = setTimeout(() => {
-      this.simService.buscarLineaPorNumero(normalized).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      const device = this.item();
+      this.simService.buscarLineaPorNumero(normalized, device?.id, device?.simAsociada?.id).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
         next: line => {
           this.associationLineLookup.set(line);
           const device = this.item();
@@ -1242,6 +1244,7 @@ export class DispositivoDetail implements OnInit {
         },
         error: error => {
           if ((error as { status?: number })?.status === 404) this.associationLineState.set('available');
+          else if ((error as { status?: number })?.status === 409) this.associationLineState.set('conflict');
           else { this.associationLineState.set('idle'); this.showModalError('No se pudo buscar el número', errorMessage(error)); }
         }
       });
@@ -1288,7 +1291,6 @@ export class DispositivoDetail implements OnInit {
       return this.isValidIccidValue(this.associationNewIccid()) && !!company;
     }
     if (needsSim && !this.associationSelectedSim()) return false;
-    if (!needsNumber && !this.item()?.lineaMovil && !this.associationInlineRegistration()) return false;
     if (needsNumber && !this.associationInlineRegistration() && this.associationLineState() === 'found'
       && String(this.associationLineLookup()?.id) !== String(this.item()?.lineaMovil?.id)) return false;
     return true;
@@ -1378,11 +1380,6 @@ export class DispositivoDetail implements OnInit {
         next: () => this.finishAssociationSave(codigo, 'SIM nueva registrada y asociada correctamente.'),
         error: error => this.failAssociationSave(error)
       });
-      return;
-    }
-    if (changeSim && !device.lineaMovil) {
-      this.submitting.set(false);
-      this.showModalError('No se puede asociar esta SIM todavía', 'El flujo atómico disponible requiere una línea móvil vigente o el registro de una SIM nueva sin línea.');
       return;
     }
     this.service.gestionarLineaSim(codigo, {

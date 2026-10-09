@@ -25,9 +25,12 @@ import {
 import { normalizarNumeroTelefonicoChileno } from "../sim/sim-phone";
 import {
   actualizarNumeroLineaMovil,
+  actualizarVinculosLinea,
+  crearLineaMovil,
   insertarHistorialLineaMovil,
   obtenerLineaPorDispositivo,
   obtenerLineaPorId,
+  obtenerLineaPorSim,
   sincronizarVinculoLineaSim
 } from "./lineas-moviles.repository";
 import type {
@@ -61,8 +64,7 @@ const simSnapshot = (sim: Awaited<ReturnType<typeof obtenerSimPorCodigo>>): Gest
 };
 
 const validateTargetSim = (
-  sim: NonNullable<Awaited<ReturnType<typeof obtenerSimPorCodigo>>>,
-  dispositivoId: string
+  sim: NonNullable<Awaited<ReturnType<typeof obtenerSimPorCodigo>>>
 ): void => {
   if (sim.estado_codigo !== "DISPONIBLE") {
     throw new ConflictError(
@@ -72,14 +74,8 @@ const validateTargetSim = (
   if (sim.dispositivo_id !== null) {
     throw new ConflictError("La SIM destino ya está instalada en otro dispositivo.");
   }
-  if (sim.linea_movil_id !== null) {
-    throw new ConflictError("La SIM destino ya está asociada a otra línea.");
-  }
   if (sim.colaborador_id !== null) {
     throw new ConflictError("La SIM destino ya tiene una custodia registrada.");
-  }
-  if (sim.dispositivo_id === dispositivoId) {
-    throw new ConflictError("La SIM destino ya está asociada al dispositivo.");
   }
 };
 
@@ -147,7 +143,7 @@ export const gestionarLineaSimEnTransaccion = async (
     );
   }
 
-  const linea = await obtenerLineaPorDispositivo(
+  let linea = await obtenerLineaPorDispositivo(
     dispositivo.dispositivo_id,
     client,
     true
@@ -158,6 +154,9 @@ export const gestionarLineaSimEnTransaccion = async (
 
   if (!simActual && linea?.sim_id) {
     simActual = await obtenerSimPorId(linea.sim_id, client, true);
+  }
+  if (!linea && simActual?.linea_movil_id) {
+    linea = await obtenerLineaPorId(simActual.linea_movil_id, client, true);
   }
 
   if (linea && linea.dispositivo_id !== dispositivo.dispositivo_id) {
@@ -204,10 +203,6 @@ export const gestionarLineaSimEnTransaccion = async (
       "La SIM actual no puede conservarse porque está en un estado terminal."
     );
   }
-  if (input.mantenerNumero && !linea) {
-    throw new ConflictError("El dispositivo no tiene una línea móvil vigente.");
-  }
-
   // Este caso es deliberadamente de solo lectura: conservar ambas cosas no
   // debe generar eventos ni reescribir referencias ya existentes.
   if (input.mantenerSim && input.mantenerNumero) {
@@ -224,55 +219,95 @@ export const gestionarLineaSimEnTransaccion = async (
     );
   }
 
+  let simDestino = simActual;
+  if (!input.mantenerSim) {
+    simDestino = await obtenerSimPorCodigo(input.simDestinoCodigo!, client, true);
+    if (!simDestino) throw new NotFoundError("SIM destino no encontrada.");
+    validateTargetSim(simDestino);
+
+    const lineaSimDestino = await obtenerLineaPorSim(simDestino.sim_id, client, true);
+    if (lineaSimDestino) {
+      if (lineaSimDestino.sim_id !== simDestino.sim_id) {
+        throw new ConflictError("La línea existente de la SIM destino tiene referencias inconsistentes.");
+      }
+      if (lineaSimDestino.estado !== "ACTIVA") {
+        throw new ConflictError("La línea existente de la SIM destino no está activa.");
+      }
+      if (lineaSimDestino.dispositivo_id && lineaSimDestino.dispositivo_id !== dispositivo.dispositivo_id) {
+        throw new ConflictError("La línea de la SIM destino ya está asociada a otro equipo.");
+      }
+      if (lineaSimDestino.colaborador_id && lineaSimDestino.colaborador_id !== dispositivo.colaborador_id) {
+        throw new ConflictError("La línea de la SIM destino ya está asociada a otro colaborador.");
+      }
+      if (linea && linea.id !== lineaSimDestino.id) {
+        throw new ConflictError("El dispositivo y la SIM destino tienen números distintos; elija un número explícitamente.");
+      }
+      linea ??= lineaSimDestino;
+    }
+
+    const activeTargetRelation = await client.query<{ id: string }>(
+      `SELECT id FROM itam.lineas_moviles_sim_historial
+        WHERE sim_id = $1 AND fecha_fin IS NULL
+          AND ($2::bigint IS NULL OR linea_movil_id <> $2)
+        LIMIT 1`,
+      [simDestino.sim_id, lineaSimDestino?.id ?? null]
+    );
+    if (activeTargetRelation.rows[0]) {
+      throw new ConflictError("La SIM destino ya tiene una asociación histórica activa.");
+    }
+  }
+
+  if (input.mantenerNumero && !linea && !input.mantenerSim) {
+    // Una SIM puede instalarse antes de registrar su número telefónico.
+    if (!simDestino || simDestino.linea_movil_id) {
+      throw new ConflictError("No se pudo confirmar que la SIM destino esté libre de línea móvil.");
+    }
+  } else if (input.mantenerNumero && !linea) {
+    throw new ConflictError("El dispositivo no tiene una línea móvil vigente.");
+  }
+
   const numeroAnterior = linea?.numero_telefonico ?? null;
   const numeroNuevo = input.mantenerNumero
     ? numeroAnterior
     : normalizarNumeroTelefonicoChileno(input.numeroNuevo!);
 
-  if (!linea) {
-    throw new ConflictError(
-      "El dispositivo no tiene una línea móvil vigente para esta operación."
-    );
-  }
+  if (!linea && !input.mantenerSim && input.mantenerNumero) {
+    const estadoSimAnterior = simActual?.estado_id ?? null;
+    const estadoSimAsignada = await obtenerEstadoSimPorCodigo("ASIGNADA", client);
+    if (!estadoSimAsignada) throw new ConflictError("No existe un estado ASIGNADA activo para SIM.");
+    const detalle = {
+      dispositivoCodigoInventario: codigoInventario,
+      lineaMovilId: null,
+      numeroAnterior: null,
+      numeroNuevo: null,
+      simAnteriorCodigoInventario: simActual?.sim_codigo_inventario ?? null,
+      simNuevaCodigoInventario: simDestino!.sim_codigo_inventario,
+      operacion
+    };
 
-  if (!input.mantenerSim && !dispositivo.colaborador_id) {
-    throw new ConflictError(
-      "No se puede instalar una SIM en un dispositivo sin custodio colaborador; la custodia por departamento aún no está modelada para SIM."
-    );
-  }
-
-  let simDestino = simActual;
-  if (!input.mantenerSim) {
-    simDestino = await obtenerSimPorCodigo(
-      input.simDestinoCodigo!,
-      client,
-      true
-    );
-    if (!simDestino) throw new NotFoundError("SIM destino no encontrada.");
-    validateTargetSim(
-      simDestino,
-      dispositivo.dispositivo_id
-    );
-    const activeTargetRelation = await client.query<{ id: string }>(
-      `SELECT id
-         FROM itam.lineas_moviles_sim_historial
-        WHERE sim_id = $1 AND fecha_fin IS NULL
-        LIMIT 1`,
-      [simDestino.sim_id]
-    );
-    if (activeTargetRelation.rows[0]) {
-      throw new ConflictError(
-        "La SIM destino ya tiene una asociación histórica activa."
-      );
+    if (simActual) {
+      await desasociarSimDeDispositivo(simActual.sim_codigo_inventario, client);
+      await insertarHistorialSim(simActual.sim_id, "DESASOCIAR_SIM_GESTION_ATOMICA", estadoSimAnterior, estadoSimAnterior, input.responsable, input.observaciones, detalle, client);
     }
-  }
+    const asociada = await asociarSimADispositivo(simDestino!.sim_codigo_inventario, dispositivo.dispositivo_id, client);
+    if (!asociada) throw new NotFoundError("SIM destino no encontrada.");
+    if (dispositivo.colaborador_id) {
+      await asignarSimAColaborador(simDestino!.sim_codigo_inventario, Number(dispositivo.colaborador_id), client);
+    }
+    const actualizada = await cambiarEstadoSim(simDestino!.sim_codigo_inventario, estadoSimAsignada.id, client);
+    if (!actualizada) throw new NotFoundError("SIM destino no encontrada.");
 
+    await insertarHistorialSim(simDestino!.sim_id, "ASOCIAR_SIM_GESTION_ATOMICA", simDestino!.estado_id, estadoSimAsignada.id, input.responsable, input.observaciones, detalle, client);
+    await insertarHistorialDispositivo(dispositivo.dispositivo_id, "GESTION_LINEA_SIM_ATOMICA", dispositivo.estado_id, dispositivo.estado_id, input.responsable, input.observaciones, detalle, client);
+    return buildResult(codigoInventario, dispositivo.dispositivo_id, operacion, null, null, simActual, null, simDestino!.sim_id, client);
+  }
   if (!input.mantenerNumero) {
     const numeroDuplicado = await existeOtraLineaConNumero(
       numeroNuevo!,
       simActual?.sim_id ?? null,
       client,
-      simDestino?.sim_id ?? null
+      simDestino?.sim_id ?? null,
+      dispositivo.dispositivo_id
     );
     if (numeroDuplicado) {
       throw new ConflictError(
@@ -281,6 +316,21 @@ export const gestionarLineaSimEnTransaccion = async (
     }
   }
 
+  const lineaCreada = !linea;
+  if (lineaCreada) {
+    if (!numeroNuevo || !simDestino) {
+      throw new ConflictError("No se puede crear una línea sin número y SIM asociada.");
+    }
+    linea = await crearLineaMovil(
+      numeroNuevo,
+      dispositivo.colaborador_id,
+      dispositivo.dispositivo_id,
+      simDestino.sim_id,
+      client
+    );
+  }
+
+  if (!linea) throw new ConflictError("No se pudo confirmar la línea móvil.");
   const estadoSimAnterior = simActual?.estado_id ?? null;
   const estadoSimDestinoAnterior = simDestino?.estado_id ?? null;
   const detalleBase = {
@@ -293,7 +343,7 @@ export const gestionarLineaSimEnTransaccion = async (
     operacion
   };
 
-  if (!input.mantenerNumero && numeroNuevo !== numeroAnterior) {
+  if (!input.mantenerNumero && numeroNuevo !== numeroAnterior && !lineaCreada) {
     await actualizarNumeroLineaMovil(linea.id, numeroNuevo!, client);
     await insertarHistorialLineaMovil(
       linea.id,
@@ -320,17 +370,20 @@ export const gestionarLineaSimEnTransaccion = async (
       client,
       simActual?.sim_id ?? null
     );
+    if (linea.dispositivo_id !== dispositivo.dispositivo_id || linea.colaborador_id !== dispositivo.colaborador_id) {
+      await actualizarVinculosLinea(linea.id, dispositivo.dispositivo_id, dispositivo.colaborador_id, client);
+    }
     await asociarSimADispositivo(
       simDestino!.sim_codigo_inventario,
       dispositivo.dispositivo_id,
       client
     );
 
+    const estadoAsignada = await obtenerEstadoSimPorCodigo("ASIGNADA", client);
+    if (!estadoAsignada) {
+      throw new ConflictError("No existe un estado ASIGNADA activo para SIM.");
+    }
     if (dispositivo.colaborador_id) {
-      const estadoAsignada = await obtenerEstadoSimPorCodigo("ASIGNADA", client);
-      if (!estadoAsignada) {
-        throw new ConflictError("No existe un estado ASIGNADA activo para SIM.");
-      }
       await asignarSimAColaborador(
         simDestino!.sim_codigo_inventario,
         Number(dispositivo.colaborador_id),
@@ -361,9 +414,7 @@ export const gestionarLineaSimEnTransaccion = async (
       simDestino!.sim_id,
       "ASOCIAR_SIM_GESTION_ATOMICA",
       estadoSimDestinoAnterior,
-      dispositivo.colaborador_id
-        ? (await obtenerEstadoSimPorCodigo("ASIGNADA", client))?.id ?? estadoSimDestinoAnterior
-        : estadoSimDestinoAnterior,
+      estadoAsignada.id,
       input.responsable,
       input.observaciones,
       detalleBase,
