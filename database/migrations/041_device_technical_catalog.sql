@@ -5,7 +5,7 @@ BEGIN;
 
 SET search_path TO itam, public;
 
-CREATE TABLE catalogos_tecnicos_dispositivo (
+CREATE TABLE IF NOT EXISTS catalogos_tecnicos_dispositivo (
     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     dispositivo_id BIGINT NOT NULL UNIQUE
         REFERENCES dispositivos(id) ON DELETE RESTRICT,
@@ -22,10 +22,11 @@ CREATE TABLE catalogos_tecnicos_dispositivo (
     )
 );
 
-CREATE INDEX idx_catalogos_tecnicos_dispositivo
+CREATE INDEX IF NOT EXISTS idx_catalogos_tecnicos_dispositivo
     ON catalogos_tecnicos_dispositivo (dispositivo_id);
 
 INSERT INTO schema_migrations(version, nombre)
-VALUES ('041', 'device_technical_catalog');
+VALUES ('041', 'device_technical_catalog')
+ON CONFLICT (version) DO NOTHING;
 
 COMMIT;
