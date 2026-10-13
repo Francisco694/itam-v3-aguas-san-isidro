@@ -2,6 +2,8 @@
 
 **Actualizado:** 23 de septiembre de 2026
 **Tipo:** técnico
+**Base:** `/api/v1`
+**Permisos:** sesión
 **Estado:** referencia complementaria; el contrato por dominio está indexado en [README.md](README.md).
 
 Este archivo conserva el nombre histórico del documento, pero ya no representa una versión del producto ni debe usarse como fuente única. Los endpoints detallados se encuentran en los documentos por dominio.

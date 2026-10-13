@@ -2,7 +2,8 @@
 
 **Actualizado:** 23 de septiembre de 2026
 **Tipo:** técnico y funcional
-**Base SIM:** `/api/v1/sim`
+**Base:** `/api/v1/sim`
+**Permisos:** sesión
 
 Todas las rutas requieren sesión. El módulo `lineas-moviles` no publica un router independiente: la línea se consulta y gestiona mediante la ficha del dispositivo y las operaciones de asociación.
 

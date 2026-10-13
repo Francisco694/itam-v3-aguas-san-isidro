@@ -2,6 +2,8 @@
 
 **Actualizado:** 23 de septiembre de 2026
 **Tipo:** técnico
+**Base:** `/api/v1`
+**Permisos:** sesión
 
 Base: `/api/v1`. `POST /auth/login` y `POST /auth/login-pin` son públicos. Health es público. Las demás rutas de esta página requieren una sesión válida.
 

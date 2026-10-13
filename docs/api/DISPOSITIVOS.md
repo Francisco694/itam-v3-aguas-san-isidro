@@ -3,6 +3,7 @@
 **Actualizado:** 13 de octubre de 2026
 **Tipo:** técnico y funcional
 **Base:** `/api/v1/dispositivos`
+**Permisos:** sesión
 
 Todas las rutas requieren sesión. Las mutaciones toman el responsable desde la sesión cuando el controlador usa `authenticatedActorName`; en los demás contratos el campo `responsable` sigue siendo obligatorio.
 

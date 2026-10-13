@@ -2,6 +2,8 @@
 
 **Actualizado:** 13 de octubre de 2026
 **Tipo:** técnico
+**Base:** `/api/v1`
+**Permisos:** sesión
 
 ## Base
 

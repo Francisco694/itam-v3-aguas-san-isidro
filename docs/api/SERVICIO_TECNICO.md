@@ -3,6 +3,7 @@
 **Actualizado:** 23 de septiembre de 2026
 **Tipo:** técnico y funcional
 **Base:** `/api/v1/servicio-tecnico`
+**Permisos:** sesión
 
 Todas las rutas requieren sesión. El responsable se toma de sesión en creación, cotización, decisión, cierre, adjuntos y equipo temporal; en edición se recibe explícitamente.
 

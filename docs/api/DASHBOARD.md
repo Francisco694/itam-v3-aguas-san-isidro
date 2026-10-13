@@ -2,6 +2,8 @@
 
 **Actualizado:** 23 de septiembre de 2026
 **Tipo:** técnico y funcional
+**Base:** `/api/v1`
+**Permisos:** sesión
 
 ## GET `/api/v1/dispositivos/resumen-gerencial`
 

@@ -3,6 +3,7 @@
 **Actualizado:** 23 de septiembre de 2026
 **Tipo:** técnico y funcional
 **Base:** `/api/v1/departamentos`
+**Permisos:** sesión
 
 Todas las rutas requieren sesión.
 
