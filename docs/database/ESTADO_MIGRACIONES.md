@@ -5,6 +5,8 @@
 **Esquema:** `itam`
 **Tipo:** estado técnico e histórico
 
+> Este documento conserva el diagnóstico histórico de `itam_dev` realizado antes de las migraciones 036 y 041. No describe el estado actual de producción. El CD del 2026-10-13 incluyó y ejecutó la migración 041 de catálogo técnico de forma idempotente.
+
 ## Resumen
 
 El repositorio contiene migraciones SQL numeradas desde `001` hasta `032`. La base analizada registra 31 migraciones aplicadas. La versión `029` no está registrada como aplicada, pero las versiones `030`, `031` y `032` sí aparecen registradas posteriormente.

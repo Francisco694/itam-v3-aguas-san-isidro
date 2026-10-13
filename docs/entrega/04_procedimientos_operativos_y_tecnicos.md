@@ -17,6 +17,8 @@ Trabajar siempre con una cuenta nominal, revisar el activo antes de modificarlo,
 
 El workflow de CD documenta empaquetado, migración, PM2, health check, respaldo de Nginx, `nginx -t`, recarga y rollback del backend y Nginx.
 
+En el release `d8cd34c`, el CD incluye la migración `041_device_technical_catalog.sql`, la ejecuta con `ON_ERROR_STOP=1` y deja la migración preparada para ejecuciones repetidas. Nginx se configura con `client_max_body_size 12m`; el backend mantiene el límite funcional de 10 MB para catálogos técnicos.
+
 ## Alta y edición de inventario
 
 1. Confirmar tipo de activo y campos dinámicos exigidos.
@@ -32,6 +34,26 @@ El workflow de CD documenta empaquetado, migración, PM2, health check, respaldo
 3. Registrar responsable y observaciones.
 4. Emitir acta o comprobante cuando el flujo lo requiera.
 5. Verificar el nuevo estado y el historial.
+
+## Catálogo técnico de un dispositivo
+
+1. Abrir la ficha del dispositivo y ubicar **Acciones del equipo**.
+2. Revisar **Catálogo técnico**. Si no existe, la interfaz muestra **Sin catálogo técnico adjunto**.
+3. Seleccionar únicamente un PDF de hasta 10 MB y confirmar la carga. El backend valida extensión, MIME, firma PDF y tamaño.
+4. Para un documento existente, usar **Ver catálogo técnico** para abrirlo en el visor del navegador o **Reemplazar PDF** para sustituirlo.
+5. Confirmar que el resto de la ficha no haya cambiado: la operación no altera estado, custodio, SIM, línea móvil ni verificación.
+
+El binario queda en la ruta persistente configurada por `DOCUMENT_STORAGE_PATH` y la asociación queda en `itam.catalogos_tecnicos_dispositivo`. La operación exige sesión y respeta el bloqueo global de `SOLO_LECTURA`.
+
+### Carga masiva controlada por script
+
+Para asignar manuales de usuario autorizados a varios dispositivos se puede usar `scripts/assign-device-manuals.mjs`. El manifiesto JSON contiene `codigoItam` y `url`; el script descarga cada PDF, valida su firma y tamaño y lo envía al endpoint existente. Primero ejecutar:
+
+```text
+node scripts/assign-device-manuals.mjs --env dev --manifest scripts/device-manuals.example.json --dry-run
+```
+
+Para subir en desarrollo, usar `ITAM_EMAIL` y `ITAM_PASSWORD` o `ITAM_PIN`. Para producción, configurar `ITAM_PROD_API_URL` o pasar `--api-url` explícitamente. El script omite catálogos existentes salvo que se indique `--replace`, informa errores por dispositivo y termina con código distinto de cero si alguna asignación falla.
 
 ## Verificación física
 

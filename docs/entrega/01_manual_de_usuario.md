@@ -6,7 +6,7 @@ Este manual explica cómo utilizar ITAM para consultar y administrar activos tec
 
 ## Alcance
 
-Incluye inicio de sesión, panel principal, colaboradores, usuarios, dispositivos, inventario, SIM, líneas telefónicas, asignaciones, recepciones, devoluciones, actas, servicio técnico, órdenes de trabajo, estados, historial, búsquedas, filtros, formularios, impresión y generación de PDF. La documentación se basa en el código disponible en el commit `754d036f00aa24b180c3812c460a2b18bd82b1a5` y distingue los datos confirmados de los que requieren validación en servidor.
+Incluye inicio de sesión, panel principal, colaboradores, usuarios, dispositivos, inventario, catálogo técnico, SIM, líneas telefónicas, asignaciones, recepciones, devoluciones, actas, servicio técnico, órdenes de trabajo, estados, historial, búsquedas, filtros, formularios, impresión y generación de PDF. La documentación se basa en el código disponible en el commit `d8cd34c63293f293b0b5bf57f3219dbb8bfe7e0c` y distingue los datos confirmados de los que requieren validación en servidor.
 
 ## Usuarios, roles y permisos
 
@@ -64,6 +64,17 @@ Las operaciones disponibles dependen del estado del activo y del rol:
 4. Revisar el mensaje de confirmación y el historial resultante.
 
 El backend evita custodias vigentes incompatibles, duplicidad de IMEI o serie cuando corresponde y operaciones que contradicen el ciclo de vida del activo.
+
+### Catálogo técnico
+
+En la ficha de detalle, dentro de **Acciones del equipo**, se muestra la sección **Catálogo técnico** asociada al código ITAM:
+
+1. Si no existe un documento, aparece **Sin catálogo técnico adjunto**.
+2. Un usuario con permisos de escritura puede seleccionar un PDF para adjuntarlo o reemplazar el existente.
+3. El archivo debe ser PDF válido y pesar como máximo 10 MB. El backend vuelve a validar extensión, MIME, firma `%PDF-` y tamaño.
+4. Si existe, **Ver catálogo técnico** lo abre en el visor PDF del navegador; desde ese visor el usuario puede descargarlo si lo necesita. No se muestra un botón de descarga separado en la ficha.
+
+La carga es opcional y solo actualiza el documento y sus metadatos. No cambia el estado, custodio, SIM, línea móvil ni resultado de verificación del dispositivo. Los usuarios `SOLO_LECTURA` pueden consultar el catálogo, pero no cargarlo ni reemplazarlo.
 
 ## SIM y líneas telefónicas
 
@@ -141,6 +152,7 @@ Use **Cerrar sesión** en el encabezado. Si la sesión vence por inactividad, vu
 | No se puede enviar a servicio técnico | Revisar estado terminal, orden abierta o datos obligatorios |
 | PDF no abre | Reintentar la descarga, revisar la sesión y reportar el código de respuesta |
 | No aparece un registro | Limpiar filtros y confirmar permisos |
+| El catálogo técnico no carga | Confirmar que la sesión siga vigente, que el archivo sea PDF y que no supere 10 MB |
 
 ## Glosario
 
@@ -154,6 +166,7 @@ Use **Cerrar sesión** en el encabezado. Si la sesión vence por inactividad, vu
 | SIM | Tarjeta de identificación del abonado móvil |
 | Offboarding | Proceso de salida de una persona y recuperación de sus activos |
 | Historial | Registro de eventos y cambios asociados a un activo |
+| Catálogo técnico | PDF opcional asociado a un dispositivo por su código ITAM |
 
 ## Evidencia y límites
 
@@ -164,3 +177,4 @@ Use **Cerrar sesión** en el encabezado. Si la sesión vence por inactividad, vu
 | PDFs | `backend/src/modules/*/*.pdf.ts` y rutas de PDF | Confirmado |
 | Usuario productivo y pruebas con usuarios reales | No ejecutado en esta validación documental | Pendiente de validar |
 | DNS, firewall, backups y certificados productivos | No se leyó configuración del servidor | Pendiente de validar en servidor |
+| Catálogo técnico | `catalogo-tecnico.service.ts`, migración 041 y endpoints de dispositivos | Confirmado en código; carga autenticada productiva pendiente |

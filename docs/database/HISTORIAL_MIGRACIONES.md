@@ -1,6 +1,6 @@
 # Historial de migraciones
 
-**Actualizado:** 29 de septiembre de 2026
+**Actualizado:** 13 de octubre de 2026
 **Fuente:** archivos reales de `database/migrations` y estado leído de `itam_dev`
 **Tipo:** referencia técnica e histórica
 
@@ -40,6 +40,11 @@ La tabla resume el propósito declarado por cada archivo y el estado observado. 
 | `030_technical_service_work_order_review.sql` | Agregar datos editables de la orden de trabajo técnica. | Servicio técnico | `APPLIED` |
 | `031_technical_service_return_fields.sql` | Agregar campos de cierre, retorno y observaciones de servicio técnico. | Servicio técnico | `APPLIED` |
 | `032_technical_service_quotes.sql` | Agregar metadatos y versiones de archivos de cotización. | Servicio técnico | `APPLIED` |
+| `033_reconcile_technical_service_schema.sql` | Reconciliar columnas faltantes del servicio técnico sin alterar el historial anterior. | Servicio técnico | `APPLIED` |
+| `034_session_activity_and_proxy_ready.sql` | Agregar actividad de sesión e índice para el timeout. | Sesiones | `APPLIED` |
+| `035_read_only_user_role.sql` | Permitir y proteger el rol `SOLO_LECTURA`. | Seguridad | `APPLIED` |
+| `036_correlative_technical_work_order_numbers.sql` | Agregar correlatividad e índice único para `numero_ot`. | Servicio técnico | `APPLIED` |
+| `041_device_technical_catalog.sql` | Crear metadatos de catálogo técnico opcional por dispositivo; el binario queda fuera de PostgreSQL. | Inventario y documentos | `APPLIED` en el CD `d8cd34c`; idempotente |
 
 ## Lectura del historial
 

@@ -1,6 +1,6 @@
 # API ITAM
 
-**Actualizado:** 23 de septiembre de 2026
+**Actualizado:** 13 de octubre de 2026
 **Tipo:** técnico
 
 ## Base
@@ -35,7 +35,7 @@ Respuesta de error:
 | Dominio | Documento |
 | --- | --- |
 | Sesión y health | [AUTH.md](AUTH.md) |
-| Dispositivos, historial y verificación | [DISPOSITIVOS.md](DISPOSITIVOS.md) |
+| Dispositivos, catálogo técnico, historial y verificación | [DISPOSITIVOS.md](DISPOSITIVOS.md) |
 | Personas y conciliación | [COLABORADORES.md](COLABORADORES.md) |
 | Organización | [DEPARTAMENTOS.md](DEPARTAMENTOS.md) |
 | SIM y líneas | [SIM_LINEAS.md](SIM_LINEAS.md) |

@@ -18,7 +18,8 @@
     "audit:automatic-verifications": "tsx src/scripts/audit-automatic-verifications.ts",
     "correction:automatic-verifications": "tsx src/scripts/correct-automatic-verifications.ts",
     "backfill:device-verification:dry-run": "tsx src/scripts/backfill-device-verification.ts --dry-run",
-    "correction:manual-verifications": "tsx src/scripts/correct-manual-verifications.ts"
+    "correction:manual-verifications": "tsx src/scripts/correct-manual-verifications.ts",
+    "manuals:assign": "node ../scripts/assign-device-manuals.mjs"
   },
   "keywords": [],
   "author": "",

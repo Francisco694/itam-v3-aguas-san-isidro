@@ -6,6 +6,8 @@
 
 Este manual resume la estructura técnica y el ciclo de desarrollo verificable del repositorio ITAM v3.0. No reemplaza los contratos API ni las decisiones de arquitectura existentes.
 
+> Actualización 2026-10-13: la fuente canónica de esta entrega corresponde al commit `d8cd34c`. Incluye la migración 041 y el módulo de catálogo técnico de dispositivos. Para el detalle actualizado, consulte [`02_Manual_de_Desarrollo_Aguas_San_Isidro.md`](02_Manual_de_Desarrollo_Aguas_San_Isidro.md).
+
 ## Identidad del sistema
 
 | Campo | Valor seguro | Estado |
@@ -37,7 +39,7 @@ El árbol local tenía cuatro artefactos `.tar.gz` sin seguimiento al momento de
 
 - `frontend/`: aplicación Angular, rutas, componentes, servicios, modelos y pruebas.
 - `backend/`: API Express, módulos por dominio, servicios, repositorios, validación, autenticación, scripts y pruebas.
-- `database/migrations/`: migraciones SQL numeradas; la secuencia instalada incluye 001 a 035 con excepciones documentadas.
+- `database/migrations/`: migraciones SQL numeradas; la fuente actual incluye 001 a 041 con excepciones históricas documentadas.
 - `docs/api/`: contratos de endpoints.
 - `docs/arquitectura/`: arquitectura, seguridad, reglas de negocio y base de datos.
 - `docs/database/`: estado y procedimiento de migraciones.
@@ -93,7 +95,7 @@ El workflow de CI ejecuta `npm ci`, `npm run typecheck` y `npm run build` en bac
 ## Riesgos técnicos
 
 1. `docs/ci/CI.md` documenta una anomalía histórica de la migración 029 y la ausencia de fixtures reproducibles.
-2. La documentación anterior de base de datos describe estados hasta 032; la fuente actual contiene además 033, 034 y 035.
+2. La documentación anterior de base de datos describe estados hasta 032; la fuente actual contiene además 033, 034, 035, 036 y 041.
 3. No existe checksum de migraciones en `schema_migrations`.
 4. No se verificó en esta sesión la cobertura de código.
 5. El repositorio contiene artefactos `.tar.gz` sin seguimiento que deben revisarse antes de cualquier commit documental.

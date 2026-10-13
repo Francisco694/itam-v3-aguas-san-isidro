@@ -17,7 +17,7 @@ flowchart TD
     API --> A
 ```
 
-El usuario opera el frontend Angular. Angular consume la API bajo `/api/v1`; en desarrollo puede usar `http://localhost:3000/api/v1` o el proxy LAN. El backend Express valida la sesión y la entrada, ejecuta reglas de negocio y consulta PostgreSQL. Los documentos de cotización y facturas se almacenan en el directorio configurado por `DOCUMENT_STORAGE_PATH`, mientras sus metadatos se guardan en PostgreSQL.
+El usuario opera el frontend Angular. Angular consume la API bajo `/api/v1`; en desarrollo puede usar `http://localhost:3000/api/v1` o el proxy LAN. El backend Express valida la sesión y la entrada, ejecuta reglas de negocio y consulta PostgreSQL. Los documentos de cotización, facturas y catálogos técnicos se almacenan en el directorio configurado por `DOCUMENT_STORAGE_PATH`, mientras sus metadatos se guardan en PostgreSQL.
 
 ## Capas del backend
 

@@ -2,6 +2,12 @@
 
 > Archivo histórico conservado por compatibilidad. El cierre documental vigente está en `docs/INFORME_FINAL_DE_VALIDACION.md` y `docs/MATRIZ_DE_VALIDACION_DOCUMENTAL.md`.
 
+## Actualización de cierre 2026-10-13
+
+La referencia histórica de esta lista usa el release `d98da12`; no debe confundirse con el estado vigente. El release actual es `d8cd34c`, cuyo CI/CD terminó correctamente. El artefacto incluyó la migración 041 del catálogo técnico, y el CD aplicó además `client_max_body_size 12m` en Nginx para que el backend pueda validar el máximo funcional de 10 MB. Los health checks productivos de API y PostgreSQL respondieron `200`.
+
+La carga autenticada de un PDF de negocio, la restauración de backups, el firewall, TLS y la consulta SQL directa de `schema_migrations` siguen pendientes de evidencia específica.
+
 ## Identidad de la entrega
 
 | Campo | Valor | Estado |
@@ -44,6 +50,8 @@ Sin modificar datos, verificar en una ventana autorizada:
 5. Confirmar que las acciones de creación, edición, asignación, devolución, cambio de estado, baja, servicio técnico y alertas no estén disponibles.
 6. Confirmar que una petición mutante recibe `403 READ_ONLY` si se prueba mediante una herramienta autorizada.
 7. Cerrar sesión.
+
+Para el catálogo técnico, en una ventana autorizada se debe seleccionar un PDF de prueba menor o igual a 10 MB, verificar su visualización, reemplazarlo y comprobar que el estado, custodio, SIM, línea y verificación del dispositivo permanezcan sin cambios.
 
 ## Bloqueos y pendientes obligatorios
 

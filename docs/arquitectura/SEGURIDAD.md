@@ -25,7 +25,7 @@ Todas las rutas de negocio requieren sesión. Las rutas de administración de us
   es el Nginx local. El backend escucha en `127.0.0.1` por defecto y no debe
   exponerse directamente a Internet.
 - Los secretos y la conexión PostgreSQL se suministran mediante variables de entorno.
-- Los documentos se sirven con controles de tipo, tamaño, disposición y `nosniff` donde corresponde.
+- Los documentos se sirven con controles de tipo, tamaño, disposición y `nosniff` donde corresponde. El catálogo técnico acepta únicamente PDF, valida la firma `%PDF-`, limita el tamaño a 10 MiB y conserva los archivos fuera de la base de datos en almacenamiento privado.
 
 ## Auditoría y exposición de errores
 

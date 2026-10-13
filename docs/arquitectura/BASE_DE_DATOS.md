@@ -1,6 +1,6 @@
 # Base de datos
 
-**Actualizado:** 29 de septiembre de 2026
+**Actualizado:** 13 de octubre de 2026
 **Tipo:** técnico
 
 ## Motor y esquema
@@ -9,11 +9,11 @@ ITAM utiliza PostgreSQL. Las tablas de negocio se encuentran en el esquema `itam
 
 ## Migraciones
 
-Las migraciones están en `database/migrations`. La secuencia vigente llega a `032_technical_service_quotes.sql` e incluye, entre otros, catálogo de tipos, familias de códigos, ciclo patrimonial, custodias temporales, verificación física, alertas de stock, líneas móviles, offboarding y cotizaciones.
+Las migraciones están en `database/migrations`. La secuencia vigente llega a `041_device_technical_catalog.sql` e incluye, entre otros, catálogo de tipos, familias de códigos, ciclo patrimonial, custodias temporales, verificación física, alertas de stock, líneas móviles, offboarding, cotizaciones y catálogos técnicos de dispositivos.
 
 ## Versionamiento y estado de migraciones
 
-El repositorio contiene migraciones SQL numeradas desde `001` hasta `032`. En la base `itam_dev`, dentro del esquema `itam`, el estado analizado es el siguiente:
+El repositorio contiene migraciones SQL numeradas desde `001` hasta `041`. La fotografía histórica de `itam_dev` que sigue conserva el estado leído antes de las migraciones recientes; no debe interpretarse como el estado actual de producción:
 
 - `001`–`028`: registradas como aplicadas.
 - `029`: pendiente y fuera de secuencia.
@@ -63,7 +63,7 @@ Esto queda registrado como pendiente de reconciliación. En esta etapa no se agr
 | Inventario | `dispositivos`, `sim`, `lineas_moviles` |
 | Trazabilidad | `historial_eventos`, `custodias_dispositivo`, `verificaciones_fisicas_dispositivo` |
 | Operación | `ordenes_servicio_tecnico`, `entregas_temporales_servicio`, `procesos_offboarding` |
-| Documentos | `facturas_adquisicion`, `actas_entrega`, `actas_entrega_detalle`, `comprobantes_devolucion`, archivos de cotización |
+| Documentos | `facturas_adquisicion`, `actas_entrega`, `actas_entrega_detalle`, `comprobantes_devolucion`, `catalogos_tecnicos_dispositivo`, archivos de cotización |
 | Seguridad | `usuarios`, `sesiones_usuario`, `auditoria_operaciones` |
 | Configuración | `configuraciones_alerta_stock`, secuencias de actas y comprobantes |
 
@@ -79,4 +79,4 @@ Esto queda registrado como pendiente de reconciliación. En esta etapa no se agr
 
 ## Documentos y respaldos
 
-Los metadatos se guardan en PostgreSQL y el binario se conserva en la ruta configurada. Antes de una migración o despliegue se debe realizar y verificar un backup PostgreSQL según el checklist de producción.
+Los metadatos se guardan en PostgreSQL y el binario se conserva en la ruta configurada por `DOCUMENT_STORAGE_PATH`. La migración 041 mantiene una fila única por dispositivo y limita el metadato a PDF de hasta 10 MiB. Antes de una migración o despliegue se debe realizar y verificar un backup PostgreSQL y del almacenamiento de documentos según el checklist de producción.

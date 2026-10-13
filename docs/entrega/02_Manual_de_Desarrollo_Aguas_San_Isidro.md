@@ -10,9 +10,9 @@ Este documento describe la estructura técnica comprobada del repositorio ITAM y
 | --- | --- | --- |
 | Repositorio principal | `https://github.com/Aguas-San-Isidro/ITAM_esssi.git` | Confirmado |
 | Rama | `main` | Confirmado |
-| Commit auditado | `754d036f00aa24b180c3812c460a2b18bd82b1a5` | Confirmado |
-| Mensaje | `chore: confirma persistencia de OT correlativas` | Confirmado |
-| Fecha del commit | 2026-10-05 15:48:27 -03:00 | Confirmado |
+| Commit auditado | `d8cd34c63293f293b0b5bf57f3219dbb8bfe7e0c` | Confirmado |
+| Mensaje | `fix: hacer idempotente migracion del catalogo tecnico` | Confirmado |
+| Fecha del commit | 2026-10-13 13:18:15 -03:00 | Confirmado |
 | Autor documentado | `Francisco694` | Confirmado en README e historial |
 | Árbol de trabajo | Contiene artefactos `.tar.gz` sin seguimiento | Confirmado |
 
@@ -31,6 +31,7 @@ Este documento describe la estructura técnica comprobada del repositorio ITAM y
 - `backend/src/app.ts`: middlewares, health checks y montaje de rutas.
 - `backend/src/modules/`: módulos por dominio, con rutas, controladores, servicios, repositorios y tipos.
 - `backend/src/modules/servicio-tecnico/servicio-tecnico.pdf.ts`: generador de PDF de OT.
+- `backend/src/modules/dispositivos/catalogo-tecnico.*`: carga, validación, persistencia de metadatos y entrega del PDF técnico.
 - `frontend/src/app/app.routes.ts`: rutas Angular.
 - `frontend/src/app/features/`: pantallas funcionales.
 - `frontend/src/app/core/`: autenticación, guards, servicios, modelos y configuración.
@@ -45,16 +46,24 @@ Este documento describe la estructura técnica comprobada del repositorio ITAM y
 4. No exponer secretos en código, documentación, logs ni respuestas.
 5. Agregar una migración nueva; no editar una migración histórica ya aplicada sin un procedimiento explícito.
 6. Mantener el rol `SOLO_LECTURA` protegido por `rejectReadOnlyMutations` y por las restricciones visuales del frontend.
+7. Para documentos, validar en frontend y backend el tipo y tamaño; nunca confiar solo en el MIME enviado por el navegador.
+8. Guardar los binarios en almacenamiento persistente y los metadatos en PostgreSQL; no usar memoria ni almacenamiento del navegador como fuente de verdad.
 
 ## API y módulos
 
-La API se monta bajo `/api/v1`. Los módulos principales son autenticación, estados, departamentos, colaboradores, dispositivos, SIM, familias de códigos, tipos de dispositivo, servicio técnico, actas, comprobantes, reportes, facturas, usuarios, offboarding y alertas de stock. El detalle de métodos y payloads se mantiene en `docs/api/`.
+La API se monta bajo `/api/v1`. Los módulos principales son autenticación, estados, departamentos, colaboradores, dispositivos, catálogo técnico, SIM, familias de códigos, tipos de dispositivo, servicio técnico, actas, comprobantes, reportes, facturas, usuarios, offboarding y alertas de stock. El detalle de métodos y payloads se mantiene en `docs/api/`.
 
 La aplicación expone health checks públicos en `/api/v1/health` y `/api/v1/health/database`. El resto de las rutas exige sesión; la administración de usuarios exige `SUPER_USUARIO`.
 
 ## Configuración
 
-El backend exige `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER` y `DB_PASSWORD`. También reconoce `NODE_ENV`, `BACKEND_HOST`, `PORT`, `CORS_ORIGIN`, `SESSION_IDLE_TIMEOUT_MINUTES`, `SESSION_IDLE_WARNING_MINUTES` y `DOCUMENT_STORAGE_PATH`. Este documento solo menciona nombres de variables; los valores deben permanecer fuera del repositorio.
+El backend exige `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER` y `DB_PASSWORD`. También reconoce `NODE_ENV`, `BACKEND_HOST`, `PORT`, `CORS_ORIGIN`, `SESSION_IDLE_TIMEOUT_MINUTES`, `SESSION_IDLE_WARNING_MINUTES` y `DOCUMENT_STORAGE_PATH`. Los catálogos técnicos se guardan bajo esa ruta; si no se define, se usa `backend/storage/facturas` como valor por defecto del proyecto. Este documento solo menciona nombres de variables; los valores deben permanecer fuera del repositorio.
+
+## Catálogo técnico de dispositivos
+
+El detalle de dispositivos usa `CatalogoTecnicoService` para consultar, cargar y reemplazar el PDF asociado al código ITAM. La carga usa `multipart/form-data` con el campo `archivo` y los endpoints documentados en `docs/api/DISPOSITIVOS.md`. El límite de aplicación es 10 MiB; Nginx acepta hasta 12 MB para que el backend pueda responder la validación de 10 MB sin producir un `413` prematuro. El archivo se escribe con nombre UUID en `DOCUMENT_STORAGE_PATH` y la tabla `itam.catalogos_tecnicos_dispositivo` conserva nombre original, tamaño, ruta, usuario y fecha.
+
+La asociación es independiente del registro principal del dispositivo. Reemplazar el PDF no modifica estado, custodio, SIM, línea móvil, verificación ni historial operativo del activo.
 
 ## Comandos comprobados
 

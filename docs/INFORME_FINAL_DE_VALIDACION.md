@@ -1,27 +1,27 @@
 # Informe final de validación documental
 
-Fecha de revisión: 2026-10-05  
+Fecha de revisión: 2026-10-13
 Proyecto: Aguas San Isidro ITAM  
 Repositorio revisado: `E:\Aguas San Isidro V2\ITAM`
 
 ## Resultado ejecutivo
 
-La documentación fue reorganizada y cotejada contra el código fuente, las migraciones SQL, las rutas, los servicios, los workflows de CI/CD y el generador de PDF. La entrega documental queda preparada con un único DOCX de usuario y los demás documentos en Markdown.
+La documentación fue reorganizada y cotejada contra el código fuente, las migraciones SQL, las rutas, los servicios, los workflows de CI/CD y el generador de PDF. En esta actualización se alinearon los documentos Markdown de entrega, API, arquitectura y base de datos. El DOCX de usuario se conserva como snapshot de la entrega anterior y debe regenerarse desde el manual canónico antes de distribuir un paquete Word final.
 
-Estado: **Documentación técnicamente avanzada, pendiente de cierre final por validación del servidor productivo y pruebas visuales automatizadas PNG del DOCX.**
+Estado: **Documentación actualizada con la funcionalidad de catálogo técnico y evidencia de despliegue productivo; permanecen pendientes los controles de infraestructura no observados y la carga autenticada de un PDF real.**
 
-No se marca como cierre absoluto porque no existe evidencia autorizada de acceso al servidor productivo, restauración de backups, configuración efectiva de Nginx/TLS/firewall ni ejecución de la versión desplegada. El DOCX sí fue abierto en Word en modo solo lectura, exportado a PDF y revisado estructuralmente: 7 páginas, 3 tablas y 1 imagen. El renderizador Python/LibreOffice requerido para generar PNG no está disponible en este Windows, por lo que la inspección visual automatizada página por página queda explícitamente pendiente.
+El CD del commit `d8cd34c` terminó correctamente, `/api/v1/health` y `/api/v1/health/database` productivos respondieron `200`, y una prueba no mutativa con un cuerpo de 1,15 MB ya no fue bloqueada por Nginx (`404` de la ruta de health en lugar de `413`). Esto confirma el despliegue y el límite de proxy, pero no sustituye una prueba autenticada de carga/reemplazo ni evidencia de backups, restauración, firewall o TLS. El DOCX fue abierto en Word en modo solo lectura, exportado a PDF y revisado estructuralmente: 7 páginas, 3 tablas y 1 imagen. El renderizador Python/LibreOffice requerido para generar PNG no está disponible en este Windows, por lo que la inspección visual automatizada página por página queda explícitamente pendiente.
 
 ## Archivos finales
 
 | Entregable | Estado | Evidencia |
 | --- | --- | --- |
-| `salida_documentacion/01_Manual_Usuario_Aguas_San_Isidro.docx` | Confirmado estructuralmente | DOCX único de entrega; Word reportó 7 páginas, 3 tablas y 1 imagen |
-| `docs/entrega/01_manual_de_usuario.md` | Confirmado | Fuente canónica del DOCX |
+| `salida_documentacion/01_Manual_Usuario_Aguas_San_Isidro.docx` | Snapshot anterior | Word reportó 7 páginas, 3 tablas y 1 imagen; no se regeneró en esta actualización |
+| `docs/entrega/01_manual_de_usuario.md` | Confirmado | Fuente canónica de contenido; el DOCX aún requiere regeneración |
 | `docs/entrega/02_Manual_de_Desarrollo_Aguas_San_Isidro.md` | Confirmado | Stack, estructura, pruebas y PDF cotejados |
-| `docs/entrega/03_Informacion_del_Servidor_e_Infraestructura.md` | Confirmado parcialmente | Workflow y configuración documentados; servidor real pendiente |
+| `docs/entrega/03_Informacion_del_Servidor_e_Infraestructura.md` | Confirmado parcialmente | CD, health productivo y límite Nginx comprobados; configuración completa del servidor pendiente |
 | `docs/entrega/04_Procedimientos_Operativos_y_Tecnicos.md` | Confirmado parcialmente | Procedimientos basados en código; rollback/restauración real pendientes |
-| `docs/entrega/05_Versionado_de_Base_de_Datos.md` | Confirmado | Migraciones 001 a 036 cotejadas |
+| `docs/entrega/05_Versionado_de_Base_de_Datos.md` | Confirmado parcialmente | Migraciones 001 a 041 cotejadas; consulta SQL productiva directa pendiente |
 | `docs/entrega/06_Versionado_del_Frontend.md` | Confirmado | Rutas y build cotejados |
 | `docs/entrega/07_Esquematico_del_Sistema.md` | Confirmado | Diagramas Mermaid incluidos |
 | `docs/entrega/08_Arquitectura_de_la_Aplicacion.md` | Confirmado | Diagrama Mermaid de arquitectura y despliegue incluido |
@@ -39,6 +39,8 @@ No se marca como cierre absoluto porque no existe evidencia autorizada de acceso
 - PDF de prueba: se comprobó extracción textual con `pdftotext`; la revisión visual PNG queda pendiente por falta de Poppler/LibreOffice/Python disponibles.
 - DOCX: Word en modo solo lectura reportó 7 páginas, 3 tablas y 1 imagen, y generó una exportación PDF de control.
 - Búsqueda de secretos en documentación y salida: sin claves privadas, JWT, contraseñas ni URLs PostgreSQL con credenciales.
+- Catálogo técnico: typecheck, build y pruebas backend incluyen el módulo; la validación de código confirma PDF, firma `%PDF-`, límite de 10 MiB y almacenamiento persistente. No se ejecutó carga autenticada contra producción.
+- Producción: CD `d8cd34c` exitoso; health API y health de PostgreSQL respondieron `200`.
 - `git diff --check`: sin errores de whitespace; solo advertencias normales de conversión LF/CRLF.
 
 ## Hallazgos y correcciones
@@ -47,16 +49,18 @@ No se marca como cierre absoluto porque no existe evidencia autorizada de acceso
 - Se conservaron los DOCX anteriores fuera de la carpeta de entrega, en `docs/archivo/entregas_docx_previas/`, para no perder información histórica.
 - Se corrigió el título de la sección interna del PDF también en las funciones heredadas del servicio.
 - Se documentaron las migraciones 033, 034, 035 y 036, incluida la numeración correlativa `numero_ot`.
+- Se documentó la migración 041 y la separación entre metadatos PostgreSQL y binario persistente del catálogo técnico.
 - Se separaron los hechos confirmados por código de los hechos de infraestructura que requieren verificación en el servidor.
 - Se incorporaron los pendientes de pruebas frontend y del presupuesto de bundle sin presentarlos como fallos del backend.
 
 ## Pendientes reales para cerrar al 100 %
 
-1. Ejecutar el smoke test del PDF en la instancia desplegada, incluyendo OT sin equipos, OT con varios equipos, texto largo y caso finalizado.
-2. Confirmar en el servidor la versión desplegada, hostname/DNS, Nginx, TLS, firewall, PM2, espacio en disco y logs.
-3. Evidenciar backup, retención y restauración de PostgreSQL; el workflow CD no prueba restauración de datos.
-4. Ejecutar una prueba controlada de rollback de backend y Nginx en un entorno autorizado.
-5. Instalar o habilitar el renderizador de documentos requerido y revisar visualmente las 7 páginas PNG del DOCX.
-6. Crear pruebas automatizadas del frontend o dejar aprobada una excepción formal.
+1. Ejecutar una carga autenticada de catálogo técnico en un dispositivo de prueba, verificar vista, reemplazo y permanencia del archivo.
+2. Ejecutar el smoke test del PDF en la instancia desplegada, incluyendo OT sin equipos, OT con varios equipos, texto largo y caso finalizado.
+3. Confirmar en el servidor la versión desplegada, hostname/DNS, Nginx, TLS, firewall, PM2, espacio en disco y logs.
+4. Evidenciar backup, retención y restauración de PostgreSQL y del almacenamiento de documentos; el workflow CD no prueba restauración de datos.
+5. Ejecutar una prueba controlada de rollback de backend y Nginx en un entorno autorizado.
+6. Regenerar el DOCX desde `docs/entrega/01_manual_de_usuario.md`, instalar o habilitar el renderizador requerido y revisar visualmente sus páginas PNG.
+7. Crear pruebas automatizadas del frontend o dejar aprobada una excepción formal.
 
 La entrega es comprobable y trazable en el repositorio; los pendientes anteriores son operativos o de infraestructura y no deben marcarse como confirmados sin evidencia adicional.

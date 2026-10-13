@@ -9,7 +9,7 @@ flowchart LR
   N --> F[Angular frontend]
   N --> A[Express backend API]
   A --> DB[(PostgreSQL esquema itam)]
-  A --> FS[Almacenamiento de documentos]
+  A --> FS[Almacenamiento persistente de documentos]
   A --> PDF[PDFKit y PDF de OT]
   G[GitHub Actions] --> AWS[AWS por SSH y SCP]
   AWS --> N
@@ -18,6 +18,8 @@ flowchart LR
 ```
 
 El frontend se sirve como archivos estáticos y usa el backend bajo `/api/v1`. El backend autentica, autoriza, audita, valida reglas de negocio y persiste en PostgreSQL. Los documentos cargados se guardan según `DOCUMENT_STORAGE_PATH`. Los PDF se generan en backend y se devuelven como `application/pdf`.
+
+Los catálogos técnicos son PDF opcionales asociados por `codigo_inventario`. PostgreSQL conserva sus metadatos en `itam.catalogos_tecnicos_dispositivo` y el binario se escribe en `DOCUMENT_STORAGE_PATH`; el almacenamiento no depende de la memoria del proceso ni del navegador.
 
 ## Flujo de autenticación
 
@@ -59,6 +61,29 @@ sequenceDiagram
   Navegador-->>Usuario: Vista previa, impresión o descarga
 ```
 
+## Flujo del catálogo técnico
+
+```mermaid
+sequenceDiagram
+  actor Usuario
+  participant Frontend
+  participant API
+  participant FS as Almacenamiento persistente
+  participant DB as PostgreSQL
+  Usuario->>Frontend: Selecciona PDF en Acciones del equipo
+  Frontend->>API: PUT /dispositivos/:codigo/catalogo-tecnico (multipart)
+  API->>API: Sesión, rol, MIME, extensión, firma y máximo 10 MB
+  API->>FS: Guarda archivo con nombre UUID
+  API->>DB: Inserta o reemplaza metadatos
+  API-->>Frontend: Catálogo asociado
+  Usuario->>Frontend: Ver catálogo técnico
+  Frontend->>API: GET /dispositivos/:codigo/catalogo-tecnico/archivo
+  API->>DB: Consulta ruta y dispositivo
+  API->>FS: Lee PDF privado
+  FS-->>API: Binario PDF
+  API-->>Frontend: application/pdf inline
+```
+
 ## Flujo de despliegue
 
 ```mermaid
@@ -78,4 +103,4 @@ flowchart TD
 
 ## Backups y recuperación
 
-El workflow respalda la configuración Nginx antes de modificarla y conserva releases anteriores. No hay evidencia en el repositorio de un backup de PostgreSQL ni de una prueba real de restauración. Ambos puntos quedan **Pendiente de validar en servidor**.
+El workflow respalda la configuración Nginx antes de modificarla y conserva releases anteriores. El CD actual configura 12 MB en Nginx para las cargas y mantiene 10 MB como límite funcional del backend. No hay evidencia de un backup de PostgreSQL ni de una prueba real de restauración; ambos puntos quedan **Pendiente de validar en servidor**.

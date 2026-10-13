@@ -5,6 +5,8 @@
 **Schema:** `itam`
 **Tipo:** fotografía técnica, no ejecutable
 
+> Corte histórico anterior a las migraciones 036 y 041. Para el estado documental vigente del repositorio, consulte `docs/entrega/05_Versionado_de_Base_de_Datos.md` y `docs/database/HISTORIAL_MIGRACIONES.md`. La ejecución del CD productivo de 2026-10-13 aplicó la migración 041 de forma idempotente.
+
 ## Versionamiento
 
 | Elemento | Estado |

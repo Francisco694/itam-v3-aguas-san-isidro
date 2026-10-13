@@ -2,6 +2,8 @@
 
 > Archivo histórico conservado por compatibilidad. La fuente canónica de entrega es [`03_Informacion_del_Servidor_e_Infraestructura.md`](03_Informacion_del_Servidor_e_Infraestructura.md).
 
+> Actualización 2026-10-13: el release vigente es `d8cd34c`, no `d98da12`. El CD actual incluye la migración 041 y configura un límite de proxy Nginx de 12 MB para cargas cuyo límite funcional en backend es 10 MB. Consulte el documento canónico para la evidencia actualizada.
+
 ## Propósito y alcance
 
 Este documento separa la infraestructura observada de la infraestructura solamente referenciada por el código de despliegue. No contiene credenciales, llaves ni valores de secretos.

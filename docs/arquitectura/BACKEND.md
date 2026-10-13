@@ -1,6 +1,6 @@
 # Backend Express
 
-**Actualizado:** 23 de septiembre de 2026
+**Actualizado:** 13 de octubre de 2026
 **Tipo:** técnico
 
 ## Entrada de la aplicación
@@ -9,7 +9,7 @@
 
 ## Módulos registrados
 
-`auth`, `estados`, `departamentos`, `colaboradores`, `dispositivos`, `sim`, `familias-codigo`, `tipos-dispositivo`, `servicio-tecnico`, `actas-entrega`, `comprobantes-devolucion`, `reportes`, `facturas-adquisicion`, `usuarios`, `offboarding` y `alertas-stock`.
+`auth`, `estados`, `departamentos`, `colaboradores`, `dispositivos`, `catálogo técnico`, `sim`, `familias-codigo`, `tipos-dispositivo`, `servicio-tecnico`, `actas-entrega`, `comprobantes-devolucion`, `reportes`, `facturas-adquisicion`, `usuarios`, `offboarding` y `alertas-stock`.
 
 ## Respuestas
 
@@ -21,7 +21,7 @@ La validación compartida comprueba enteros positivos, textos, booleanos, enumer
 
 ## Persistencia
 
-Los repositorios usan `pg` con consultas parametrizadas. Las operaciones que actualizan activo, custodia, estado, historial o documentos se realizan mediante servicios y transacciones cuando el flujo lo requiere. El esquema vigente se mantiene mediante `database/migrations/001` a `032`.
+Los repositorios usan `pg` con consultas parametrizadas. Las operaciones que actualizan activo, custodia, estado, historial o documentos se realizan mediante servicios y transacciones cuando el flujo lo requiere. El esquema vigente se mantiene mediante `database/migrations/001` a `041`. El catálogo técnico guarda el binario en almacenamiento persistente y sus metadatos en PostgreSQL.
 
 ## Auditoría
 

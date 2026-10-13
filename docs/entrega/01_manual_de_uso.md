@@ -2,6 +2,8 @@
 
 > Archivo histórico conservado por compatibilidad. La fuente canónica de entrega es [`01_manual_de_usuario.md`](01_manual_de_usuario.md), que contiene la versión ampliada y validada del manual.
 
+> Actualización 2026-10-13: para la funcionalidad vigente de catálogo técnico, consulte la sección **Catálogo técnico** del manual canónico. Esta copia conserva el alcance histórico anterior y no debe usarse para validar el release actual.
+
 ## Propósito y alcance
 
 Este manual describe el uso funcional observado de ITAM v3.0 para Aguas San Isidro. Cubre el acceso, la consulta del inventario, la custodia de activos, las líneas móviles, los documentos operativos, el servicio técnico, el offboarding y los reportes. Las indicaciones se basan en las rutas Angular y los módulos del backend presentes en el commit `d98da1223838be87ec48302a8c5427b88ee45bf7`.

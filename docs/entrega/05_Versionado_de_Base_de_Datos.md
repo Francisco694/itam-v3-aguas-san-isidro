@@ -18,6 +18,7 @@ La fuente de cambios es `database/migrations/`. La tabla `itam.schema_migrations
 | 034 | Actividad de sesión e índice para timeout | Confirmado en repositorio |
 | 035 | Rol `SOLO_LECTURA` | Confirmado en repositorio |
 | 036 | Correlatividad `numero_ot` | Confirmado en repositorio y empaquetado por el CD actual |
+| 041 | Catálogo técnico opcional por dispositivo | Confirmado en repositorio; aplicado por el CD `d8cd34c` de forma idempotente |
 | 023N | Instalación limpia alternativa de RUT canónico | No es una versión lineal adicional; usar solo según su propósito documentado |
 
 ## Inventario de migraciones
@@ -60,10 +61,13 @@ La fuente de cambios es `database/migrations/`. La tabla `itam.schema_migrations
 | 034 | `034_session_activity_and_proxy_ready.sql` | `ultima_actividad` e índice parcial |
 | 035 | `035_read_only_user_role.sql` | Rol `SOLO_LECTURA` |
 | 036 | `036_correlative_technical_work_order_numbers.sql` | `numero_ot`, restricción positiva e índice único |
+| 041 | `041_device_technical_catalog.sql` | Tabla e índice para metadatos de PDF técnico por dispositivo |
 
 ## Tablas y relaciones principales
 
-Las migraciones crean o modifican, entre otras, `departamentos`, `colaboradores`, `usuarios`, `sesiones_usuario`, `auditoria_operaciones`, `estados`, `tipos_dispositivo`, `familias_codigo_inventario`, `dispositivos`, `sim`, `lineas_moviles`, `historial_eventos`, `ordenes_servicio_tecnico`, `entregas_temporales_servicio`, `actas_entrega`, `actas_entrega_detalle`, `comprobantes_devolucion`, `offboarding`, `verificaciones_fisicas`, `alertas_stock`, `facturas_adquisicion` y `servicio_tecnico_cotizaciones_archivos`.
+Las migraciones crean o modifican, entre otras, `departamentos`, `colaboradores`, `usuarios`, `sesiones_usuario`, `auditoria_operaciones`, `estados`, `tipos_dispositivo`, `familias_codigo_inventario`, `dispositivos`, `sim`, `lineas_moviles`, `historial_eventos`, `ordenes_servicio_tecnico`, `entregas_temporales_servicio`, `actas_entrega`, `actas_entrega_detalle`, `comprobantes_devolucion`, `offboarding`, `verificaciones_fisicas`, `alertas_stock`, `facturas_adquisicion`, `servicio_tecnico_cotizaciones_archivos` y `catalogos_tecnicos_dispositivo`.
+
+La migración 041 no guarda el binario en PostgreSQL: conserva una fila única por dispositivo con nombre original, nombre almacenado, MIME, tamaño, ruta relativa, usuario y fecha. El PDF se guarda en el almacenamiento persistente configurado por `DOCUMENT_STORAGE_PATH`.
 
 Las relaciones críticas son dispositivo–estado, dispositivo–colaborador o departamento, SIM–dispositivo, línea–dispositivo, orden técnica–dispositivo, cotización–orden técnica, acta–detalle–dispositivo y sesión–usuario. Las restricciones de unicidad, checks, claves foráneas e índices deben consultarse en el SQL correspondiente antes de modificar una regla.
 
@@ -76,4 +80,4 @@ Las relaciones críticas son dispositivo–estado, dispositivo–colaborador o d
 
 ## Rollback y diferencias de entorno
 
-Las migraciones no incluyen un mecanismo general de rollback automático. El CD aplica 036 con `psql --set=ON_ERROR_STOP=1`, pero no ejecuta restauración de datos. Desarrollo puede instalar desde cero con los archivos SQL; producción debe verificar `schema_migrations`, estructura y datos antes de aplicar. La versión realmente aplicada en producción queda **Pendiente de validar en servidor** mientras no exista consulta autorizada.
+Las migraciones no incluyen un mecanismo general de rollback automático. El CD aplica las migraciones incluidas con `psql --set=ON_ERROR_STOP=1`, incluida 041, pero no ejecuta restauración de datos. La 041 usa `IF NOT EXISTS` y `ON CONFLICT` para tolerar reejecuciones controladas. Desarrollo puede instalar desde cero con los archivos SQL; producción debe verificar `schema_migrations`, estructura y datos antes de aplicar. En producción se comprobó el CD exitoso y el health de PostgreSQL; una consulta SQL directa de `schema_migrations` sigue pendiente.

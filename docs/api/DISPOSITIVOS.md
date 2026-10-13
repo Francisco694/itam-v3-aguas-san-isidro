@@ -1,6 +1,6 @@
 # API de dispositivos
 
-**Actualizado:** 23 de septiembre de 2026
+**Actualizado:** 13 de octubre de 2026
 **Tipo:** técnico y funcional
 **Base:** `/api/v1/dispositivos`
 
@@ -49,6 +49,30 @@ GET /api/v1/dispositivos/validar-identificador?tipo=imei&valor=356789012345678
 - **Path:** `codigo`, entero positivo de inventario.
 - **Respuesta:** `200` un `DispositivoResumen` ampliado con factura, línea, último responsable, resultado de offboarding, origen y verificación.
 - **Errores:** `400` si el código no es entero positivo; `404` si no existe.
+
+## GET `/dispositivos/:codigo/catalogo-tecnico`
+
+- **Propósito:** consultar los metadatos del PDF técnico asociado al dispositivo.
+- **Respuesta:** `200` con `data: null` cuando no existe o con `id`, `dispositivoId`, `nombreOriginal`, `mimeType`, `tamanoBytes`, `subidoPor` y `creadoEn` cuando existe.
+- **Errores:** `400` por código inválido; `401` sin sesión; `404` si no existe el dispositivo.
+
+## PUT `/dispositivos/:codigo/catalogo-tecnico`
+
+- **Propósito:** adjuntar o reemplazar manualmente el catálogo técnico del dispositivo.
+- **Body:** `multipart/form-data`, campo `archivo`, un único PDF.
+- **Validación:** extensión `.pdf`, MIME `application/pdf`, firma `%PDF-` y tamaño entre 1 byte y 10 MiB (10 MB).
+- **Respuesta:** `200` con los metadatos del catálogo guardado.
+- **Errores:** `400` por archivo ausente, formato inválido o tamaño excedido; `401` sin sesión; `403` por rol sin permiso o `SOLO_LECTURA`; `404` si no existe el dispositivo.
+- **Reglas:** reemplaza la asociación anterior sin modificar estado, custodio, SIM, línea móvil, verificación ni datos históricos del dispositivo. El usuario responsable se obtiene de la sesión.
+
+## GET `/dispositivos/:codigo/catalogo-tecnico/archivo`
+
+- **Propósito:** entregar el PDF asociado para visualizarlo en el navegador.
+- **Query:** `download=true` puede solicitar disposición de descarga; la ficha usa la vista inline del navegador y no muestra un botón de descarga separado.
+- **Respuesta:** `200` `application/pdf` desde almacenamiento persistente.
+- **Errores:** `401`, `404` si el dispositivo o catálogo no existe.
+
+El binario se almacena en la ruta configurada por `DOCUMENT_STORAGE_PATH` con un nombre interno UUID. La tabla `itam.catalogos_tecnicos_dispositivo` conserva la asociación y los metadatos; el PDF no se guarda en PostgreSQL, memoria de proceso ni almacenamiento del navegador.
 
 ## POST `/dispositivos`
 

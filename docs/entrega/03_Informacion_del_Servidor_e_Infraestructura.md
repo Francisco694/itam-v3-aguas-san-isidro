@@ -4,6 +4,8 @@
 
 Este documento separa datos comprobados en el repositorio o en una sesión autorizada de los datos que requieren acceso de solo lectura al servidor, consola cloud o administrador responsable. No contiene contraseñas, tokens, PIN, hashes, llaves privadas ni valores de variables secretas.
 
+> Actualización 2026-10-13: el commit `d8cd34c` fue publicado por CD correctamente. La migración 041 del catálogo técnico se incluyó en el artefacto y se ejecutó de forma idempotente. El health público y el health de PostgreSQL productivo respondieron `200`. No se presenta esto como evidencia de backups, firewall, certificados ni una prueba autenticada de carga de PDF.
+
 ## Datos observados
 
 | Dato | Valor observado | Estado | Evidencia |
@@ -18,7 +20,7 @@ Este documento separa datos comprobados en el repositorio o en una sesión autor
 | Ruta de releases | `/opt/itam/releases/<release>` | Confirmado en CD | `.github/workflows/cd.yml` |
 | Frontend desplegado | `/opt/itam/releases/<release>/frontend-dist` | Confirmado en CD | workflow de despliegue |
 
-La evidencia histórica del proceso `d98da12` no debe presentarse como estado actual: el commit auditado de esta entrega es `754d036`. El workflow actual empaqueta la migración 036.
+La evidencia histórica del proceso `d98da12` no debe presentarse como estado actual. El release vigente de esta revisión corresponde al commit `d8cd34c`; el workflow empaqueta las migraciones requeridas, incluida la 041.
 
 ## Arquitectura de despliegue
 
@@ -40,12 +42,12 @@ El diagrama representa lo que el workflow y el código soportan. La existencia y
 
 1. CI instala dependencias y compila backend y frontend.
 2. CD toma el SHA validado de `main`.
-3. Se empaquetan backend compilado, dependencias, frontend estático y la migración 036.
+3. Se empaquetan backend compilado, dependencias, frontend estático y las migraciones requeridas, incluida `041_device_technical_catalog.sql`.
 4. SSH y SCP transfieren los artefactos al host configurado por secretos.
 5. Se crea `/opt/itam/releases/<release>` y se conserva el `.env` del release anterior.
 6. Se ejecuta `npm ci --omit=dev` y `psql` con `ON_ERROR_STOP=1`.
 7. PM2 inicia el backend nuevo y se valida `/api/v1/health` por loopback.
-8. Se respalda la configuración Nginx, se cambia el root del frontend, se ejecuta `nginx -t` y se recarga Nginx.
+8. Se respalda la configuración Nginx, se configura `client_max_body_size 12m` para permitir que el backend aplique su límite de 10 MB, se cambia el root del frontend, se ejecuta `nginx -t` y se recarga Nginx.
 9. Si falla el health check o Nginx, el workflow restaura el backend y la configuración anterior.
 
 ## Pendientes críticos de servidor
@@ -55,9 +57,9 @@ El diagrama representa lo que el workflow y el código soportan. La existencia y
 | Región y tipo de instancia | No aparecen en el repositorio ni en la sesión observada | Consola AWS o inventario autorizado | Administrador AWS | Medio |
 | Dominio y DNS | Solo se observó una IP pública | Consulta DNS y zona administrada | Administrador DNS | Alto |
 | Distribución exacta de Linux | El prompt indica `ubuntu`, no versión | `cat /etc/os-release` en lectura | Operaciones TI | Medio |
-| Configuración Nginx | El CD solo prueba y modifica el archivo remoto | `sudo nginx -T` sin secretos | Operaciones TI | Alto |
+| Configuración Nginx | El CD respalda, ajusta `client_max_body_size 12m`, ejecuta `nginx -t` y recarga; no se leyó el archivo completo | `sudo nginx -T` sin secretos | Operaciones TI | Alto |
 | PM2 y servicios activos | Se conoce el comando del workflow, no el estado actual | `pm2 jlist`, `systemctl status` | Operaciones TI | Alto |
-| PostgreSQL productivo | El endpoint existe, pero no se consultó producción | Health check autorizado y versión sin credenciales | DBA | Alto |
+| PostgreSQL productivo | Health de producción respondió `200` y reportó `itam_prod`/`itam_app`; no se hizo consulta SQL directa | Consulta de solo lectura de versión y `schema_migrations` | DBA | Alto |
 | HTTPS y certificados | No se vio certificado ni renovación | `certbot certificates`, expiración y timer | Operaciones TI | Alto |
 | Firewall y puertos | No se observó Security Group ni firewall del host | Consola AWS, `ss -lntp`, reglas autorizadas | Administrador AWS | Alto |
 | Backups y restauración | No se observó archivo, retención ni prueba | Inventario y prueba de restauración | DBA / Operaciones TI | Crítico |
