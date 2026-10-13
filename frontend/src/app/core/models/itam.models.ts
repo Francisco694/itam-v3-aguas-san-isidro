@@ -203,6 +203,7 @@ export interface DarBajaInput extends ResponsableInput { motivo:MotivoBaja; }
 export interface FacturaDocumento{nombreOriginal:string;mimeType:'application/pdf'|'image/jpeg'|'image/png';tamanoBytes:number}
 export interface FacturaAdquisicionInput{numeroFactura:string;fechaFactura?:string|null;proveedor?:string|null;montoTotal?:number|null;observaciones?:string|null;referenciaDocumental?:string|null;dispositivosCodigos:number[]}
 export interface FacturaAdquisicion{ id:string;numeroFactura:string;fechaFactura:string|null;proveedor:string|null;montoTotal:number|null;observaciones:string|null;referenciaDocumental:string|null;documento:FacturaDocumento|null;dispositivos:Array<{id:string;codigoInventario:number;tipo:string;marca:string|null;modelo:string|null}>;creadoEn:string;actualizadoEn:string}
+export interface CatalogoTecnico{ id:string;dispositivoId:string;nombreOriginal:string;mimeType:'application/pdf';tamanoBytes:number;subidoPor:string;creadoEn:string }
 
 export interface SimDispositivoResumen { id: string; codigoInventario: number; tipoDispositivo: string; marca: string | null; modelo: string | null; estado: EstadoResumen | null; }
 export interface Sim {

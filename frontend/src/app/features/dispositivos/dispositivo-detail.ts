@@ -3,9 +3,9 @@ import { Component, DestroyRef, HostListener, OnInit, inject, signal } from '@an
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { LucideBuilding, LucideCircleAlert, LucideDownload, LucideExternalLink, LucideFileText, LucideHistory, LucidePackageCheck, LucidePencil, LucidePlus, LucideRotateCcw, LucideShieldAlert, LucideShieldCheck, LucideUserCheck, LucideUsers, LucideWrench, LucideX } from '@lucide/angular';
+import { LucideBuilding, LucideCircleAlert, LucideDownload, LucideEye, LucideExternalLink, LucideFileText, LucideHistory, LucidePackageCheck, LucidePencil, LucidePlus, LucideRotateCcw, LucideShieldAlert, LucideShieldCheck, LucideUserCheck, LucideUsers, LucideWrench, LucideX } from '@lucide/angular';
 import { catchError, combineLatest, forkJoin, map, Observable, of, switchMap } from 'rxjs';
-import { ActaEntrega, Colaborador, ComprobanteDevolucion, Departamento, Dispositivo, Estado, HistorialEvento, LineaMovilLookup, LineaMovilResumen, OrdenServicio, RegistrarSimNuevaAccionLinea, ResultadoDevolucion, Sim, TrazabilidadDispositivo, ReemplazoDispositivo } from '../../core/models/itam.models';
+import { ActaEntrega, CatalogoTecnico, Colaborador, ComprobanteDevolucion, Departamento, Dispositivo, Estado, HistorialEvento, LineaMovilLookup, LineaMovilResumen, OrdenServicio, RegistrarSimNuevaAccionLinea, ResultadoDevolucion, Sim, TrazabilidadDispositivo, ReemplazoDispositivo } from '../../core/models/itam.models';
 import { ColaboradoresService } from '../../core/services/colaboradores.service';
 import { ConfirmationService } from '../../core/services/confirmation.service';
 import { AuthService } from '../../core/services/auth.service';
@@ -18,6 +18,7 @@ import { ServicioTecnicoService } from '../../core/services/servicio-tecnico.ser
 import { ActasEntregaService } from '../../core/services/actas-entrega.service';
 import { ComprobantesDevolucionService } from '../../core/services/comprobantes-devolucion.service';
 import { FacturasAdquisicionService } from '../../core/services/facturas-adquisicion.service';
+import { CatalogoTecnicoService } from '../../core/services/catalogo-tecnico.service';
 import { ReemplazosDispositivoService } from '../../core/services/reemplazos-dispositivo.service';
 import { ComprobanteDevolucionPreview } from '../../shared/components/document-preview/comprobante-devolucion-preview';
 import { AssetLabel, assetLabelResponsible } from '../../shared/components/asset-label/asset-label';
@@ -31,6 +32,8 @@ import { formatClp } from '../../shared/utils/currency';
 import { isCellularRouterDevice, isRouterType } from '../../core/utils/device-capabilities';
 
 type ReplacementExistingLineChoice = 'CONSERVAR_NUMERO' | 'USAR_NUMERO_SIM' | 'NUMERO_NUEVO' | 'SIN_LINEA';
+
+export const MAX_CATALOGO_TECNICO_BYTES = 10 * 1024 * 1024;
 
 
 export const receiversForDepartment = (
@@ -275,7 +278,7 @@ interface SimilarAssignedDevicePrompt {
 @Component({
   selector: 'app-dispositivo-detail',
   standalone: true,
-  imports: [DatePipe, FormsModule, ReactiveFormsModule, RouterLink, PageHeader, StatusBadge, ViewState, ComprobanteDevolucionPreview, ActaPreview, AssetLabel, LucideBuilding, LucideCircleAlert, LucideDownload, LucideExternalLink, LucideFileText, LucideHistory, LucidePackageCheck, LucidePencil, LucidePlus, LucideRotateCcw, LucideShieldAlert, LucideShieldCheck, LucideUserCheck, LucideUsers, LucideWrench, LucideX],
+  imports: [DatePipe, FormsModule, ReactiveFormsModule, RouterLink, PageHeader, StatusBadge, ViewState, ComprobanteDevolucionPreview, ActaPreview, AssetLabel, LucideBuilding, LucideCircleAlert, LucideDownload, LucideEye, LucideExternalLink, LucideFileText, LucideHistory, LucidePackageCheck, LucidePencil, LucidePlus, LucideRotateCcw, LucideShieldAlert, LucideShieldCheck, LucideUserCheck, LucideUsers, LucideWrench, LucideX],
   template: `
     <app-page-header title="Ficha de Equipo" subtitle="Información del equipo y acciones disponibles.">
       <a class="btn btn--secondary" [routerLink]="['/dispositivos']">Volver al inventario</a>
@@ -337,9 +340,23 @@ interface SimilarAssignedDevicePrompt {
         </article>
         <aside class="panoramic-column actions-column">
           <div class="column-title"><span>03</span><div><small>GESTIÓN</small><h3>Acciones del equipo</h3></div></div>
-          @if (auth.user()?.rol !== 'SOLO_LECTURA') {
           @if (!action()) {
             <div class="operation-list">
+              @if (catalogoTecnico(); as catalogo) {
+                <div class="operation-document-group">
+                  <a class="operation-document" [href]="catalogoArchivoUrl(device.codigoInventario)" target="_blank" rel="noopener"><svg lucideEye></svg><span>Ver catálogo técnico<small>{{ catalogo.nombreOriginal }}</small></span></a>
+                  @if (auth.user()?.rol !== 'SOLO_LECTURA') {
+                    <button type="button" class="operation-document-replace" [disabled]="catalogoSubiendo()" (click)="abrirCargaCatalogo()">Reemplazar PDF</button>
+                  }
+                </div>
+              } @else {
+                <button type="button" class="operation-document" [disabled]="auth.user()?.rol === 'SOLO_LECTURA' || catalogoSubiendo()" (click)="abrirCargaCatalogo()"><svg lucideFileText></svg><span>Adjuntar catálogo técnico<small>Sin catálogo técnico adjunto</small></span></button>
+              }
+              @if (catalogoError()) {
+                <div class="catalogo-action-error" role="alert">{{ catalogoError() }}</div>
+              }
+              <input id="technical-catalog-upload" class="technical-catalog__input" type="file" accept="application/pdf,.pdf" [disabled]="catalogoSubiendo()" (change)="catalogoSeleccionado($event)" />
+              @if (auth.user()?.rol !== 'SOLO_LECTURA') {
               <button type="button" [disabled]="terminal() || technicalServiceActive() || device.tipoCustodia!=='NONE'" (click)="open('assign-person')"><svg lucideUserCheck></svg><span>Entregar equipo<small>A un colaborador habilitado</small></span></button>
               @if((device.colaborador || device.departamento) && !terminal() && !technicalServiceActive()){<button type="button" class="operation-return" (click)="open('return')"><svg lucideRotateCcw></svg><span>Recibir en bodega<small>Registra recepción y revisión</small></span></button>}
               @if(!technicalServiceActive()){<button type="button" [disabled]="terminal()" (click)="openServiceOrder()"><svg lucideWrench></svg><span>Enviar a Servicio Técnico<small>Crear orden y bloquear movimientos</small></span></button>}
@@ -352,8 +369,9 @@ interface SimilarAssignedDevicePrompt {
               @if(canCarrySim(device) && !terminal()){<button type="button" (click)="openSimAssociation()"><svg lucidePlus></svg><span>{{ lineActionCopy(device).title }}<small>{{ lineActionCopy(device).description }}</small></span></button>}
               @if(device.estado.codigo==='EXTRAVIADO' || device.estado.codigo==='DADO_BAJA'){<button type="button" (click)="open('recover')"><svg lucideRotateCcw></svg><span>Registrar equipo encontrado<small>Reactivar con trazabilidad</small></span></button>}
               <button type="button" class="operation-danger" [disabled]="!stateExists('DADO_BAJA')" (click)="open('retire')"><svg lucideCircleAlert></svg><span>Da de Baja<small>Motivo obligatorio</small></span></button>
+              }
             </div>
-          } @else {
+          } @else if (auth.user()?.rol !== 'SOLO_LECTURA') {
             <form class="action-form" [formGroup]="actionForm" (ngSubmit)="execute()">
               @if(action()==='service'){<section class="technical-order-identity"><strong>Orden de Trabajo - Servicio Técnico</strong><span>Revisa los antecedentes del equipo antes de registrar el envío.</span><dl><div><dt>Código ITAM</dt><dd>{{device.codigoInventario}}</dd></div><div><dt>Tipo de equipo</dt><dd>{{device.tipo.nombre}}</dd></div><div><dt>Marca / modelo</dt><dd>{{device.marca || 'Sin marca'}} {{device.modelo || ''}}</dd></div><div><dt>IMEI / serie</dt><dd>{{device.imei || device.numeroSerie || 'No informado'}}</dd></div><div><dt>Usuario / área</dt><dd>{{device.colaborador?.nombre || device.departamento?.nombre || 'No informado'}}</dd></div></dl></section>}
               <header><div><small>OPERACIÓN EN CURSO</small><h4>{{ actionTitle() }}</h4></div><button class="icon-button" type="button" aria-label="Cancelar operación" [disabled]="submitting()" (click)="action.set(null)"><svg lucideX></svg></button></header>
@@ -556,7 +574,7 @@ interface SimilarAssignedDevicePrompt {
               @if(action()==='service'){<div class="form-grid"><div class="field"><label for="service-area">Área solicitante</label><input id="service-area" formControlName="areaSolicitante" maxlength="180" /></div><div class="field"><label for="service-contact">Contacto del servicio técnico</label><input id="service-contact" formControlName="contactoServicio" maxlength="180" /></div></div><div class="field"><label for="service-responsible">Responsable TI *</label><input id="service-responsible" formControlName="responsable" maxlength="150" /></div>}
             </form>
           }
-          } @else {
+          @if (auth.user()?.rol === 'SOLO_LECTURA') {
             <div class="notice notice--info">
               <strong>Perfil de solo lectura</strong>
               <span>Puede consultar el equipo y su trazabilidad, pero no modificar operaciones.</span>
@@ -1142,6 +1160,9 @@ export class DispositivoDetail implements OnInit {
     this.selectedSim.set(null);
     this.simError.set('');
     this.modalError.set(null);
+    this.catalogoTecnico.set(null);
+    this.catalogoSubiendo.set(false);
+    this.catalogoError.set('');
     this.resetAssignmentDecision();
     this.clearFeedback();
   }
@@ -1155,10 +1176,14 @@ export class DispositivoDetail implements OnInit {
   protected readonly actasService=inject(ActasEntregaService);
   protected readonly returnService=inject(ComprobantesDevolucionService);
   protected readonly facturas=inject(FacturasAdquisicionService);
+  protected readonly catalogos=inject(CatalogoTecnicoService);
   private readonly replacements=inject(ReemplazosDispositivoService);
   private readonly route = inject(ActivatedRoute);
   private readonly fb = inject(FormBuilder);
   protected readonly item = signal<Dispositivo | null>(null);
+  protected readonly catalogoTecnico = signal<CatalogoTecnico | null>(null);
+  protected readonly catalogoSubiendo = signal(false);
+  protected readonly catalogoError = signal('');
   protected readonly traceability = signal<TrazabilidadDispositivo | null>(null);
   protected readonly history = signal<HistorialEvento[]>([]);
   protected readonly states = signal<Estado[]>([]);
@@ -1203,6 +1228,47 @@ export class DispositivoDetail implements OnInit {
   protected readonly lineActionCopy=smartphoneLineActionCopy;
   protected readonly technicalServiceStatusLabel=technicalServiceOrderStatusLabel;
   protected latestServiceOrder(): OrdenServicio | null { return latestTechnicalServiceOrder(this.serviceOrders()); }
+  protected catalogoArchivoUrl(codigo: number, download = false): string {
+    return this.catalogos.archivoUrl(codigo, download);
+  }
+  protected abrirCargaCatalogo(): void {
+    if (this.auth.user()?.rol === 'SOLO_LECTURA' || this.catalogoSubiendo()) return;
+    document.getElementById('technical-catalog-upload')?.click();
+  }
+  protected catalogoSeleccionado(event: Event): void {
+    const input = event.target as HTMLInputElement | null;
+    const file = input?.files?.[0];
+    if (input) input.value = '';
+    if (!file || this.catalogoSubiendo()) return;
+
+    if (file.type !== 'application/pdf' || !file.name.toLowerCase().endsWith('.pdf')) {
+      this.catalogoError.set('Solo se permiten archivos PDF.');
+      this.toast.error('Archivo no válido', 'Selecciona un archivo PDF.');
+      return;
+    }
+    if (file.size < 1 || file.size > MAX_CATALOGO_TECNICO_BYTES) {
+      this.catalogoError.set('El PDF debe pesar como máximo 10 MB.');
+      this.toast.error('Archivo demasiado grande', 'El PDF debe pesar como máximo 10 MB.');
+      return;
+    }
+
+    this.catalogoSubiendo.set(true);
+    this.catalogoError.set('');
+    this.catalogos.reemplazar(this.codigo, file)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (catalogo) => {
+          this.catalogoTecnico.set(catalogo);
+          this.catalogoSubiendo.set(false);
+          this.toast.success('Catálogo técnico guardado', 'El PDF quedó asociado al dispositivo.');
+        },
+        error: (error) => {
+          this.catalogoSubiendo.set(false);
+          this.catalogoError.set(errorMessage(error));
+          this.toast.error('No se pudo guardar el catálogo técnico', errorMessage(error));
+        }
+      });
+  }
   protected technicalCostPercent(value: number | null, order: OrdenServicio): number {
     const maximum = Math.max(order.montoCotizacion ?? 0, order.costoFinal ?? 0);
     return maximum > 0 && value !== null ? Math.min(100, (value / maximum) * 100) : 0;
@@ -1235,8 +1301,8 @@ export class DispositivoDetail implements OnInit {
   }
   protected load(): void {
     const requestedId = this.id;
-    this.loading.set(true); this.error.set('');
-    forkJoin({ traceability: this.service.trazabilidad(this.id), states: this.estadosService.listar('DISPOSITIVO'), collaborators: this.colaboradoresService.listar({ activo: true }), departments: this.departamentosService.listar(), serviceOrders: this.technicalService.listar().pipe(catchError(() => of([] as OrdenServicio[]))), replacements: this.replacements.pendientes().pipe(catchError(() => of([] as ReemplazoDispositivo[]))) }).subscribe({ next: (result) => { if (requestedId !== this.id) return; this.traceability.set(result.traceability); this.item.set(result.traceability.dispositivo); this.codigo = result.traceability.dispositivo.codigoInventario; this.pendingReplacement.set(result.replacements.find(replacement => replacement.dispositivoAnterior.codigoInventario === this.codigo && replacement.estadoOperacion === 'PENDIENTE_DEVOLUCION') || null); this.serviceOrders.set(result.serviceOrders.filter(order => String(order.dispositivo.id) === String(result.traceability.dispositivo.id))); this.activeServiceOrder.set(activeTechnicalServiceOrderForDevice(result.serviceOrders, this.codigo)); this.history.set(result.traceability.eventos); this.states.set(result.states.filter((state) => state.activo)); this.collaborators.set(result.collaborators); this.departments.set(result.departments.filter((department) => department.activo)); this.loading.set(false); if (this.routeAction === 'assign' && !this.terminal() && !this.technicalServiceActive()) this.open('assign-person'); }, error: (error) => { if (requestedId !== this.id) return; this.error.set(errorMessage(error)); this.loading.set(false); } });
+    this.loading.set(true); this.error.set(''); this.catalogoError.set('');
+    forkJoin({ traceability: this.service.trazabilidad(this.id), states: this.estadosService.listar('DISPOSITIVO'), collaborators: this.colaboradoresService.listar({ activo: true }), departments: this.departamentosService.listar(), catalogo: this.catalogos.obtener(this.id).pipe(catchError((error) => { this.catalogoError.set(errorMessage(error)); return of(null as CatalogoTecnico | null); })), serviceOrders: this.technicalService.listar().pipe(catchError(() => of([] as OrdenServicio[]))), replacements: this.replacements.pendientes().pipe(catchError(() => of([] as ReemplazoDispositivo[]))) }).subscribe({ next: (result) => { if (requestedId !== this.id) return; this.traceability.set(result.traceability); this.item.set(result.traceability.dispositivo); this.catalogoTecnico.set(result.catalogo); this.codigo = result.traceability.dispositivo.codigoInventario; this.pendingReplacement.set(result.replacements.find(replacement => replacement.dispositivoAnterior.codigoInventario === this.codigo && replacement.estadoOperacion === 'PENDIENTE_DEVOLUCION') || null); this.serviceOrders.set(result.serviceOrders.filter(order => String(order.dispositivo.id) === String(result.traceability.dispositivo.id))); this.activeServiceOrder.set(activeTechnicalServiceOrderForDevice(result.serviceOrders, this.codigo)); this.history.set(result.traceability.eventos); this.states.set(result.states.filter((state) => state.activo)); this.collaborators.set(result.collaborators); this.departments.set(result.departments.filter((department) => department.activo)); this.loading.set(false); if (this.routeAction === 'assign' && !this.terminal() && !this.technicalServiceActive()) this.open('assign-person'); }, error: (error) => { if (requestedId !== this.id) return; this.error.set(errorMessage(error)); this.loading.set(false); } });
   }
   protected terminal(): boolean { return this.states().find((state) => state.id === this.item()?.estado.id)?.esTerminal ?? false; }
   protected stateExists(code: string): boolean { return this.states().some((state) => state.codigo === code); }

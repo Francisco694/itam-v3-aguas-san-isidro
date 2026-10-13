@@ -26,7 +26,7 @@ CI ejecuta typecheck y build backend, build frontend y verifica `frontend/dist/f
 
 - `backend/`: API, módulos, servicios, repositorios y pruebas.
 - `frontend/`: aplicación Angular y componentes.
-- `database/migrations/`: migraciones 001 a 040.
+- `database/migrations/`: migraciones 001 a 041.
 - `docs/api/`: contratos de endpoints.
 - `docs/arquitectura/`: arquitectura, seguridad y reglas.
 - `docs/diagramas/`: diagramas Mermaid de respaldo.

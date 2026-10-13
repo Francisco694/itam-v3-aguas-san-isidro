@@ -21,6 +21,12 @@ import {
   registrarVerificacionManualController,
   registrarVerificacionFisicaController
 } from "./dispositivos.controller";
+import {
+  obtenerArchivoCatalogoTecnicoController,
+  obtenerCatalogoTecnicoController,
+  reemplazarCatalogoTecnicoController
+} from "./catalogo-tecnico.controller";
+import { technicalCatalogUpload } from "./catalogo-tecnico.upload";
 
 const router = Router();
 
@@ -33,6 +39,9 @@ router.post("/:codigo/registrar-sim", registrarSimNuevaController);
 router.get("/:codigo/historial", historialDispositivoController);
 router.get("/:codigo/trazabilidad", trazabilidadDispositivoController);
 router.get("/:codigo/verificaciones-fisicas", listarVerificacionesFisicasController);
+router.get("/:codigo/catalogo-tecnico/archivo", obtenerArchivoCatalogoTecnicoController);
+router.get("/:codigo/catalogo-tecnico", obtenerCatalogoTecnicoController);
+router.put("/:codigo/catalogo-tecnico", technicalCatalogUpload, reemplazarCatalogoTecnicoController);
 router.get("/:codigo", obtenerDispositivoController);
 router.post("/", crearDispositivoController);
 router.patch("/:codigo", actualizarDispositivoController);

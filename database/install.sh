@@ -57,6 +57,7 @@ readonly MIGRATIONS=(
   "038_sim_line_history.sql"
   "039_seed_current_sim_line_history.sql"
   "040_expand_device_types.sql"
+  "041_device_technical_catalog.sql"
 )
 
 die() {
@@ -189,10 +190,10 @@ done
 
 printf 'Validando resultado final...\n'
 table_count="$(psql "${PSQL_ARGS[@]}" --dbname="$TARGET_DB" -Atqc "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'itam' AND table_type = 'BASE TABLE';")"
-[[ "$table_count" == "30" ]] || die "Se esperaban 30 tablas en itam y se encontraron $table_count"
+[[ "$table_count" == "31" ]] || die "Se esperaban 31 tablas en itam y se encontraron $table_count"
 
 migration_count="$(psql "${PSQL_ARGS[@]}" --dbname="$TARGET_DB" -Atqc "SELECT COUNT(*) FROM itam.schema_migrations;")"
-[[ "$migration_count" == "39" ]] || die "Se esperaban 39 registros de migraciones y se encontraron $migration_count"
+[[ "$migration_count" == "40" ]] || die "Se esperaban 40 registros de migraciones y se encontraron $migration_count"
 
 invalid_history="$(psql "${PSQL_ARGS[@]}" --dbname="$TARGET_DB" -Atqc "
 SELECT COUNT(*)
