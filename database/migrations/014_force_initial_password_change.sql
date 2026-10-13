@@ -1,5 +1,5 @@
 -- ============================================================
--- ITAM v3.0 - Aguas San Isidro
+-- ITAM - Aguas San Isidro
 -- Migracion 014 - Cargo de usuario y cambio de clave inicial
 -- Incremental y no destructiva.
 -- ============================================================

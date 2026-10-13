@@ -1,4 +1,4 @@
--- ITAM v3.0 - Migracion 037 - Operaciones generales de reemplazo de dispositivos
+-- ITAM - Migracion 037 - Operaciones generales de reemplazo de dispositivos
 
 BEGIN;
 

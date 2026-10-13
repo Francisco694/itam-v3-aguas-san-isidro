@@ -1,5 +1,5 @@
 -- ============================================================
--- ITAM v3.0 - Aguas San Isidro
+-- ITAM - Aguas San Isidro
 -- Migración 004 - Inmutabilidad del código físico del activo
 --
 -- Impide que el identificador impreso de un dispositivo o SIM

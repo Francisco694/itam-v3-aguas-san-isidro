@@ -1,5 +1,5 @@
 -- ============================================================
--- ITAM v3.0 - Aguas San Isidro
+-- ITAM - Aguas San Isidro
 -- Migración 001 - Initial Core
 --
 -- Núcleo inicial del inventario TI:

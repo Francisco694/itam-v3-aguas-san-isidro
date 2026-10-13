@@ -35,7 +35,7 @@ El CD del commit `d8cd34c` terminó correctamente, `/api/v1/health` y `/api/v1/h
 - Backend `npm test`: 113 casos pasan, 0 fallan.
 - Frontend `npm run build`: código 0; queda advertencia del presupuesto del bundle inicial.
 - Frontend: no se encontraron archivos `*.spec.ts` ni `*.test.ts` bajo `frontend/src`; `ng test --watch=false` inició el runner sin casos y no terminó automáticamente.
-- PDF de prueba `OT-163`: 2 páginas, formato A4, tres equipos, texto largo, número correlativo, pie de formulario, sección exacta `5. RECEPCIÓN Y DEVOLUCIÓN (INTERNO)` y sin texto `ITAM v3.0`.
+- PDF de prueba `OT-163`: 2 páginas, formato A4, tres equipos, texto largo, número correlativo, pie de formulario, sección exacta `5. RECEPCIÓN Y DEVOLUCIÓN (INTERNO)` y sin etiqueta de versión del sistema.
 - PDF de prueba: se comprobó extracción textual con `pdftotext`; la revisión visual PNG queda pendiente por falta de Poppler/LibreOffice/Python disponibles.
 - DOCX: Word en modo solo lectura reportó 7 páginas, 3 tablas y 1 imagen, y generó una exportación PDF de control.
 - Búsqueda de secretos en documentación y salida: sin claves privadas, JWT, contraseñas ni URLs PostgreSQL con credenciales.

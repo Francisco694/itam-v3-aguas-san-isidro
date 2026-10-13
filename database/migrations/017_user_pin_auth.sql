@@ -1,4 +1,4 @@
--- ITAM v3.0 - PIN de acceso rápido protegido mediante hash.
+-- ITAM - PIN de acceso rápido protegido mediante hash.
 BEGIN;
 
 SET search_path TO itam, public;

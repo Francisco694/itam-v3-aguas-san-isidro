@@ -1,5 +1,5 @@
 -- ============================================================
--- ITAM v3.0 - Aguas San Isidro
+-- ITAM - Aguas San Isidro
 -- Migración 005 - Catálogo normalizado de tipos de dispositivo
 --
 -- - Conserva todos los tipos textuales existentes.

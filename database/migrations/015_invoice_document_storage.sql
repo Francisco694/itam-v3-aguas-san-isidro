@@ -1,5 +1,5 @@
 -- ============================================================
--- ITAM v3.0 - Aguas San Isidro
+-- ITAM - Aguas San Isidro
 -- Migracion 015 - Documento principal de factura de adquisicion
 -- El archivo se almacena fuera de PostgreSQL; estos campos guardan metadata.
 -- ============================================================

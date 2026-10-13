@@ -1,4 +1,4 @@
--- ITAM v3.0 - Rol de solo lectura
+-- ITAM - Rol de solo lectura
 -- Amplia el catalogo de perfiles sin modificar migraciones historicas.
 
 BEGIN;

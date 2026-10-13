@@ -13,5 +13,5 @@ import { Component, input } from '@angular/core';
 export class PageHeader {
   readonly title = input.required<string>();
   readonly subtitle = input('');
-  readonly eyebrow = input('Aguas San Isidro · ITAM v3.0');
+  readonly eyebrow = input('Aguas San Isidro · ITAM');
 }

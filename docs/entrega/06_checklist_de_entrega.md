@@ -12,7 +12,7 @@ La carga autenticada de un PDF de negocio, la restauración de backups, el firew
 
 | Campo | Valor | Estado |
 | --- | --- | --- |
-| Sistema | ITAM v3.0 - Aguas San Isidro | Confirmado |
+| Sistema | ITAM - Aguas San Isidro | Confirmado |
 | Commit | `d98da1223838be87ec48302a8c5427b88ee45bf7` | Confirmado |
 | Release activo | `d98da12` | Confirmado |
 | Fecha de consulta | 2026-10-02 | Confirmado |

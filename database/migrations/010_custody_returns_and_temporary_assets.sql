@@ -1,5 +1,5 @@
 -- ============================================================
--- ITAM v3.0 - Aguas San Isidro
+-- ITAM - Aguas San Isidro
 -- Migración 010 - Custodia técnica, equipos temporales y devoluciones
 -- ============================================================
 

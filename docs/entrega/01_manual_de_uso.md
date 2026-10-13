@@ -6,7 +6,7 @@
 
 ## Propósito y alcance
 
-Este manual describe el uso funcional observado de ITAM v3.0 para Aguas San Isidro. Cubre el acceso, la consulta del inventario, la custodia de activos, las líneas móviles, los documentos operativos, el servicio técnico, el offboarding y los reportes. Las indicaciones se basan en las rutas Angular y los módulos del backend presentes en el commit `d98da1223838be87ec48302a8c5427b88ee45bf7`.
+Este manual describe el uso funcional observado de ITAM para Aguas San Isidro. Cubre el acceso, la consulta del inventario, la custodia de activos, las líneas móviles, los documentos operativos, el servicio técnico, el offboarding y los reportes. Las indicaciones se basan en las rutas Angular y los módulos del backend presentes en el commit `d98da1223838be87ec48302a8c5427b88ee45bf7`.
 
 ## Acceso y sesión
 

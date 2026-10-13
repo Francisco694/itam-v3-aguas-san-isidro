@@ -1,5 +1,5 @@
 -- ============================================================
--- ITAM v3.0 - Aguas San Isidro
+-- ITAM - Aguas San Isidro
 -- Migracion 023 - RUT canonico y conciliacion P1-10
 -- ============================================================
 

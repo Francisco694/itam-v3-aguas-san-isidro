@@ -1,5 +1,5 @@
 -- ============================================================
--- ITAM v3.0 - Aguas San Isidro
+-- ITAM - Aguas San Isidro
 -- Migración 003 - Familias de código y custodia departamental
 --
 -- - Configura prefijos sin codificarlos en la aplicación.

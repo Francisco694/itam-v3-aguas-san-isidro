@@ -570,7 +570,7 @@ index 7956b7b..7babb8e 100644
            <span class="brand__icon"><svg lucideDroplet></svg></span>
            <span>
              <strong>Aguas San Isidro</strong>
--            <small>SISTEMA ITAM v3.0</small>
+-            <small>SISTEMA ITAM</small>
 +            <small>SISTEMA ITAM</small>
            </span>
          </a>
@@ -594,7 +594,7 @@ index fc354ca..5623e4d 100644
    <meta charset="utf-8">
    <meta name="theme-color" content="#03045E">
    <meta name="description" content="Sistema de gestión de activos TI de Aguas San Isidro">
--  <title>ITAM v3.0 | Aguas San Isidro</title>
+-  <title>ITAM | Aguas San Isidro</title>
 +  <title>ITAM | Aguas San Isidro</title>
    <base href="/">
    <meta name="viewport" content="width=device-width, initial-scale=1">

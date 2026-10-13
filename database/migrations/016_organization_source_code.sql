@@ -1,4 +1,4 @@
--- ITAM v3.0 - Identificador estable de la fuente organizacional oficial.
+-- ITAM - Identificador estable de la fuente organizacional oficial.
 BEGIN;
 
 SET search_path TO itam, public;

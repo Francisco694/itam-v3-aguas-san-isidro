@@ -1,5 +1,5 @@
 -- ============================================================
--- ITAM v3.0 - Aguas San Isidro
+-- ITAM - Aguas San Isidro
 -- Migracion 013 - Organizacion, adquisicion, autenticacion y auditoria
 -- Incremental y no destructiva. Los historicos admiten ejecutor NULL.
 -- ============================================================

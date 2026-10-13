@@ -10,7 +10,7 @@ const startServer = async (): Promise<void> => {
 
     app.listen(env.port, env.host, () => {
       console.log("========================================");
-      console.log(" ITAM v3.0 - Aguas San Isidro");
+      console.log(" ITAM - Aguas San Isidro");
       console.log(" Backend iniciado correctamente");
       console.log(` API: http://${env.host}:${env.port}`);
       console.log(

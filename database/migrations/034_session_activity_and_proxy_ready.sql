@@ -1,4 +1,4 @@
--- ITAM v3.0 - Actividad de sesión e índice para timeout de inactividad.
+-- ITAM - Actividad de sesión e índice para timeout de inactividad.
 -- Corrige el defecto histórico de 018 sin reescribir esa migración.
 
 BEGIN;

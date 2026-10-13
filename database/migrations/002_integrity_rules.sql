@@ -1,5 +1,5 @@
 -- ============================================================
--- ITAM v3.0 - Aguas San Isidro
+-- ITAM - Aguas San Isidro
 -- Migración 002 - Integrity Rules
 --
 -- Refuerza reglas de integridad del dominio:

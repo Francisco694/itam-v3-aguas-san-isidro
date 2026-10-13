@@ -1,4 +1,4 @@
-# Auditoria automatica integral ITAM v3.0
+# Auditoria automatica integral ITAM
 
 Generado: 2026-09-24T12:27:57.371Z
 Proyecto: E:/Aguas San Isidro V2/ITAM
@@ -111,7 +111,7 @@ Estado general: **NO APTO: existen hallazgos CRITICAL/HIGH.**
 | PORT_3100_CLOSED | MEDIUM | El puerto 3100 no esta abierto. | connect ECONNREFUSED 127.0.0.1:3100 | Levantar el backend local o ajustar la configuracion de puerto. |
 | HTTP_BACKEND_HEALTH_3100_DOWN | HIGH | backend health 3100 no esta disponible. | fetch failed | Levantar el servicio local o corregir host/puerto antes de validar disponibilidad. |
 | HTTP_BACKEND_DATABASE_HEALTH_3100_DOWN | HIGH | backend database health 3100 no esta disponible. | fetch failed | Levantar el servicio local o corregir host/puerto antes de validar disponibilidad. |
-| BACKEND_PORT_NOT_3100 | INFO | El PORT configurado para backend no es 3100. | PORT=3000 | Confirmar si ITAM v3.0 debe estandarizar backend en puerto 3100. |
+| BACKEND_PORT_NOT_3100 | INFO | El PORT configurado para backend no es 3100. | PORT=3000 | Confirmar si ITAM debe estandarizar backend en puerto 3100. |
 | HTTP_FRONTEND_LOCAL_4200_DOWN | INFO | frontend local 4200 no esta disponible. | fetch failed | Levantar el servicio local o corregir host/puerto antes de validar disponibilidad. |
 | FRONTEND_4200_OPTIONAL | INFO | Frontend local 4200 no esta levantado o no responde. | Chequeo informativo porque el requisito indica validar si esta levantado. | Levantar npm start en frontend si se desea validar disponibilidad web. |
 

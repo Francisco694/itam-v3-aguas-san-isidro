@@ -93,7 +93,7 @@ app.use("/api/v1/lineas-moviles", lineasMovilesRoutes);
 app.get("/api/v1/health", (_req, res) => {
   res.status(200).json({
     success: true,
-    service: "ITAM v3.0 API",
+    service: "ITAM API",
     status: "OK",
     timestamp: new Date().toISOString()
   });

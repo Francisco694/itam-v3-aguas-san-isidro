@@ -1,5 +1,5 @@
 -- ============================================================
--- ITAM v3.0 - Aguas San Isidro
+-- ITAM - Aguas San Isidro
 -- Migracion 021 - Anulacion logica de bajas de dispositivos
 -- ============================================================
 

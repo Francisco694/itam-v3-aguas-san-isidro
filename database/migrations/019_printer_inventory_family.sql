@@ -1,4 +1,4 @@
--- ITAM v3.0 - Familia independiente para impresoras (7000)
+-- ITAM - Familia independiente para impresoras (7000)
 BEGIN;
 
 SET search_path TO itam, public;

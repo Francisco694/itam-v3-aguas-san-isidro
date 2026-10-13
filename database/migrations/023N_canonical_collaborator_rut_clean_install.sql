@@ -1,5 +1,5 @@
 -- ============================================================
--- ITAM v3.0 - Aguas San Isidro
+-- ITAM - Aguas San Isidro
 -- Migración 023N - RUT canónico para instalación nueva
 --
 -- Esta variante sustituye exclusivamente a la conciliación histórica 023
