@@ -219,6 +219,12 @@ jobs:
           sudo mkdir -p /var/backups/itam
           sudo cp "$nginx_config" "$nginx_backup"
 
+          if sudo grep -qE '^[[:space:]]*client_max_body_size[[:space:]]' "$nginx_config"; then
+            sudo sed -E -i 's#^[[:space:]]*client_max_body_size[[:space:]]+[^;]+;#    client_max_body_size 12m;#' "$nginx_config"
+          else
+            sudo sed -i '/^[[:space:]]*server[[:space:]]*{/a\    client_max_body_size 12m;' "$nginx_config"
+          fi
+
           rollback_backend() {
             set +e
             pm2 delete itam-backend
