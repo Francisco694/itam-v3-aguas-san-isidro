@@ -1,5 +1,8 @@
 # Cómo crear una migración
 
+**Actualizado:** 13 de octubre de 2026
+**Tipo:** guía técnica
+
 Esta guía aplica a futuras modificaciones estructurales de PostgreSQL en ITAM.
 
 1. Revisar los archivos existentes en `database/migrations`.

@@ -1,5 +1,9 @@
 # Manual de Usuario
 
+**Actualizado:** 13 de octubre de 2026
+**Tipo:** manual de usuario
+**Commit de referencia:** `d8cd34c63293f293b0b5bf57f3219dbb8bfe7e0c`
+
 ## Objetivo
 
 Este manual explica cómo utilizar ITAM para consultar y administrar activos tecnológicos de Aguas San Isidro. Describe las tareas visibles en el frontend y las reglas que condicionan cada operación.

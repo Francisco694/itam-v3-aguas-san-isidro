@@ -15,3 +15,10 @@ flowchart LR
 ```
 
 Registrar una línea no equivale a verificar físicamente el equipo.
+
+---
+
+**Referencias cruzadas:**
+- [Arquitectura general](../arquitectura/ARQUITECTURA_GENERAL.md)
+- [Reglas de negocio](../arquitectura/REGLAS_DE_NEGOCIO.md)
+- [Documentación de API](../api/README.md)

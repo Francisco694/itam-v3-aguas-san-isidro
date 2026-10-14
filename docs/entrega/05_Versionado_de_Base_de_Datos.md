@@ -1,5 +1,9 @@
 # Versionado de Base de Datos
 
+**Actualizado:** 13 de octubre de 2026
+**Tipo:** referencia técnica
+**Commit de referencia:** `d8cd34c63293f293b0b5bf57f3219dbb8bfe7e0c`
+
 ## Fuente de verdad
 
 La fuente de cambios es `database/migrations/`. La tabla `itam.schema_migrations` registra `version`, `nombre` y `aplicado_en`, pero no contiene checksum. La presencia de un archivo SQL no demuestra por sí sola que haya sido aplicado en producción.

@@ -3,7 +3,7 @@
 **Actualizado:** 23 de septiembre de 2026
 **Tipo:** operativo e histórico
 
-Esta síntesis conserva únicamente actividades con evidencia en la bitácora detallada, conversaciones o cambios versionados. El detalle completo está en [bitacora-2026-08-24-a-2026-09-22.md](bitacora-2026-08-24-a-2026-09-22.md).
+Esta síntesis conserva únicamente actividades con evidencia en la bitácora detallada, conversaciones o cambios versionados. El detalle completo está en [bitacora-detallada-2026-08-24-a-2026-09-22.md](bitacora-detallada-2026-08-24-a-2026-09-22.md).
 
 ## 24 de agosto
 

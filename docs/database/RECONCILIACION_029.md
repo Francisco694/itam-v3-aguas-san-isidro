@@ -1,5 +1,7 @@
 # Reconciliación de la migración 029
 
+**Actualizado:** 30 de septiembre de 2026
+**Tipo:** técnico e histórico
 **Estado:** propuesta preparada para revisión; no ejecutada.
 
 ## Diagnóstico definitivo

@@ -6,6 +6,9 @@
 
 Esta carpeta documenta el sistema ITAM según el código vigente. Los documentos distinguen entre comportamiento implementado, decisiones de diseño, evidencia histórica y tareas pendientes. La documentación no sustituye las migraciones ni los contratos TypeScript: cuando existe una diferencia, la fuente de verdad es el código actual.
 
+> **Nota:** la deuda técnica conocida está consolidada en
+> [DEUDA_TECNICA.md](DEUDA_TECNICA.md).
+
 ## API
 
 - [Índice de API](api/README.md)
@@ -36,9 +39,9 @@ Esta carpeta documenta el sistema ITAM según el código vigente. Los documentos
 ## Bitácoras
 
 - [Índice de bitácoras](bitacoras/README.md)
-- [Agosto de 2026](bitacoras/BITACORA_AGOSTO_2026.md)
-- [Septiembre de 2026](bitacoras/BITACORA_SEPTIEMBRE_2026.md)
-- [Bitácora detallada 24 de agosto–22 de septiembre](bitacoras/bitacora-2026-08-24-a-2026-09-22.md)
+- [Agosto de 2026](bitacoras/bitacora-agosto-2026.md)
+- [Septiembre de 2026](bitacoras/bitacora-septiembre-2026.md)
+- [Bitácora detallada 24 de agosto–22 de septiembre](bitacoras/bitacora-detallada-2026-08-24-a-2026-09-22.md)
 - [Avance documental del 23 de septiembre](bitacoras/avance-2026-09-23.md)
 
 ## Base de datos
@@ -52,7 +55,7 @@ Esta carpeta documenta el sistema ITAM según el código vigente. Los documentos
 
 ## Diagramas
 
-- [Arquitectura general](diagramas/ARQUITECTURA_GENERAL.md)
+- [Arquitectura general](diagramas/DIAGRAMA_ARQUITECTURA.md)
 - [Casos de uso](diagramas/CASOS_DE_USO.md)
 - [Ciclo de vida del activo](diagramas/CICLO_VIDA_ACTIVO.md)
 - [Flujo de asignación](diagramas/FLUJO_ASIGNACION.md)
@@ -63,16 +66,16 @@ Esta carpeta documenta el sistema ITAM según el código vigente. Los documentos
 - [Flujo de verificación física](diagramas/FLUJO_VERIFICACION_FISICA.md)
 - [Modelo de relaciones](diagramas/MODELO_RELACIONES.md)
 
-## Prototipo y producto
+## UX y producto
 
-- [Índice de prototipo](prototipo/README.md)
-- [Evolución de interfaz](prototipo/EVOLUCION_INTERFAZ.md)
-- [Dashboard](prototipo/DASHBOARD.md)
-- [Ficha de activo](prototipo/FICHA_ACTIVO.md)
-- [Etiquetas](prototipo/ETIQUETAS.md)
-- [Actas](prototipo/ACTAS.md)
-- [Servicio técnico](prototipo/SERVICIO_TECNICO.md)
-- [Offboarding](prototipo/OFFBOARDING.md)
+- [Índice UX](ux/README.md)
+- [Evolución de interfaz](bitacoras/evolucion-interfaz.md)
+- [Dashboard](ux/DASHBOARD.md)
+- [Ficha de activo](ux/FICHA_ACTIVO.md)
+- [Etiquetas](hardware/ETIQUETAS.md)
+- [Actas](ux/ACTAS.md)
+- [Servicio técnico](ux/SERVICIO_TECNICO.md)
+- [Offboarding](ux/OFFBOARDING.md)
 
 ## Producción
 
@@ -80,7 +83,7 @@ Esta carpeta documenta el sistema ITAM según el código vigente. Los documentos
 
 ## Integración continua
 
-- [Estado de CI/CD](ci/CI.md)
+- [Estado de CI/CD](ci/ci-cd.md)
 
 ## Convenciones
 

@@ -11,7 +11,7 @@ from docx.shared import Inches, Pt, RGBColor
 
 
 ROOT = Path(__file__).resolve().parent
-SOURCE = ROOT / "bitacora-2026-08-24-a-2026-09-22.md"
+SOURCE = ROOT / "bitacora-detallada-2026-08-24-a-2026-09-22.md"
 OUTPUT = ROOT / "bitacora-itam-2026-08-24-a-2026-09-22.docx"
 
 NAVY = "123B5D"

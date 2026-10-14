@@ -1,6 +1,6 @@
 # Arquitectura ITAM
 
-**Actualizado:** 23 de septiembre de 2026
+**Actualizado:** 13 de octubre de 2026
 **Tipo:** técnico
 
 ## Documentos

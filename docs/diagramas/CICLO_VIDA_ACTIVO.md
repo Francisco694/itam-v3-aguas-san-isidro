@@ -20,3 +20,10 @@ stateDiagram-v2
 ```
 
 Los nombres son códigos de estado; la API valida las transiciones y no permite reemplazar una baja o recuperación con un cambio genérico.
+
+---
+
+**Referencias cruzadas:**
+- [Arquitectura general](../arquitectura/ARQUITECTURA_GENERAL.md)
+- [Reglas de negocio](../arquitectura/REGLAS_DE_NEGOCIO.md)
+- [Documentación de API](../api/README.md)

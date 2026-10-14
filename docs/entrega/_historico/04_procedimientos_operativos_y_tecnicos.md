@@ -1,6 +1,6 @@
 # Procedimientos Operativos y Tecnicos
 
-> Archivo histórico conservado por compatibilidad. La fuente canónica de entrega es [`04_Procedimientos_Operativos_y_Tecnicos.md`](04_Procedimientos_Operativos_y_Tecnicos.md).
+> Archivo histórico conservado por compatibilidad. El documento canónico previsto es [`04_Procedimientos_Operativos.md`](../04_Procedimientos_Operativos.md), pendiente de crear.
 
 ## Principios
 

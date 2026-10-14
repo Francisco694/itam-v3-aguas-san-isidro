@@ -1,6 +1,6 @@
 # Estado actual de la base de datos
 
-**Fecha del análisis:** 29 de septiembre de 2026
+**Actualizado:** 29 de septiembre de 2026
 **Base analizada:** `itam_dev`
 **Schema:** `itam`
 **Tipo:** fotografía técnica, no ejecutable

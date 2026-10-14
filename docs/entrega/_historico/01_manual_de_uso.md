@@ -1,6 +1,6 @@
 # Manual de Uso
 
-> Archivo histórico conservado por compatibilidad. La fuente canónica de entrega es [`01_manual_de_usuario.md`](01_manual_de_usuario.md), que contiene la versión ampliada y validada del manual.
+> Archivo histórico conservado por compatibilidad. La fuente canónica de entrega es [`01_manual_de_usuario.md`](../01_manual_de_usuario.md), que contiene la versión ampliada y validada del manual.
 
 > Actualización 2026-10-13: para la funcionalidad vigente de catálogo técnico, consulte la sección **Catálogo técnico** del manual canónico. Esta copia conserva el alcance histórico anterior y no debe usarse para validar el release actual.
 

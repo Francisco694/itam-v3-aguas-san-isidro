@@ -1,5 +1,9 @@
 # Informacion del Servidor e Infraestructura
 
+**Actualizado:** 13 de octubre de 2026
+**Tipo:** referencia técnica y operativa
+**Commit de referencia:** `d8cd34c63293f293b0b5bf57f3219dbb8bfe7e0c`
+
 ## Alcance y criterio de evidencia
 
 Este documento separa datos comprobados en el repositorio o en una sesión autorizada de los datos que requieren acceso de solo lectura al servidor, consola cloud o administrador responsable. No contiene contraseñas, tokens, PIN, hashes, llaves privadas ni valores de variables secretas.

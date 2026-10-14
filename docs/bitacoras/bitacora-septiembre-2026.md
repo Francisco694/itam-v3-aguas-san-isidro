@@ -3,7 +3,7 @@
 **Actualizado:** 23 de septiembre de 2026
 **Tipo:** operativo e histórico
 
-El registro diario completo está en [bitacora-2026-08-24-a-2026-09-22.md](bitacora-2026-08-24-a-2026-09-22.md). Esta página organiza los hitos por etapa y conserva los días sin evidencia como pendientes.
+El registro diario completo está en [bitacora-detallada-2026-08-24-a-2026-09-22.md](bitacora-detallada-2026-08-24-a-2026-09-22.md). Esta página organiza los hitos por etapa y conserva los días sin evidencia como pendientes.
 
 ## 1–10 de septiembre — trazabilidad, etiquetas y control físico
 
@@ -32,7 +32,7 @@ El registro diario completo está en [bitacora-2026-08-24-a-2026-09-22.md](bitac
 ## 23 de septiembre — actualización documental
 
 - **Objetivo:** completar la documentación del sistema sin modificar comportamiento.
-- **Trabajo realizado:** inventario de `docs/`, identificación de archivos incompletos, referencias antiguas y carpetas sin documentación; creación de índices, API por dominio, arquitectura, diagramas, prototipo y checklist actualizado.
+- **Trabajo realizado:** inventario de `docs/`, identificación de archivos incompletos, referencias antiguas y carpetas sin documentación; creación de índices, API por dominio, arquitectura, diagramas, documentación UX y checklist actualizado.
 - **Problemas detectados:** la documentación API monolítica estaba desactualizada y usaba una denominación anterior del sistema.
 - **Solución:** se mantuvo la referencia histórica, se separaron los contratos por dominio y se normalizó el nombre ITAM.
 - **Pruebas:** revisión contra routes/controllers/services/types actuales; no se modificó código funcional.

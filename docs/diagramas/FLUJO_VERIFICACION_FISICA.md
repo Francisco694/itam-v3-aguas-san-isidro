@@ -15,3 +15,10 @@ flowchart TD
     V --> E
     E --> H[Guardar evidencia e historial]
 ```
+
+---
+
+**Referencias cruzadas:**
+- [Arquitectura general](../arquitectura/ARQUITECTURA_GENERAL.md)
+- [Reglas de negocio](../arquitectura/REGLAS_DE_NEGOCIO.md)
+- [Documentación de API](../api/README.md)

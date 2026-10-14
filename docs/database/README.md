@@ -11,5 +11,6 @@ Esta carpeta documenta el estado actual del versionamiento SQL y las reglas para
 - [Estado actual de la base](ESTADO_ACTUAL_BD.md): fotografía técnica de `itam_dev`.
 - [Cómo crear una migración](COMO_CREAR_MIGRACION.md): guía para futuras migraciones.
 - [Instalador PostgreSQL](INSTALADOR_POSTGRESQL.md): instalación nueva reproducible en PostgreSQL 16 y validación en Ubuntu.
+- [Reconciliación de la migración 029](RECONCILIACION_029.md): diagnóstico, validación en escenarios A y B, y estrategia definitiva de instalación y actualización.
 
 Esta documentación no ejecuta SQL ni reemplaza los archivos de `database/migrations`.

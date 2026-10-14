@@ -1,6 +1,7 @@
 # Estado de CI/CD
 
-**Fecha del análisis:** 30 de septiembre de 2026
+**Actualizado:** 30 de septiembre de 2026
+**Tipo:** técnico y operativo
 **Alcance:** primera etapa de integración continua
 **Estado:** Fase 1 implementada; Fase 2 de pruebas PostgreSQL pendiente
 
@@ -36,6 +37,8 @@ El repositorio actualmente no contiene todos los elementos necesarios para repro
 - No existe un runner de migraciones ni un script oficial para preparar una base de pruebas.
 - La migración `029` está pendiente y fuera de secuencia, mientras `030`–`032` aparecen aplicadas en desarrollo.
 - `029` no puede ejecutarse directamente porque migraciones posteriores ya agregaron parte de sus cambios y todavía faltan `tipo_servicio` y `accesorios_entregados`.
+
+El detalle y la evidencia se mantienen en [Estado de migraciones](../database/ESTADO_MIGRACIONES.md) y [Base de datos](../arquitectura/BASE_DE_DATOS.md).
 
 Por lo tanto, aplicar mecánicamente `001`–`028` y `030`–`032` en PostgreSQL 16 produciría un esquema incompleto para la batería actual y no reproduciría el estado de datos que las pruebas esperan. No se debe presentar esa ejecución como equivalente al entorno local ni omitir silenciosamente las pruebas de integración.
 

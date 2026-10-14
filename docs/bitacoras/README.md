@@ -1,15 +1,20 @@
 # Bitácoras ITAM
 
-**Actualizado:** 23 de septiembre de 2026
+**Actualizado:** 13 de octubre de 2026
 **Tipo:** operativo e histórico
 
 ## Fuentes
 
-- [Agosto de 2026](BITACORA_AGOSTO_2026.md)
-- [Septiembre de 2026](BITACORA_SEPTIEMBRE_2026.md)
-- [Bitácora detallada del 24 de agosto al 22 de septiembre](bitacora-2026-08-24-a-2026-09-22.md)
+- [Evolución de la interfaz](evolucion-interfaz.md)
+- [Agosto de 2026](bitacora-agosto-2026.md)
+- [Septiembre de 2026](bitacora-septiembre-2026.md)
+- [Bitácora detallada del 24 de agosto al 22 de septiembre](bitacora-detallada-2026-08-24-a-2026-09-22.md)
 - [Avance documental del 23 de septiembre](avance-2026-09-23.md)
 - [Documento DOCX del período](bitacora-itam-2026-08-24-a-2026-09-22.docx)
+
+## Registros técnicos
+
+- [Deuda técnica y bloqueadores](DEUDA_TECNICA.md)
 
 ## Criterio de registro
 

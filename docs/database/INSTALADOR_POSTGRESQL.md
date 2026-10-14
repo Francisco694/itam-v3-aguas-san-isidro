@@ -1,5 +1,8 @@
 # Instalador PostgreSQL de ITAM
 
+**Actualizado:** 13 de octubre de 2026
+**Tipo:** guía técnica y operativa
+
 ## Alcance
 
 `database/install.sh` prepara una base PostgreSQL 16 completamente vacía para ITAM. El instalador ejecuta 33 archivos en un orden explícito, detiene la ejecución ante cualquier error y valida el resultado final.

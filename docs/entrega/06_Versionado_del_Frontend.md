@@ -1,5 +1,9 @@
 # Versionado del Frontend
 
+**Actualizado:** 13 de octubre de 2026
+**Tipo:** referencia técnica
+**Commit de referencia:** `d8cd34c63293f293b0b5bf57f3219dbb8bfe7e0c`
+
 ## Identidad técnica
 
 | Dato | Valor | Estado |

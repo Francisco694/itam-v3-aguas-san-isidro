@@ -1,5 +1,9 @@
 # Esquematico del Sistema
 
+**Actualizado:** 13 de octubre de 2026
+**Tipo:** técnico y funcional
+**Commit de referencia:** `d8cd34c63293f293b0b5bf57f3219dbb8bfe7e0c`
+
 ## Vista de componentes
 
 ```mermaid

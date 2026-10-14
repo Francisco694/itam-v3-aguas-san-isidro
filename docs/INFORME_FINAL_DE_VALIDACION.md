@@ -1,8 +1,9 @@
 # Informe final de validación documental
 
-Fecha de revisión: 2026-10-13
-Proyecto: Aguas San Isidro ITAM  
-Repositorio revisado: `E:\Aguas San Isidro V2\ITAM`
+**Actualizado:** 13 de octubre de 2026
+**Tipo:** informe de validación
+**Proyecto:** Aguas San Isidro ITAM
+**Repositorio:** `E:\Aguas San Isidro V2\ITAM`
 
 ## Resultado ejecutivo
 
@@ -18,9 +19,9 @@ El CD del commit `d8cd34c` terminó correctamente, `/api/v1/health` y `/api/v1/h
 | --- | --- | --- |
 | `salida_documentacion/01_Manual_Usuario_Aguas_San_Isidro.docx` | Snapshot anterior | Word reportó 7 páginas, 3 tablas y 1 imagen; no se regeneró en esta actualización |
 | `docs/entrega/01_manual_de_usuario.md` | Confirmado | Fuente canónica de contenido; el DOCX aún requiere regeneración |
-| `docs/entrega/02_Manual_de_Desarrollo_Aguas_San_Isidro.md` | Confirmado | Stack, estructura, pruebas y PDF cotejados |
-| `docs/entrega/03_Informacion_del_Servidor_e_Infraestructura.md` | Confirmado parcialmente | CD, health productivo y límite Nginx comprobados; configuración completa del servidor pendiente |
-| `docs/entrega/04_Procedimientos_Operativos_y_Tecnicos.md` | Confirmado parcialmente | Procedimientos basados en código; rollback/restauración real pendientes |
+| `docs/entrega/02_Manual_de_Desarrollo.md` | Confirmado | Stack, estructura, pruebas y PDF cotejados |
+| `docs/entrega/03_Informacion_del_Servidor.md` | Confirmado parcialmente | CD, health productivo y límite Nginx comprobados; configuración completa del servidor pendiente |
+| `docs/entrega/04_Procedimientos_Operativos.md` | Confirmado parcialmente | Procedimientos basados en código; rollback/restauración real pendientes |
 | `docs/entrega/05_Versionado_de_Base_de_Datos.md` | Confirmado parcialmente | Migraciones 001 a 041 cotejadas; consulta SQL productiva directa pendiente |
 | `docs/entrega/06_Versionado_del_Frontend.md` | Confirmado | Rutas y build cotejados |
 | `docs/entrega/07_Esquematico_del_Sistema.md` | Confirmado | Diagramas Mermaid incluidos |

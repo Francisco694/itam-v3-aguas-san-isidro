@@ -342,6 +342,19 @@ interface SimilarAssignedDevicePrompt {
           <div class="column-title"><span>03</span><div><small>GESTIÓN</small><h3>Acciones del equipo</h3></div></div>
           @if (!action()) {
             <div class="operation-list">
+              @if (auth.user()?.rol !== 'SOLO_LECTURA') {
+              <button type="button" [disabled]="terminal() || technicalServiceActive() || device.tipoCustodia!=='NONE'" (click)="open('assign-person')"><svg lucideUserCheck></svg><span>Entregar equipo<small>A un colaborador habilitado</small></span></button>
+              @if((device.colaborador || device.departamento) && !terminal() && !technicalServiceActive()){<button type="button" class="operation-return" (click)="open('return')"><svg lucideRotateCcw></svg><span>Recibir en bodega<small>Registra recepción y revisión</small></span></button>}
+              @if(!technicalServiceActive()){<button type="button" [disabled]="terminal()" (click)="openServiceOrder()"><svg lucideWrench></svg><span>Enviar a Servicio Técnico<small>Crear orden y bloquear movimientos</small></span></button>}
+              <button type="button" [disabled]="!stateExists('EXTRAVIADO')" (click)="openState('EXTRAVIADO')"><svg lucideShieldAlert></svg><span>Reportar equipo perdido<small>Requiere confirmación</small></span></button>
+              <button type="button" (click)="open('assign-department')" [disabled]="terminal() || technicalServiceActive() || device.tipoCustodia!=='NONE'"><svg lucideBuilding></svg><span>Entregar a departamento<small>Responsabilidad institucional</small></span></button>
+              <button type="button" (click)="open('state')"><svg lucidePackageCheck></svg><span>Cambiar situación del equipo<small>Ver opciones disponibles</small></span></button>
+              @if(canVerifyManually(device)){
+                <button type="button" (click)="verifyManually()"><svg lucidePackageCheck></svg><span>Verificar equipo<small>Acción opcional de auditoría física</small></span></button>
+              }
+              @if(canCarrySim(device) && !terminal()){<button type="button" (click)="openSimAssociation()"><svg lucidePlus></svg><span>{{ lineActionCopy(device).title }}<small>{{ lineActionCopy(device).description }}</small></span></button>}
+              @if(device.estado.codigo==='EXTRAVIADO' || device.estado.codigo==='DADO_BAJA'){<button type="button" (click)="open('recover')"><svg lucideRotateCcw></svg><span>Registrar equipo encontrado<small>Reactivar con trazabilidad</small></span></button>}
+              }
               @if (catalogoTecnico(); as catalogo) {
                 <div class="operation-document-group">
                   <a class="operation-document" [href]="catalogoArchivoUrl(device.codigoInventario)" target="_blank" rel="noopener"><svg lucideEye></svg><span>Ver catálogo técnico<small>{{ catalogo.nombreOriginal }}</small></span></a>
@@ -357,17 +370,6 @@ interface SimilarAssignedDevicePrompt {
               }
               <input id="technical-catalog-upload" class="technical-catalog__input" type="file" accept="application/pdf,.pdf" [disabled]="catalogoSubiendo()" (change)="catalogoSeleccionado($event)" />
               @if (auth.user()?.rol !== 'SOLO_LECTURA') {
-              <button type="button" [disabled]="terminal() || technicalServiceActive() || device.tipoCustodia!=='NONE'" (click)="open('assign-person')"><svg lucideUserCheck></svg><span>Entregar equipo<small>A un colaborador habilitado</small></span></button>
-              @if((device.colaborador || device.departamento) && !terminal() && !technicalServiceActive()){<button type="button" class="operation-return" (click)="open('return')"><svg lucideRotateCcw></svg><span>Recibir en bodega<small>Registra recepción y revisión</small></span></button>}
-              @if(!technicalServiceActive()){<button type="button" [disabled]="terminal()" (click)="openServiceOrder()"><svg lucideWrench></svg><span>Enviar a Servicio Técnico<small>Crear orden y bloquear movimientos</small></span></button>}
-              <button type="button" [disabled]="!stateExists('EXTRAVIADO')" (click)="openState('EXTRAVIADO')"><svg lucideShieldAlert></svg><span>Reportar equipo perdido<small>Requiere confirmación</small></span></button>
-              <button type="button" (click)="open('assign-department')" [disabled]="terminal() || technicalServiceActive() || device.tipoCustodia!=='NONE'"><svg lucideBuilding></svg><span>Entregar a departamento<small>Responsabilidad institucional</small></span></button>
-              <button type="button" (click)="open('state')"><svg lucidePackageCheck></svg><span>Cambiar situación del equipo<small>Ver opciones disponibles</small></span></button>
-              @if(canVerifyManually(device)){
-                <button type="button" (click)="verifyManually()"><svg lucidePackageCheck></svg><span>Verificar equipo<small>Acción opcional de auditoría física</small></span></button>
-              }
-              @if(canCarrySim(device) && !terminal()){<button type="button" (click)="openSimAssociation()"><svg lucidePlus></svg><span>{{ lineActionCopy(device).title }}<small>{{ lineActionCopy(device).description }}</small></span></button>}
-              @if(device.estado.codigo==='EXTRAVIADO' || device.estado.codigo==='DADO_BAJA'){<button type="button" (click)="open('recover')"><svg lucideRotateCcw></svg><span>Registrar equipo encontrado<small>Reactivar con trazabilidad</small></span></button>}
               <button type="button" class="operation-danger" [disabled]="!stateExists('DADO_BAJA')" (click)="open('retire')"><svg lucideCircleAlert></svg><span>Da de Baja<small>Motivo obligatorio</small></span></button>
               }
             </div>
