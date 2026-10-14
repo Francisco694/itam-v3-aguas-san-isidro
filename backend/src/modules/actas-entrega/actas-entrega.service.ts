@@ -1,4 +1,6 @@
 import PDFDocument from "pdfkit";
+import {existsSync} from "node:fs";
+import {resolve} from "node:path";
 import {pool} from "../../config/database";
 import {ConflictError,NotFoundError,ValidationError} from "../../shared/errors";
 import {toIsoDateTime} from "../../shared/dates";
@@ -72,15 +74,53 @@ export const crearActaEntrega=async(input:CrearActaInput)=>{
 
 const clp=(value:number)=>new Intl.NumberFormat("es-CL",{style:"currency",currency:"CLP",maximumFractionDigits:0}).format(value);
 export const generarPdfActa=async(id:number):Promise<{buffer:Buffer;filename:string}>=>{
- const acta=await obtenerActaEntrega(id);const doc=new PDFDocument({size:"A4",margin:48,info:{Title:`Acta ${acta.numeroActa}`}});const chunks:Buffer[]=[];
+ const acta=await obtenerActaEntrega(id);
+ const doc=new PDFDocument({size:"LETTER",margin:48,info:{Title:`Acta ${acta.numeroActa}`}});const chunks:Buffer[]=[];
  doc.on("data",chunk=>chunks.push(Buffer.from(chunk)));const done=new Promise<Buffer>((resolve,reject)=>{doc.on("end",()=>resolve(Buffer.concat(chunks)));doc.on("error",reject)});
- doc.fontSize(16).fillColor("#03045E").text("AGUAS SAN ISIDRO",{align:"center"});doc.fontSize(10).text("Departamento de Tecnología",{align:"center"});
- doc.moveDown().fontSize(15).text("ACTA DE ENTREGA DE EQUIPOS",{align:"center"});doc.fontSize(10).fillColor("#111827").text(`N° ${acta.numeroActa}`,{align:"center"});
- doc.moveDown().text(`Fecha: ${new Date(acta.fecha).toLocaleDateString("es-CL")}    Localidad: ${acta.localidad??"—"}`);
- const person=acta.colaborador??acta.recepcionante;doc.moveDown().fontSize(12).fillColor("#03045E").text("FUNCIONARIO RESPONSABLE");doc.fontSize(10).fillColor("#111827").text(`Nombre: ${person?.nombre??"—"}\nRUT: ${person?.rut??"—"}\nCargo: ${person?.cargo??"—"}\nDepartamento: ${acta.departamento?.nombre??"Sin departamento registrado"}`);
- doc.moveDown().fontSize(12).fillColor("#03045E").text("EQUIPOS ENTREGADOS");doc.fontSize(9).fillColor("#111827");for(const device of acta.dispositivos){doc.moveDown(.4).text(`${device.codigoInventario} · ${device.tipo} · ${device.marca??"—"} ${device.modelo??""}\nSerie: ${device.numeroSerie??"—"} · IMEI: ${device.imei??"—"} · ${clp(device.valorComercial)}`)}
- doc.moveDown().fontSize(12).text(`VALOR COMERCIAL TOTAL: ${clp(acta.valorTotal)}`);
- doc.moveDown().fontSize(11).fillColor("#03045E").text("INFORMACIÓN IMPORTANTE / DECLARACIÓN DEL FUNCIONARIO");doc.fontSize(8.7).fillColor("#111827").text(acta.declaracion??"—",{align:"justify",lineGap:1.5});
- if(doc.y>doc.page.height-125){doc.addPage();}
- doc.moveDown(3).text("____________________________                  ____________________________",{align:"center"});doc.text("Firma funcionario                                      Firma responsable TI",{align:"center"});doc.end();return{buffer:await done,filename:`${acta.numeroActa}.pdf`};
+ const left=doc.page.margins.left;const width=doc.page.width-doc.page.margins.left-doc.page.margins.right;const right=left+width;const bottom=doc.page.height-doc.page.margins.bottom;
+ const teal="#0B7180";const dark="#111111";const labelSize=7.1;const columnGap=28;const columnWidth=(width-columnGap)/2;const rightColumn=left+columnWidth+columnGap;
+ const value=(input:unknown,fallback="—")=>{const text=String(input??fallback).replace(/[ \t]+/g," ").trim();return text||fallback};
+ const date=new Date(acta.fecha).toISOString().slice(0,10);const person=acta.colaborador??acta.recepcionante;const logoPath=resolve(__dirname,"../../assets/icono_doc.png");
+ const field=(x:number,y:number,label:string,text:string,labelWidth=108)=>{doc.font("Helvetica-Bold").fontSize(labelSize).fillColor(dark).text(label,x,y,{width:labelWidth});doc.font("Helvetica").fontSize(labelSize).text(text,x+labelWidth,y,{width:columnWidth-labelWidth});};
+ const section=(title:string,y:number)=>{doc.font("Helvetica-Bold").fontSize(7.8).fillColor(dark).text(title.toUpperCase(),left,y,{width});return y+13};
+ const rule=(y:number)=>{doc.save().strokeColor(dark).lineWidth(.7).moveTo(left,y).lineTo(right,y).stroke().restore()};
+
+ const headerY=doc.page.margins.top;
+ if(existsSync(logoPath))doc.image(logoPath,left,headerY,{fit:[34,34]});
+ doc.font("Helvetica-Bold").fontSize(11).fillColor(teal).text("Aguas San Isidro",left+43,headerY+8,{width:165});
+ doc.font("Helvetica-Bold").fontSize(9.5).fillColor(dark).text(`${value(acta.localidad,"TEMUCO").toUpperCase()} - OFICINA CENTRAL`,left+210,headerY+2,{width:width-210,align:"right"});
+ doc.font("Helvetica").fontSize(8.8).text(`${date}`,left+210,headerY+17,{width:width-210,align:"right"});
+ doc.font("Helvetica-Bold").fontSize(9).text(`ACTA ENTREGA DE EQUIPOS N° ${acta.numeroActa}`,left+210,headerY+31,{width:width-210,align:"right"});
+ rule(headerY+49);let y=headerY+66;
+
+ y=section("Información importante : Acta de entrega de equipos",y);
+ doc.font("Helvetica").fontSize(7.2).fillColor(dark).text("Mediante el presente documento se realiza entrega formal de HERRAMIENTA DE TRABAJO - EQUIPOS",left,y,{width});
+ doc.text("COMPUTACIONALES / CELULARES, asignado para el cumplimiento de las tareas asignadas por el funcionario responsable.",left,y+9,{width});y+=25;
+
+ y=section("Funcionario responsable",y);
+ field(left,y,"Nombre funcionario:",value(person?.nombre));field(rightColumn,y,"Rut funcionario:",value(person?.rut),108);y+=14;
+ field(left,y,"Localidad:",value(acta.localidad));field(rightColumn,y,"Cargo funcionario:",value(person?.cargo),108);y+=18;
+
+ y=section("Equipos asignados",y);
+ const devices=acta.dispositivos.length?acta.dispositivos:[null];
+ for(const device of devices){
+   field(left,y,"Teléfono/Número:",value(device?.numeroSerie??device?.codigoInventario));field(rightColumn,y,"IMEI :",value(device?.imei),108);y+=14;
+   field(left,y,"Tipo equipos:",value(device?.tipo));field(rightColumn,y,"Descripción equipos:",value([device?.marca,device?.modelo].filter(Boolean).join(" ")),108);y+=14;
+   field(left,y,"Accesorios:","—");field(rightColumn,y,"Compañía:",value(device?.marca),108);y+=16;
+ }
+
+ y=section("Valor comercial",y);
+ field(left,y,"Valor comercial:",clp(acta.valorTotal));field(rightColumn,y,"Documento correspondiente:","—",132);y+=23;
+
+ const signatureTop=bottom-78; y=section("El trabajador declara saber que:",y);
+ const declaration=(acta.declaracion??"—").replace(/[ \t]+\n/g,"\n").replace(/\n{2,}/g,"\n");
+ const available=Math.max(32,signatureTop-y-6);let declarationSize=7.2;let declarationHeight=0;
+ for(const candidate of [7.2,6.8,6.4,6]){declarationSize=candidate;doc.font("Helvetica").fontSize(candidate);declarationHeight=doc.heightOfString(declaration,{width,lineGap:.25});if(declarationHeight<=available)break;}
+ doc.font("Helvetica").fontSize(declarationSize).fillColor(dark).text(declaration,left,y,{width,lineGap:.25});
+
+ const lineY=signatureTop+23;const signatureWidth=155;doc.save().strokeColor(dark).lineWidth(.7).moveTo(left+12,lineY).lineTo(left+12+signatureWidth,lineY).moveTo(right-12-signatureWidth,lineY).lineTo(right-12,lineY).stroke().restore();
+ doc.font("Helvetica").fontSize(7.2).text(value(person?.nombre),left+12,lineY-18,{width:signatureWidth,align:"center"});doc.font("Helvetica").fontSize(7.2).text(value(person?.rut),left+12,lineY-9,{width:signatureWidth,align:"center"});doc.text("Firma trabajador",left+12,lineY+5,{width:signatureWidth,align:"center"});
+ doc.text(value(acta.responsableTi,"Responsable TI"),right-12-signatureWidth,lineY-18,{width:signatureWidth,align:"center"});doc.text("Firma encargada entrega",right-12-signatureWidth,lineY+5,{width:signatureWidth,align:"center"});
+ doc.font("Helvetica-Bold").fontSize(6.8).text("EMPLEADOR",left+signatureWidth+12,lineY-10,{width:width-2*signatureWidth-24,align:"center"});doc.font("Helvetica").fontSize(6.4).text("EMPRESA DE SERVICIOS SANITARIOS\nSAN ISIDRO S.A.",left+signatureWidth+12,lineY+2,{width:width-2*signatureWidth-24,align:"center"});
+ doc.end();return{buffer:await done,filename:`${acta.numeroActa}.pdf`};
 };

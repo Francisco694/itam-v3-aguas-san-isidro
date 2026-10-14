@@ -356,8 +356,27 @@ export class ActaPreview {
   protected personCargo() {
     return this.acta().colaborador?.cargo || this.acta().recepcionante?.cargo || '—';
   }
-  protected print() {
-    window.print();
+  protected async print() {
+    const popup = window.open('', '_blank');
+    if (!popup) return;
+    let printed = false;
+    const printPdf = () => {
+      if (printed || popup.closed) return;
+      printed = true;
+      popup.print();
+    };
+    try {
+      const response = await fetch(this.pdfUrl(), {credentials: 'include'});
+      if (!response.ok) throw new Error(`No se pudo cargar el PDF (${response.status}).`);
+      const pdfUrl = URL.createObjectURL(await response.blob());
+      popup.addEventListener('load', () => window.setTimeout(printPdf, 300), {once: true});
+      popup.location.href = pdfUrl;
+      window.setTimeout(printPdf, 1500);
+      window.setTimeout(() => URL.revokeObjectURL(pdfUrl), 60_000);
+    } catch (error) {
+      popup.close();
+      console.error('No se pudo abrir el PDF para imprimir.', error);
+    }
   }
   protected backdrop(e: MouseEvent) {
     if (e.target === e.currentTarget) this.close.emit();
