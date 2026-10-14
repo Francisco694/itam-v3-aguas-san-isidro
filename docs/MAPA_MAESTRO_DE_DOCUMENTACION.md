@@ -1,6 +1,9 @@
 # Mapa Maestro de Documentacion
 
-Fecha de auditoría: 2026-10-05. Fuente de código: commit `754d036f00aa24b180c3812c460a2b18bd82b1a5`.
+**Actualizado:** 5 de octubre de 2026
+**Tipo:** matriz funcional
+**Commit auditado:** `754d036f00aa24b180c3812c460a2b18bd82b1a5`
+**Commit vigente:** `d8cd34c63293f293b0b5bf57f3219dbb8bfe7e0c`
 
 | Funcionalidad | Frontend | Backend | Endpoint principal | Tablas involucradas | Migraciones | Documento | Estado | Pendientes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -27,3 +30,9 @@ Fecha de auditoría: 2026-10-05. Fuente de código: commit `754d036f00aa24b180c3
 ## Regla de lectura
 
 `Confirmado` significa que existe evidencia directa en código, SQL o workflow. `Confirmado parcialmente` significa que la implementación está documentada pero falta validar el entorno real. `Pendiente de validar` se conserva cuando la evidencia productiva no está disponible. Los documentos 01–08 son la entrega resumida; `docs/api`, `docs/arquitectura`, `docs/database` y `docs/diagramas` son documentación técnica de respaldo.
+
+## Índices documentales
+
+- [UX funcional](ux/README.md): documentación vigente de la interfaz.
+- [Hardware](hardware/README.md): especificaciones de hardware físico.
+- [Bitácora de evolución de interfaz](bitacoras/evolucion-interfaz.md): retrospectiva histórica.

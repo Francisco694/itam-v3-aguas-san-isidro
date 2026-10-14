@@ -1,6 +1,6 @@
 # Etiquetas físicas
 
-**Actualizado:** 23 de septiembre de 2026
+**Actualizado:** 24 de septiembre de 2026
 **Tipo:** operativo y visual
 
 ## Hardware y medidas

@@ -1,6 +1,6 @@
 # Actas de entrega
 
-**Actualizado:** 23 de septiembre de 2026
+**Actualizado:** 24 de septiembre de 2026
 **Tipo:** funcional y visual
 
 ## Flujo
@@ -19,3 +19,10 @@ La pantalla muestra el destinatario, los equipos y la declaración antes de conf
 ## Estado actual
 
 La API expone listado, detalle, creación y PDF. La trazabilidad del acta se conserva junto al detalle de activos y no se reemplaza por una descarga de archivo.
+
+---
+
+**Referencias cruzadas:**
+- [Reglas de negocio](../arquitectura/REGLAS_DE_NEGOCIO.md)
+- [Arquitectura general](../arquitectura/ARQUITECTURA_GENERAL.md)
+- [Documentación de API](../api/README.md)

@@ -1,6 +1,6 @@
 # Offboarding
 
-**Actualizado:** 23 de septiembre de 2026
+**Actualizado:** 24 de septiembre de 2026
 **Tipo:** funcional y operativo
 
 ## Flujo visual
@@ -19,3 +19,10 @@ El proceso separa la salida de la persona del cierre de cada activo. Un resultad
 ## Estado actual
 
 La API y la vista implementan búsqueda, apertura, detalle, listado de procesos abiertos y cierre. Las reglas exactas de cada resultado están documentadas en [OFFBOARDING.md de API](../api/OFFBOARDING.md) y en [REGLAS_DE_NEGOCIO.md](../arquitectura/REGLAS_DE_NEGOCIO.md).
+
+---
+
+**Referencias cruzadas:**
+- [Reglas de negocio](../arquitectura/REGLAS_DE_NEGOCIO.md)
+- [Arquitectura general](../arquitectura/ARQUITECTURA_GENERAL.md)
+- [Documentación de API](../api/README.md)

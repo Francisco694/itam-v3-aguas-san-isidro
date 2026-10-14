@@ -1,7 +1,8 @@
 # Checklist de producción — ITAM
 
-**Actualizado:** 23 de septiembre de 2026
-**Tipo:** operativo
+**Actualizado:** 14 de octubre de 2026
+**Tipo:** checklist operativo
+**Commit vigente:** `d8cd34c63293f293b0b5bf57f3219dbb8bfe7e0c`
 **Regla:** completar cada casilla con evidencia antes de declarar un despliegue listo.
 
 ## Preparación y respaldo

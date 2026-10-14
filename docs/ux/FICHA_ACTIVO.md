@@ -1,6 +1,6 @@
 # Ficha de activo
 
-**Actualizado:** 23 de septiembre de 2026
+**Actualizado:** 24 de septiembre de 2026
 **Tipo:** funcional y visual
 
 ## Información mostrada
@@ -25,3 +25,9 @@ La ficha concentra editar, entregar a colaborador, entregar a departamento, devo
 ## Razón de diseño
 
 La ficha es el punto de auditoría de un activo: una persona debe poder identificarlo físicamente, saber quién responde por él, entender qué ocurrió antes y distinguir una acción disponible de una operación terminal.
+
+---
+
+**Referencias cruzadas:**
+- [Reglas de negocio](../arquitectura/REGLAS_DE_NEGOCIO.md)
+- [Arquitectura general](../arquitectura/ARQUITECTURA_GENERAL.md)

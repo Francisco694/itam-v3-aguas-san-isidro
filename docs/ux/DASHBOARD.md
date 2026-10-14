@@ -1,6 +1,6 @@
 # Prototipo funcional del Dashboard
 
-**Actualizado:** 23 de septiembre de 2026
+**Actualizado:** 24 de septiembre de 2026
 **Tipo:** funcional y visual
 
 ## Estructura actual
@@ -27,3 +27,10 @@ El Dashboard está implementado en `frontend/src/app/features/dashboard` y consu
 ## Validación pendiente
 
 Durante la última validación el frontend generó bundles, pero el build fue rechazado por el límite de estilos de `dashboard.scss`. La revisión visual de datos reales y el ajuste/aprobación del presupuesto siguen siendo tareas de producción.
+
+---
+
+**Referencias cruzadas:**
+- [Reglas de negocio](../arquitectura/REGLAS_DE_NEGOCIO.md)
+- [Arquitectura general](../arquitectura/ARQUITECTURA_GENERAL.md)
+- [Documentación de API](../api/README.md)

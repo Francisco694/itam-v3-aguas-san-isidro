@@ -28,4 +28,4 @@ La etiqueta representa al activo, no reemplaza el registro del inventario. Debe 
 - número telefónico para smartphones cuando exista;
 - QR asociado al activo.
 
-Los detalles de hardware y medidas de impresión se encuentran en [ETIQUETAS.md](../prototipo/ETIQUETAS.md). La prueba de impresión real debe registrarse en el checklist de producción.
+Los detalles de hardware y medidas de impresión se encuentran en [ETIQUETAS.md](../hardware/ETIQUETAS.md). La prueba de impresión real debe registrarse en el checklist de producción.
