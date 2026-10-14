@@ -68,7 +68,7 @@ jobs:
           mkdir -p .deploy
           tar -czf ".deploy/backend-${release_id}.tar.gz" \
             -C backend dist package.json package-lock.json \
-            -C ../database/migrations 036_correlative_technical_work_order_numbers.sql 037_device_replacements.sql 038_sim_line_history.sql 039_seed_current_sim_line_history.sql 040_expand_device_types.sql 041_device_technical_catalog.sql
+            -C ../database/migrations 036_correlative_technical_work_order_numbers.sql 037_device_replacements.sql 038_sim_line_history.sql 039_seed_current_sim_line_history.sql 040_expand_device_types.sql 041_device_technical_catalog.sql 042_reconcile_service_and_session_schema.sql
           tar -czf ".deploy/frontend-${release_id}.tar.gz" \
             -C frontend/dist/frontend/browser .
 
@@ -195,6 +195,7 @@ jobs:
           test -f "$release_dir/backend/039_seed_current_sim_line_history.sql"
           test -f "$release_dir/backend/040_expand_device_types.sql"
           test -f "$release_dir/backend/041_device_technical_catalog.sql"
+          test -f "$release_dir/backend/042_reconcile_service_and_session_schema.sql"
           test -f "$release_dir/frontend-dist/index.html"
           cp "$previous_backend/.env" "$release_dir/backend/.env"
 
@@ -214,7 +215,8 @@ jobs:
             --file="$release_dir/backend/038_sim_line_history.sql" \
             --file="$release_dir/backend/039_seed_current_sim_line_history.sql" \
             --file="$release_dir/backend/040_expand_device_types.sql" \
-            --file="$release_dir/backend/041_device_technical_catalog.sql"
+            --file="$release_dir/backend/041_device_technical_catalog.sql" \
+            --file="$release_dir/backend/042_reconcile_service_and_session_schema.sql"
 
           sudo mkdir -p /var/backups/itam
           sudo cp "$nginx_config" "$nginx_backup"
