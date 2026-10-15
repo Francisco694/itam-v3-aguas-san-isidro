@@ -424,7 +424,8 @@ interface SimilarAssignedDevicePrompt {
                       }
                       </div>
                       <section class="replacement-old-sim-context" role="group" aria-label="SIM y línea del equipo anterior"><strong>SIM Y LÍNEA DEL EQUIPO ANTERIOR</strong>@if(oldDevice.simAsociada; as previousSim){<span>SIM ITAM {{previousSim.codigoInventario}} · ICCID {{previousSim.iccidCodigoFabrica || 'Pendiente de validación'}} · Compañía {{previousSim.compania || 'Sin compañía'}}</span>} @else {<span>SIM actual: Sin SIM asociada.</span>}<span>Número actual: {{replacementCurrentPhoneText(oldDevice) || 'Sin número asociado'}}</span></section>
-                      @if(oldDevice.simAsociada; as oldSim){<div class="replacement-sim-resolution"><strong>Este dispositivo tiene una SIM asociada.</strong><span>SIM: ITAM {{oldSim.codigoInventario}} · ICCID {{oldSim.iccidCodigoFabrica || 'Pendiente de validación'}} · Número {{replacementCurrentPhoneText(oldDevice) || 'Sin número'}}</span><label><input type="radio" name="replacement-sim-action" [checked]="replacementSimAction()==='MOVER_SIM_ACTUAL'" (change)="chooseReplacementSimAction('MOVER_SIM_ACTUAL')" [disabled]="submitting() || replacementDelivered()===false" /> Mover SIM actual al dispositivo nuevo</label><label><input type="radio" name="replacement-sim-action" [checked]="replacementSimAction()==='USAR_SIM_EXISTENTE'" (change)="chooseReplacementSimAction('USAR_SIM_EXISTENTE')" [disabled]="submitting()" /> Utilizar otra SIM registrada</label><label><input type="radio" name="replacement-sim-action" [checked]="replacementSimAction()==='SIN_SIM'" (change)="chooseReplacementSimAction('SIN_SIM')" [disabled]="submitting()" /> Entregar dispositivo nuevo sin SIM</label><label><input type="radio" name="replacement-sim-action" [checked]="replacementSimAction()===null" (change)="chooseReplacementSimAction(null)" [disabled]="submitting()" /> Cancelar resolución SIM</label></div>}
+                      @if(oldDevice.simAsociada; as oldSim){<div class="replacement-sim-resolution"><strong>Este dispositivo tiene una SIM asociada.</strong><span>SIM: ITAM {{oldSim.codigoInventario}} · ICCID {{oldSim.iccidCodigoFabrica || 'Pendiente de validación'}} · Número {{replacementCurrentPhoneText(oldDevice) || 'Sin número'}}</span><label><input type="radio" name="replacement-sim-action" [checked]="replacementSimAction()==='MOVER_SIM_ACTUAL'" (change)="chooseReplacementSimAction('MOVER_SIM_ACTUAL')" [disabled]="submitting() || replacementDelivered()===false" /> Mover SIM actual al dispositivo nuevo</label><label><input type="radio" name="replacement-sim-action" [checked]="replacementSimAction()==='USAR_SIM_EXISTENTE'" (change)="chooseReplacementSimAction('USAR_SIM_EXISTENTE')" [disabled]="submitting()" /> Utilizar otra SIM registrada</label><label><input type="radio" name="replacement-sim-action" [checked]="replacementSimAction()==='SIN_SIM'" (change)="chooseReplacementSimAction('SIN_SIM')" [disabled]="submitting()" /> Entregar dispositivo nuevo sin SIM</label></div>}
+                      @if(oldDevice.simAsociada && !replacementSimAction()){<div class="notice notice--warning replacement-sim-required"><strong>Debes resolver la SIM antes de continuar.</strong><span>@if(replacementDelivered()===false){Como el equipo anterior no fue entregado, puedes utilizar otra SIM registrada o entregar el equipo nuevo sin SIM.}@else {Selecciona si moverás la SIM actual, utilizarás otra SIM o entregarás el equipo nuevo sin SIM.}</span></div>}
                       <section class="replacement-selected-sim" role="group" aria-label="SIM seleccionada">@if(replacementSimAction()==='USAR_SIM_EXISTENTE'){<select id="replacement-sim" [value]="replacementSimCode()" (change)="replacementSimCode.set($any($event.target).value); replacementExistingLineChoice.set(null); replacementKeepNumber.set(null)" [disabled]="submitting()"><option value="">Seleccionar SIM disponible</option>@for(candidate of replacementSims(); track candidate.id){<option [value]="candidate.codigoInventario">ITAM {{candidate.codigoInventario}} · ICCID {{candidate.iccidCodigoFabrica || 'Pendiente'}} · {{candidate.compania || 'Sin compañía'}} · {{replacementSimPhoneText(candidate)}}</option>}</select>}@if(replacementSimAction()==='USAR_SIM_EXISTENTE' && replacementSelectedSim(); as selectedSim){<strong>UTILIZAR SIM EXISTENTE</strong><span>ITAM SIM {{selectedSim.codigoInventario}} · ICCID {{selectedSim.iccidCodigoFabrica || 'Pendiente de validación'}}</span><span>Compañía: {{selectedSim.compania || 'Sin compañía'}} · Estado: {{selectedSim.estado.nombre}}</span><span>Línea asociada: {{replacementSimPhoneText(selectedSim)}}</span><button class="btn btn--link" type="button" (click)="changeExistingReplacementSim()">Cambiar SIM</button><div class="field replacement-existing-line-field"><label>Línea telefónica</label>@for(option of replacementExistingLineOptions(oldDevice); track option.value){<label><input type="radio" name="replacement-existing-line" [checked]="replacementExistingLineChoice()===option.value" (click)="chooseReplacementExistingLine(replacementExistingLineChoice()===option.value ? null : option.value)" [disabled]="submitting()" /> {{option.label}}</label>}@if(replacementExistingLineChoice()==='NUMERO_NUEVO'){<div class="field"><label for="replacement-existing-new-phone">Número telefónico nuevo</label><input id="replacement-existing-new-phone" type="tel" [value]="replacementNewPhone()" (input)="replacementNewPhone.set($any($event.target).value)" [disabled]="submitting()" placeholder="+56 9 1234 5678" /></div>} @if(replacementExistingLineWarning(oldDevice)){<small class="delivery-help">{{replacementExistingLineWarning(oldDevice)}}</small>}</div>}
                             </section>
                       <strong>{{ replacementDelivered()===false ? 'Continuar con devolución pendiente' : 'Reemplazar equipo' }}</strong>
@@ -966,6 +967,7 @@ export class DispositivoDetail implements OnInit {
       return sim ? `SIM ITAM ${sim.codigoInventario} · ICCID ${sim.iccidCodigoFabrica || 'pendiente'} · ${sim.compania || 'sin compañía'}` : 'SIM existente pendiente de selección';
     }
     if (action === 'MOVER_SIM_ACTUAL' && device.simAsociada) return `SIM ITAM ${device.simAsociada.codigoInventario} · ICCID ${device.simAsociada.iccidCodigoFabrica || 'pendiente'} · ${device.simAsociada.compania || 'sin compañía'}`;
+    if (device.simAsociada && !action) return 'Pendiente de resolver';
     return 'Sin SIM';
   }
   protected replacementSummaryLine(device: Dispositivo): string {
@@ -983,6 +985,7 @@ export class DispositivoDetail implements OnInit {
       if (choice === 'SIN_LINEA') return 'Sin línea';
     }
     if (action === 'MOVER_SIM_ACTUAL') return this.replacementCurrentPhoneText(device) || 'Sin número asociado';
+    if (device.simAsociada && !action) return 'Pendiente de resolver';
     return 'Sin línea';
   }
   protected chooseReplacementNewLine(line: 'CONSERVAR_NUMERO' | 'NUMERO_NUEVO' | 'SIN_LINEA' | null): void {
@@ -998,6 +1001,10 @@ export class DispositivoDetail implements OnInit {
     if (this.submitting()) return;
     const oldDevice = this.replacementDevice();
     if (!oldDevice) return;
+    if (this.item()?.estado.codigo !== 'DISPONIBLE') {
+      this.actionError.set('El dispositivo nuevo debe estar disponible para iniciar el reemplazo.');
+      return;
+    }
     if (this.replacementDelivered() === null) {
       this.replacementDeliveryError.set('Debes indicar si el equipo anterior fue entregado físicamente.');
       this.actionError.set('');
@@ -1015,6 +1022,10 @@ export class DispositivoDetail implements OnInit {
       const simAction = this.replacementSimAction();
       if (!simAction) {
         this.actionError.set('Indica qué deseas hacer con la SIM asociada.');
+        return;
+      }
+      if (simAction !== 'SIN_SIM' && (!this.item() || !canDeviceCarrySim(this.item()!))) {
+        this.actionError.set('El dispositivo nuevo no admite una SIM. Selecciona “Entregar dispositivo nuevo sin SIM”.');
         return;
       }
       if (simAction === 'MOVER_SIM_ACTUAL' && this.replacementDelivered() === false) {

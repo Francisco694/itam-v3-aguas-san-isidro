@@ -812,6 +812,27 @@ test("validaciones: anterior incorrecto y nuevo ocupado no persisten reemplazos"
   });
 });
 
+test("validaciones: el dispositivo nuevo debe estar disponible", async () => {
+  await withIsolatedDatabase(async () => {
+    const fixture = await createFixture();
+    await dbQuery(
+      "UPDATE itam.dispositivos SET estado_id = (SELECT id FROM itam.estados WHERE tipo_entidad = 'DISPOSITIVO' AND codigo = 'RETENIDO_REVISION' LIMIT 1) WHERE id = $1",
+      [fixture.newId]
+    );
+
+    await assert.rejects(asTestUser(fixture.actorId, () => crearReemplazoDispositivo({
+      colaboradorId: Number(fixture.collaboratorId),
+      dispositivoAnteriorCodigo: fixture.oldCode,
+      dispositivoNuevoCodigo: fixture.newCode,
+      entregaAnterior: false,
+      accionSim: "SIN_SIM",
+      responsable: "Prueba reemplazos"
+    })), /debe estar DISPONIBLE/);
+    assert.equal(await replacementCount(fixture), 0);
+    assert.equal((await deviceState(fixture.newCode)).state, "RETENIDO_REVISION");
+  });
+});
+
 test("rollback: un reemplazo inmediato inválido no asigna el nuevo ni crea auditoría", async () => {
   await withIsolatedDatabase(async () => {
     const fixture = await createFixture();

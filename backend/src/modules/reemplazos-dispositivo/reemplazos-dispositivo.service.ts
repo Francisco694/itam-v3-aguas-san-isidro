@@ -26,6 +26,7 @@ import {
 } from "../dispositivos/dispositivos.repository";
 import type { DispositivoRow, MotivoBaja } from "../dispositivos/dispositivos.types";
 import { assertDispositivoSinSimParaBaja } from "../dispositivos/dispositivo-baja-rules";
+import { tipoDispositivoPermiteSim } from "../tipos-dispositivo/tipos-dispositivo.types";
 import {
   actualizarVinculosLinea,
   crearLineaMovil,
@@ -98,6 +99,27 @@ const assertColaboradorActivoLocal = (collaborator: { activo: boolean } | null):
 const assertCustodiaLibre = (device: DispositivoRow): void => {
   if (device.colaborador_id || device.departamento_id) {
     throw new ConflictError("El dispositivo nuevo ya tiene un custodio vigente.");
+  }
+};
+
+const assertNuevoDisponible = (device: DispositivoRow): void => {
+  if (device.estado_codigo !== "DISPONIBLE") {
+    throw new ConflictError(
+      `El dispositivo nuevo debe estar DISPONIBLE para iniciar un reemplazo. Estado actual: ${device.estado_nombre}.`
+    );
+  }
+};
+
+const assertSimCompatibleConNuevoDispositivo = (
+  device: DispositivoRow,
+  accion: AccionSimReemplazo
+): void => {
+  if (accion !== "SIN_SIM" && !tipoDispositivoPermiteSim(
+    device.tipo_dispositivo_nombre,
+    device.tipo_dispositivo_configuracion_formulario,
+    device.atributos_especificos
+  )) {
+    throw new ConflictError("El dispositivo nuevo no admite una SIM y no puede recibir esta resolución.");
   }
 };
 
@@ -551,6 +573,7 @@ const resolverSimReemplazo = async (
   const accion: AccionSimReemplazo = input.accionSim ?? (oldSim && input.entregaAnterior
     ? (() => { throw new ConflictError("Debe resolver la SIM asociada al dispositivo anterior antes de continuar."); })()
     : "SIN_SIM");
+  assertSimCompatibleConNuevoDispositivo(nuevo, accion);
   if (accion === "MOVER_SIM_ACTUAL" && !oldSim) throw new ValidationError("No existe una SIM actual para mover.");
   if (accion === "MOVER_SIM_ACTUAL" && !input.entregaAnterior) {
     throw new ConflictError("No se puede mover la SIM mientras el dispositivo anterior siga bajo custodia.");
@@ -850,6 +873,7 @@ export const crearReemplazoDispositivo = async (input: CrearReemplazoInput): Pro
     if (!anterior || !nuevo) throw new NotFoundError("No se encontró uno de los dispositivos del reemplazo.");
     assertNoTerminal(anterior);
     assertNoTerminal(nuevo);
+    assertNuevoDisponible(nuevo);
     if (anterior.colaborador_id !== String(input.colaboradorId) || anterior.departamento_id) {
       throw new ConflictError("El dispositivo anterior no pertenece actualmente al colaborador seleccionado.");
     }
