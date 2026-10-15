@@ -12,24 +12,24 @@ export class CatalogoTecnicoService {
 
   obtener(codigo: string | number) {
     return this.http
-      .get<ApiItemResponse<CatalogoTecnico | null>>(
+      .get<ApiItemResponse<CatalogoTecnico[]>>(
         `${this.url}/${codigo}/catalogo-tecnico`
       )
       .pipe(map((response) => response.data));
   }
 
-  reemplazar(codigo: string | number, archivo: File) {
+  agregar(codigo: string | number, archivos: File[]) {
     const body = new FormData();
-    body.append('archivo', archivo);
+    archivos.forEach((archivo) => body.append('archivos', archivo));
     return this.http
-      .put<ApiItemResponse<CatalogoTecnico>>(
+      .post<ApiItemResponse<CatalogoTecnico[]>>(
         `${this.url}/${codigo}/catalogo-tecnico`,
         body
       )
       .pipe(map((response) => response.data));
   }
 
-  archivoUrl(codigo: string | number, download = false): string {
-    return `${this.url}/${codigo}/catalogo-tecnico/archivo${download ? '?download=true' : ''}`;
+  archivoUrl(codigo: string | number, catalogoId: string, download = false): string {
+    return `${this.url}/${codigo}/catalogo-tecnico/${catalogoId}/archivo${download ? '?download=true' : ''}`;
   }
 }

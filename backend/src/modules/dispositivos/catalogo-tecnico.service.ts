@@ -1,9 +1,10 @@
 import { stat } from "node:fs/promises";
-import { NotFoundError } from "../../shared/errors";
+import { NotFoundError, ValidationError } from "../../shared/errors";
 import { toIsoDateTime } from "../../shared/dates";
 import {
-  obtenerCatalogoTecnicoPorCodigo,
-  reemplazarCatalogoTecnico as reemplazarCatalogoTecnicoRow
+  agregarCatalogosTecnicos as agregarCatalogosTecnicosRows,
+  obtenerCatalogoTecnicoPorId,
+  obtenerCatalogosTecnicosPorCodigo
 } from "./catalogo-tecnico.repository";
 import {
   removeTechnicalCatalogFile,
@@ -25,51 +26,42 @@ const mapCatalogoTecnico = (row: CatalogoTecnicoRow): CatalogoTecnico => ({
   creadoEn: toIsoDateTime(row.creado_en)
 });
 
-export const obtenerCatalogoTecnico = async (
+export const obtenerCatalogosTecnicos = async (
   codigoInventario: number
-): Promise<CatalogoTecnico | null> => {
-  const row = await obtenerCatalogoTecnicoPorCodigo(codigoInventario);
-  return row ? mapCatalogoTecnico(row) : null;
+): Promise<CatalogoTecnico[]> => {
+  const rows = await obtenerCatalogosTecnicosPorCodigo(codigoInventario);
+  return rows.map(mapCatalogoTecnico);
 };
 
-export const reemplazarCatalogoTecnico = async (
+export const agregarCatalogosTecnicos = async (
   codigoInventario: number,
-  document: CatalogoTecnicoAlmacenado,
+  documents: CatalogoTecnicoAlmacenado[],
   subidoPor: string
-): Promise<CatalogoTecnico> => {
-  const result = await reemplazarCatalogoTecnicoRow(
-    codigoInventario,
-    document,
-    subidoPor
-  );
-  if (result.previousPath && result.previousPath !== document.ruta) {
-    await removeTechnicalCatalogFile(result.previousPath);
-  }
-  return mapCatalogoTecnico(result.row);
+): Promise<CatalogoTecnico[]> => {
+  if (!documents.length) throw new ValidationError("Debe adjuntar al menos un archivo PDF.");
+  const rows = await agregarCatalogosTecnicosRows(codigoInventario, documents, subidoPor);
+  return rows.map(mapCatalogoTecnico);
 };
 
 export const obtenerArchivoCatalogoTecnico = async (
-  codigoInventario: number
+  codigoInventario: number,
+  catalogoId?: number
 ): Promise<{
   absolutePath: string;
   nombreOriginal: string;
   mimeType: string;
   tamanoBytes: number;
 }> => {
-  const row = await obtenerCatalogoTecnicoPorCodigo(codigoInventario);
-  if (!row) {
-    throw new NotFoundError("El dispositivo no tiene un catálogo técnico adjunto.");
-  }
+  const row = await obtenerCatalogoTecnicoPorId(codigoInventario, catalogoId);
+  if (!row) throw new NotFoundError("El dispositivo no tiene ese catÃ¡logo tÃ©cnico adjunto.");
 
   const absolutePath = resolveTechnicalCatalogPath(row.ruta);
   const expectedSize = Number(row.tamano_bytes);
   try {
     const file = await stat(absolutePath);
-    if (!file.isFile() || file.size !== expectedSize) {
-      throw new Error("Archivo inconsistente.");
-    }
+    if (!file.isFile() || file.size !== expectedSize) throw new Error("Archivo inconsistente.");
   } catch {
-    throw new NotFoundError("El catálogo técnico no está disponible.");
+    throw new NotFoundError("El catÃ¡logo tÃ©cnico no estÃ¡ disponible.");
   }
 
   return {
@@ -78,4 +70,10 @@ export const obtenerArchivoCatalogoTecnico = async (
     mimeType: row.mime_type,
     tamanoBytes: expectedSize
   };
+};
+
+export const removeUploadedTechnicalCatalogs = async (
+  documents: CatalogoTecnicoAlmacenado[]
+): Promise<void> => {
+  await Promise.all(documents.map((document) => removeTechnicalCatalogFile(document.ruta)));
 };

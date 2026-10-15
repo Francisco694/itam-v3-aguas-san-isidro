@@ -171,6 +171,23 @@
   opacity: .55;
 }
 
+.technical-catalog-list__header {
+  align-items: center;
+  color: var(--blue);
+  display: flex;
+  justify-content: space-between;
+  padding: .45rem .5rem .25rem;
+}
+
+.technical-catalog-list__header strong {
+  font-size: .7rem;
+}
+
+.technical-catalog-list__header small {
+  color: var(--slate-500);
+  font-size: .6rem;
+}
+
 .catalogo-action-error {
   color: #991b1b;
   font-size: .68rem;

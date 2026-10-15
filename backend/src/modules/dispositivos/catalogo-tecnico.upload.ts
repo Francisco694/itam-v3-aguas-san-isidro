@@ -9,6 +9,7 @@ import { ValidationError } from "../../shared/errors";
 import type { CatalogoTecnicoAlmacenado } from "./catalogo-tecnico.types";
 
 export const MAX_CATALOGO_TECNICO_BYTES = 10 * 1024 * 1024;
+export const MAX_CATALOGO_TECNICO_FILES = 10;
 
 const storageRoot = path.resolve(env.documentStoragePath);
 mkdirSync(storageRoot, { recursive: true });
@@ -23,25 +24,30 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: MAX_CATALOGO_TECNICO_BYTES, files: 1 },
+  limits: { fileSize: MAX_CATALOGO_TECNICO_BYTES, files: MAX_CATALOGO_TECNICO_FILES },
   fileFilter: (_request, file, callback) => {
     const extension = path.extname(file.originalname).toLowerCase();
     if (file.mimetype !== "application/pdf" || extension !== ".pdf") {
-      callback(new ValidationError(
-        "Formato no permitido. Adjunte un archivo PDF."
-      ));
+      callback(new ValidationError("Formato no permitido. Adjunte un archivo PDF."));
       return;
     }
     callback(null, true);
   }
-}).single("archivo");
+}).fields([
+  { name: "archivos", maxCount: MAX_CATALOGO_TECNICO_FILES },
+  { name: "archivo", maxCount: 1 }
+]);
 
 export const technicalCatalogUpload: RequestHandler = (request, response, next) => {
   upload(request, response, (error: unknown) => {
     if (error instanceof multer.MulterError) {
-      next(new ValidationError(error.code === "LIMIT_FILE_SIZE"
-        ? "El archivo supera el tamaño máximo permitido de 10 MB."
-        : "No fue posible procesar el catálogo técnico adjunto."));
+      next(new ValidationError(
+        error.code === "LIMIT_FILE_SIZE"
+          ? "El archivo supera el tamaño máximo permitido de 10 MB."
+          : error.code === "LIMIT_FILE_COUNT"
+            ? `Puede adjuntar como máximo ${MAX_CATALOGO_TECNICO_FILES} archivos por operación.`
+            : "No fue posible procesar el catálogo técnico adjunto."
+      ));
       return;
     }
     next(error);
@@ -65,6 +71,17 @@ export const catalogoTecnicoFromUpload = (
   ruta: file.filename
 } : undefined;
 
+export const catalogosTecnicosFromUpload = (
+  files: Express.Multer.File[] | Record<string, Express.Multer.File[]> | undefined
+): CatalogoTecnicoAlmacenado[] => {
+  const uploaded = Array.isArray(files)
+    ? files
+    : files
+      ? Object.values(files).flat()
+      : [];
+  return uploaded.map((file) => catalogoTecnicoFromUpload(file)!).filter(Boolean);
+};
+
 export const validateTechnicalCatalogSignature = async (
   document: CatalogoTecnicoAlmacenado | undefined
 ): Promise<void> => {
@@ -80,16 +97,12 @@ export const validateTechnicalCatalogSignature = async (
     }
   } catch {
     await removeTechnicalCatalogFile(document.ruta);
-    throw new ValidationError(
-      "No fue posible validar el contenido del catálogo técnico adjunto."
-    );
+    throw new ValidationError("No fue posible validar el contenido del catálogo técnico adjunto.");
   }
 
   if (!signature.equals(Buffer.from("%PDF-"))) {
     await removeTechnicalCatalogFile(document.ruta);
-    throw new ValidationError(
-      "El contenido del archivo no corresponde al formato PDF indicado."
-    );
+    throw new ValidationError("El contenido del archivo no corresponde al formato PDF indicado.");
   }
 };
 

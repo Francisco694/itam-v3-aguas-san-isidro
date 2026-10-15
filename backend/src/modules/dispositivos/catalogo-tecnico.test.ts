@@ -5,6 +5,8 @@ import { test } from "node:test";
 import { ValidationError } from "../../shared/errors";
 import {
   MAX_CATALOGO_TECNICO_BYTES,
+  MAX_CATALOGO_TECNICO_FILES,
+  catalogosTecnicosFromUpload,
   removeTechnicalCatalogFile,
   resolveTechnicalCatalogPath,
   validateTechnicalCatalogSignature
@@ -17,6 +19,24 @@ const testDocument = (ruta: string): CatalogoTecnicoAlmacenado => ({
   mimeType: "application/pdf",
   tamanoBytes: 12,
   ruta
+});
+
+test("catÃ¡logo tÃ©cnico transforma varios archivos adjuntos", () => {
+  const documents = catalogosTecnicosFromUpload({
+    archivos: [
+      { originalname: "manual.pdf", filename: "manual-a.pdf", size: 12 },
+      { originalname: "ficha técnica.pdf", filename: "manual-b.pdf", size: 14 }
+    ] as Express.Multer.File[]
+  });
+
+  assert.deepEqual(documents.map((document) => document.nombreOriginal), [
+    "manual.pdf",
+    "ficha técnica.pdf"
+  ]);
+  assert.deepEqual(documents.map((document) => document.ruta), [
+    "manual-a.pdf",
+    "manual-b.pdf"
+  ]);
 });
 
 test("catálogo técnico acepta una firma PDF y elimina una firma inválida", async () => {
@@ -45,6 +65,7 @@ test("catálogo técnico acepta una firma PDF y elimina una firma inválida", as
 
 test("catálogo técnico conserva el límite de 10 MB y bloquea traversal", () => {
   assert.equal(MAX_CATALOGO_TECNICO_BYTES, 10 * 1024 * 1024);
+  assert.equal(MAX_CATALOGO_TECNICO_FILES, 10);
   assert.throws(
     () => resolveTechnicalCatalogPath("../fuera-del-almacenamiento.pdf"),
     /Ruta de catálogo técnico inválida/

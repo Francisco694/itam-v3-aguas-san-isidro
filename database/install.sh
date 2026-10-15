@@ -59,6 +59,7 @@ readonly MIGRATIONS=(
   "040_expand_device_types.sql"
   "041_device_technical_catalog.sql"
   "042_reconcile_service_and_session_schema.sql"
+  "043_multiple_device_technical_catalogs.sql"
 )
 
 die() {
@@ -194,7 +195,7 @@ table_count="$(psql "${PSQL_ARGS[@]}" --dbname="$TARGET_DB" -Atqc "SELECT COUNT(
 [[ "$table_count" == "31" ]] || die "Se esperaban 31 tablas en itam y se encontraron $table_count"
 
 migration_count="$(psql "${PSQL_ARGS[@]}" --dbname="$TARGET_DB" -Atqc "SELECT COUNT(*) FROM itam.schema_migrations;")"
-[[ "$migration_count" == "41" ]] || die "Se esperaban 41 registros de migraciones y se encontraron $migration_count"
+[[ "$migration_count" == "42" ]] || die "Se esperaban 42 registros de migraciones y se encontraron $migration_count"
 
 invalid_history="$(psql "${PSQL_ARGS[@]}" --dbname="$TARGET_DB" -Atqc "
 SELECT COUNT(*)

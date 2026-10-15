@@ -22,9 +22,9 @@ import {
   registrarVerificacionFisicaController
 } from "./dispositivos.controller";
 import {
+  agregarCatalogosTecnicosController,
   obtenerArchivoCatalogoTecnicoController,
   obtenerCatalogoTecnicoController,
-  reemplazarCatalogoTecnicoController
 } from "./catalogo-tecnico.controller";
 import { technicalCatalogUpload } from "./catalogo-tecnico.upload";
 
@@ -40,8 +40,10 @@ router.get("/:codigo/historial", historialDispositivoController);
 router.get("/:codigo/trazabilidad", trazabilidadDispositivoController);
 router.get("/:codigo/verificaciones-fisicas", listarVerificacionesFisicasController);
 router.get("/:codigo/catalogo-tecnico/archivo", obtenerArchivoCatalogoTecnicoController);
+router.get("/:codigo/catalogo-tecnico/:catalogoId/archivo", obtenerArchivoCatalogoTecnicoController);
 router.get("/:codigo/catalogo-tecnico", obtenerCatalogoTecnicoController);
-router.put("/:codigo/catalogo-tecnico", technicalCatalogUpload, reemplazarCatalogoTecnicoController);
+router.post("/:codigo/catalogo-tecnico", technicalCatalogUpload, agregarCatalogosTecnicosController);
+router.put("/:codigo/catalogo-tecnico", technicalCatalogUpload, agregarCatalogosTecnicosController);
 router.get("/:codigo", obtenerDispositivoController);
 router.post("/", crearDispositivoController);
 router.patch("/:codigo", actualizarDispositivoController);

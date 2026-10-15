@@ -5,13 +5,13 @@ import { ValidationError } from "../../shared/errors";
 import { parsePositiveInteger } from "../../shared/validation";
 import { sendItem } from "../../shared/responses";
 import {
+  agregarCatalogosTecnicos,
   obtenerArchivoCatalogoTecnico,
-  obtenerCatalogoTecnico,
-  reemplazarCatalogoTecnico
+  obtenerCatalogosTecnicos,
+  removeUploadedTechnicalCatalogs
 } from "./catalogo-tecnico.service";
 import {
-  catalogoTecnicoFromUpload,
-  removeTechnicalCatalogFile,
+  catalogosTecnicosFromUpload,
   validateTechnicalCatalogSignature
 } from "./catalogo-tecnico.upload";
 
@@ -19,32 +19,30 @@ export const obtenerCatalogoTecnicoController = asyncHandler(
   async (request: Request, response: Response): Promise<void> => {
     sendItem(
       response,
-      await obtenerCatalogoTecnico(
-        parsePositiveInteger(request.params.codigo, "codigo")
-      )
+      await obtenerCatalogosTecnicos(parsePositiveInteger(request.params.codigo, "codigo"))
     );
   }
 );
 
-export const reemplazarCatalogoTecnicoController = asyncHandler(
+export const agregarCatalogosTecnicosController = asyncHandler(
   async (request: Request, response: Response): Promise<void> => {
-    const document = catalogoTecnicoFromUpload(request.file);
-    if (!document) {
-      throw new ValidationError("Debe adjuntar un archivo PDF de catálogo técnico.");
+    const documents = catalogosTecnicosFromUpload(request.files);
+    if (!documents.length) {
+      throw new ValidationError("Debe adjuntar al menos un archivo PDF de catálogo técnico.");
     }
 
     try {
-      await validateTechnicalCatalogSignature(document);
+      for (const document of documents) await validateTechnicalCatalogSignature(document);
       sendItem(
         response,
-        await reemplazarCatalogoTecnico(
+        await agregarCatalogosTecnicos(
           parsePositiveInteger(request.params.codigo, "codigo"),
-          document,
+          documents,
           authenticatedActorName(request)
         )
       );
     } catch (error) {
-      await removeTechnicalCatalogFile(document.ruta);
+      await removeUploadedTechnicalCatalogs(documents);
       throw error;
     }
   }
@@ -60,7 +58,10 @@ const contentDisposition = (filename: string, download: boolean): string => {
 export const obtenerArchivoCatalogoTecnicoController = asyncHandler(
   async (request: Request, response: Response): Promise<void> => {
     const document = await obtenerArchivoCatalogoTecnico(
-      parsePositiveInteger(request.params.codigo, "codigo")
+      parsePositiveInteger(request.params.codigo, "codigo"),
+      request.params.catalogoId
+        ? parsePositiveInteger(request.params.catalogoId, "catalogoId")
+        : undefined
     );
     response.setHeader("Content-Type", document.mimeType);
     response.setHeader("Content-Length", document.tamanoBytes);

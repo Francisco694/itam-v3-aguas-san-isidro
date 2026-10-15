@@ -355,20 +355,27 @@ interface SimilarAssignedDevicePrompt {
               @if(canCarrySim(device) && !terminal()){<button type="button" (click)="openSimAssociation()"><svg lucidePlus></svg><span>{{ lineActionCopy(device).title }}<small>{{ lineActionCopy(device).description }}</small></span></button>}
               @if(device.estado.codigo==='EXTRAVIADO' || device.estado.codigo==='DADO_BAJA'){<button type="button" (click)="open('recover')"><svg lucideRotateCcw></svg><span>Registrar equipo encontrado<small>Reactivar con trazabilidad</small></span></button>}
               }
-              @if (catalogoTecnico(); as catalogo) {
-                <div class="operation-document-group">
-                  <a class="operation-document" [href]="catalogoArchivoUrl(device.codigoInventario)" target="_blank" rel="noopener"><svg lucideEye></svg><span>Ver catálogo técnico<small>{{ catalogo.nombreOriginal }}</small></span></a>
+              @if (catalogosTecnicos().length) {
+                <div class="operation-document-group technical-catalog-list">
+                  <div class="technical-catalog-list__header"><strong>Catálogos técnicos</strong><small>{{ catalogosTecnicos().length }} archivo{{ catalogosTecnicos().length === 1 ? '' : 's' }}</small></div>
+                  @for (catalogo of catalogosTecnicos(); track catalogo.id) {
+                    <a class="operation-document" [href]="catalogoArchivoUrl(device.codigoInventario, catalogo.id)" target="_blank" rel="noopener"><svg lucideEye></svg><span>{{ catalogo.nombreOriginal }}<small>{{ catalogoFileSize(catalogo.tamanoBytes) }} · {{ catalogo.creadoEn | date:'dd/MM/yyyy HH:mm' }}</small></span></a>
+                  }
                   @if (auth.user()?.rol !== 'SOLO_LECTURA') {
-                    <button type="button" class="operation-document-replace" [disabled]="catalogoSubiendo()" (click)="abrirCargaCatalogo()">Reemplazar PDF</button>
+                    <button type="button" class="operation-document-replace" [disabled]="catalogoSubiendo()" (click)="abrirCargaCatalogo()">Adjuntar más archivos</button>
                   }
                 </div>
               } @else {
-                <button type="button" class="operation-document" [disabled]="auth.user()?.rol === 'SOLO_LECTURA' || catalogoSubiendo()" (click)="abrirCargaCatalogo()"><svg lucideFileText></svg><span>Adjuntar catálogo técnico<small>Sin catálogo técnico adjunto</small></span></button>
+                @if (auth.user()?.rol !== 'SOLO_LECTURA') {
+                  <button type="button" class="operation-document" [disabled]="catalogoSubiendo()" (click)="abrirCargaCatalogo()"><svg lucideFileText></svg><span>Adjuntar catálogo técnico<small>Sin catálogo técnico adjunto</small></span></button>
+                } @else {
+                  <div class="operation-document technical-catalog-readonly"><svg lucideFileText></svg><span>Catálogos técnicos<small>Sin archivos adjuntos</small></span></div>
+                }
               }
               @if (catalogoError()) {
                 <div class="catalogo-action-error" role="alert">{{ catalogoError() }}</div>
               }
-              <input id="technical-catalog-upload" class="technical-catalog__input" type="file" accept="application/pdf,.pdf" [disabled]="catalogoSubiendo()" (change)="catalogoSeleccionado($event)" />
+              <input id="technical-catalog-upload" class="technical-catalog__input" type="file" accept="application/pdf,.pdf" multiple [disabled]="catalogoSubiendo()" (change)="catalogoSeleccionado($event)" />
               @if (auth.user()?.rol !== 'SOLO_LECTURA') {
               <button type="button" class="operation-danger" [disabled]="!stateExists('DADO_BAJA')" (click)="open('retire')"><svg lucideCircleAlert></svg><span>Da de Baja<small>Motivo obligatorio</small></span></button>
               }
@@ -1188,7 +1195,7 @@ export class DispositivoDetail implements OnInit {
     this.selectedSim.set(null);
     this.simError.set('');
     this.modalError.set(null);
-    this.catalogoTecnico.set(null);
+    this.catalogosTecnicos.set([]);
     this.catalogoSubiendo.set(false);
     this.catalogoError.set('');
     this.resetAssignmentDecision();
@@ -1209,7 +1216,7 @@ export class DispositivoDetail implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly fb = inject(FormBuilder);
   protected readonly item = signal<Dispositivo | null>(null);
-  protected readonly catalogoTecnico = signal<CatalogoTecnico | null>(null);
+  protected readonly catalogosTecnicos = signal<CatalogoTecnico[]>([]);
   protected readonly catalogoSubiendo = signal(false);
   protected readonly catalogoError = signal('');
   protected readonly traceability = signal<TrazabilidadDispositivo | null>(null);
@@ -1256,8 +1263,12 @@ export class DispositivoDetail implements OnInit {
   protected readonly lineActionCopy=smartphoneLineActionCopy;
   protected readonly technicalServiceStatusLabel=technicalServiceOrderStatusLabel;
   protected latestServiceOrder(): OrdenServicio | null { return latestTechnicalServiceOrder(this.serviceOrders()); }
-  protected catalogoArchivoUrl(codigo: number, download = false): string {
-    return this.catalogos.archivoUrl(codigo, download);
+  protected catalogoArchivoUrl(codigo: number, catalogoId: string, download = false): string {
+    return this.catalogos.archivoUrl(codigo, catalogoId, download);
+  }
+  protected catalogoFileSize(bytes: number): string {
+    if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
   protected abrirCargaCatalogo(): void {
     if (this.auth.user()?.rol === 'SOLO_LECTURA' || this.catalogoSubiendo()) return;
@@ -1265,16 +1276,16 @@ export class DispositivoDetail implements OnInit {
   }
   protected catalogoSeleccionado(event: Event): void {
     const input = event.target as HTMLInputElement | null;
-    const file = input?.files?.[0];
+    const files = Array.from(input?.files || []);
     if (input) input.value = '';
-    if (!file || this.catalogoSubiendo()) return;
+    if (!files.length || this.catalogoSubiendo()) return;
 
-    if (file.type !== 'application/pdf' || !file.name.toLowerCase().endsWith('.pdf')) {
+    if (files.some((file) => file.type !== 'application/pdf' || !file.name.toLowerCase().endsWith('.pdf'))) {
       this.catalogoError.set('Solo se permiten archivos PDF.');
       this.toast.error('Archivo no válido', 'Selecciona un archivo PDF.');
       return;
     }
-    if (file.size < 1 || file.size > MAX_CATALOGO_TECNICO_BYTES) {
+    if (files.some((file) => file.size < 1 || file.size > MAX_CATALOGO_TECNICO_BYTES)) {
       this.catalogoError.set('El PDF debe pesar como máximo 10 MB.');
       this.toast.error('Archivo demasiado grande', 'El PDF debe pesar como máximo 10 MB.');
       return;
@@ -1282,13 +1293,13 @@ export class DispositivoDetail implements OnInit {
 
     this.catalogoSubiendo.set(true);
     this.catalogoError.set('');
-    this.catalogos.reemplazar(this.codigo, file)
+    this.catalogos.agregar(this.codigo, files)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: (catalogo) => {
-          this.catalogoTecnico.set(catalogo);
+        next: (catalogos) => {
+          this.catalogosTecnicos.update((current) => [...catalogos, ...current]);
           this.catalogoSubiendo.set(false);
-          this.toast.success('Catálogo técnico guardado', 'El PDF quedó asociado al dispositivo.');
+          this.toast.success('Catálogos técnicos guardados', `${catalogos.length} archivo${catalogos.length === 1 ? '' : 's'} quedó${catalogos.length === 1 ? '' : 'aron'} asociado${catalogos.length === 1 ? '' : 's'} al dispositivo.`);
         },
         error: (error) => {
           this.catalogoSubiendo.set(false);
@@ -1330,7 +1341,7 @@ export class DispositivoDetail implements OnInit {
   protected load(): void {
     const requestedId = this.id;
     this.loading.set(true); this.error.set(''); this.catalogoError.set('');
-    forkJoin({ traceability: this.service.trazabilidad(this.id), states: this.estadosService.listar('DISPOSITIVO'), collaborators: this.colaboradoresService.listar({ activo: true }), departments: this.departamentosService.listar(), catalogo: this.catalogos.obtener(this.id).pipe(catchError((error) => { this.catalogoError.set(errorMessage(error)); return of(null as CatalogoTecnico | null); })), serviceOrders: this.technicalService.listar().pipe(catchError(() => of([] as OrdenServicio[]))), replacements: this.replacements.pendientes().pipe(catchError(() => of([] as ReemplazoDispositivo[]))) }).subscribe({ next: (result) => { if (requestedId !== this.id) return; this.traceability.set(result.traceability); this.item.set(result.traceability.dispositivo); this.catalogoTecnico.set(result.catalogo); this.codigo = result.traceability.dispositivo.codigoInventario; this.pendingReplacement.set(result.replacements.find(replacement => replacement.dispositivoAnterior.codigoInventario === this.codigo && replacement.estadoOperacion === 'PENDIENTE_DEVOLUCION') || null); this.serviceOrders.set(result.serviceOrders.filter(order => String(order.dispositivo.id) === String(result.traceability.dispositivo.id))); this.activeServiceOrder.set(activeTechnicalServiceOrderForDevice(result.serviceOrders, this.codigo)); this.history.set(result.traceability.eventos); this.states.set(result.states.filter((state) => state.activo)); this.collaborators.set(result.collaborators); this.departments.set(result.departments.filter((department) => department.activo)); this.loading.set(false); if (this.routeAction === 'assign' && !this.terminal() && !this.technicalServiceActive()) this.open('assign-person'); }, error: (error) => { if (requestedId !== this.id) return; this.error.set(errorMessage(error)); this.loading.set(false); } });
+    forkJoin({ traceability: this.service.trazabilidad(this.id), states: this.estadosService.listar('DISPOSITIVO'), collaborators: this.colaboradoresService.listar({ activo: true }), departments: this.departamentosService.listar(), catalogos: this.catalogos.obtener(this.id).pipe(catchError((error) => { this.catalogoError.set(errorMessage(error)); return of([] as CatalogoTecnico[]); })), serviceOrders: this.technicalService.listar().pipe(catchError(() => of([] as OrdenServicio[]))), replacements: this.replacements.pendientes().pipe(catchError(() => of([] as ReemplazoDispositivo[]))) }).subscribe({ next: (result) => { if (requestedId !== this.id) return; this.traceability.set(result.traceability); this.item.set(result.traceability.dispositivo); this.catalogosTecnicos.set(result.catalogos); this.codigo = result.traceability.dispositivo.codigoInventario; this.pendingReplacement.set(result.replacements.find(replacement => replacement.dispositivoAnterior.codigoInventario === this.codigo && replacement.estadoOperacion === 'PENDIENTE_DEVOLUCION') || null); this.serviceOrders.set(result.serviceOrders.filter(order => String(order.dispositivo.id) === String(result.traceability.dispositivo.id))); this.activeServiceOrder.set(activeTechnicalServiceOrderForDevice(result.serviceOrders, this.codigo)); this.history.set(result.traceability.eventos); this.states.set(result.states.filter((state) => state.activo)); this.collaborators.set(result.collaborators); this.departments.set(result.departments.filter((department) => department.activo)); this.loading.set(false); if (this.routeAction === 'assign' && !this.terminal() && !this.technicalServiceActive()) this.open('assign-person'); }, error: (error) => { if (requestedId !== this.id) return; this.error.set(errorMessage(error)); this.loading.set(false); } });
   }
   protected terminal(): boolean { return this.states().find((state) => state.id === this.item()?.estado.id)?.esTerminal ?? false; }
   protected stateExists(code: string): boolean { return this.states().some((state) => state.codigo === code); }
