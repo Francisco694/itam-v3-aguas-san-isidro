@@ -18,6 +18,19 @@
 - historial de eventos y trazabilidad;
 - estado y resumen de servicio técnico.
 
+## Catálogos técnicos
+
+La ficha permite consultar uno o más manuales o documentos técnicos en PDF asociados al equipo.
+Los perfiles `SUPER_USUARIO` y `USUARIO` pueden adjuntar, cambiar y eliminar documentos. El
+perfil `SOLO_LECTURA` solo puede abrirlos: la columna de acciones no se muestra y los catálogos se
+presentan en una tarjeta independiente de documentación.
+
+La gestión exige confirmación dentro de la página antes de abrir el selector de archivos o
+eliminar un documento. La convención recomendada es `Tipo de documento - Marca Modelo.pdf`.
+
+El acceso desde un QR ofrece la opción **Catálogo Técnico y Manuales PDF** y navega a la ficha con
+el ancla `#catalogo`.
+
 ## Acciones
 
 La ficha concentra editar, entregar a colaborador, entregar a departamento, devolver, cambiar estado, recuperar, dar de baja, registrar verificación, gestionar línea/SIM y abrir servicio técnico. Las acciones se deshabilitan cuando la regla de estado, custodia u orden técnica lo exige.

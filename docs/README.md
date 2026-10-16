@@ -72,6 +72,7 @@ Esta carpeta documenta el sistema ITAM según el código vigente. Los documentos
 - [Evolución de interfaz](bitacoras/evolucion-interfaz.md)
 - [Dashboard](ux/DASHBOARD.md)
 - [Ficha de activo](ux/FICHA_ACTIVO.md)
+- [Catálogos técnicos](ux/CATALOGOS_TECNICOS.md)
 - [Etiquetas](hardware/ETIQUETAS.md)
 - [Actas](ux/ACTAS.md)
 - [Servicio técnico](ux/SERVICIO_TECNICO.md)

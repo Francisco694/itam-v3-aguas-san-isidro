@@ -5,10 +5,11 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { LucideCamera, LucideDownload, LucideEye, LucidePencil, LucidePrinter, LucidePlus, LucideScanBarcode, LucideSearch, LucideSlidersHorizontal, LucideTriangleAlert } from '@lucide/angular';
 import QRCode from 'qrcode';
 import { catchError, forkJoin, map, of } from 'rxjs';
-import { Departamento, Dispositivo, DispositivoFilters, Estado, FiltroVerificacionDispositivo, ResultadoVerificacionFisica, TipoDispositivo } from '../../core/models/itam.models';
+import { CatalogoTecnico, Departamento, Dispositivo, DispositivoFilters, Estado, FiltroVerificacionDispositivo, ResultadoVerificacionFisica, TipoDispositivo } from '../../core/models/itam.models';
 import { DepartamentosService } from '../../core/services/departamentos.service';
 import { DispositivosService } from '../../core/services/dispositivos.service';
 import { AuthService } from '../../core/services/auth.service';
+import { CatalogoTecnicoService } from '../../core/services/catalogo-tecnico.service';
 import { EstadosService } from '../../core/services/estados.service';
 import { SimService } from '../../core/services/sim.service';
 import { ToastService } from '../../core/services/toast.service';
@@ -23,6 +24,8 @@ import { buildItamQrValue } from '../../shared/utils/itam-qr';
 import { errorMessage } from '../../shared/utils/error-message';
 import { formatRut } from '../../shared/utils/rut';
 import { belongsToInventoryView, classificationForView, type InventoryClassification, type InventoryView } from '../../shared/utils/inventory-classification';
+import { AssetScanOptionsDialog } from './asset-scan-options-dialog';
+import { CatalogoModal } from './catalogo-modal';
 
 const normalizeInventorySearch = (value: unknown): string => String(value ?? '')
   .normalize('NFD')
@@ -191,7 +194,7 @@ const printableDocument = (
 
 @Component({
   selector: 'app-dispositivos-list',
-  imports: [DatePipe, FormsModule, RouterLink, PageHeader, QrScanner, StatusBadge, ViewState, LucideCamera, LucideDownload, LucideEye, LucidePencil, LucidePrinter, LucidePlus, LucideScanBarcode, LucideSearch, LucideSlidersHorizontal, LucideTriangleAlert],
+  imports: [DatePipe, FormsModule, RouterLink, PageHeader, QrScanner, AssetScanOptionsDialog, CatalogoModal, StatusBadge, ViewState, LucideCamera, LucideDownload, LucideEye, LucidePencil, LucidePrinter, LucidePlus, LucideScanBarcode, LucideSearch, LucideSlidersHorizontal, LucideTriangleAlert],
   template: `
     <app-page-header title="Inventario de Equipos" subtitle="Control físico, custodias y condición operativa de los activos.">
       <button class="btn btn--navy mobile-qr-action" type="button" (click)="scannerOpen.set(true)"><svg lucideCamera></svg> Escanear QR</button>
@@ -222,6 +225,27 @@ const printableDocument = (
         (scanned)="openScannedAsset($event)"
         (cancelled)="scannerOpen.set(false)"
       />
+    }
+    @if (scannedDevice(); as device) {
+      @if (!catalogoDevice()) {
+        <app-asset-scan-options-dialog
+          [dispositivo]="device"
+          (verFicha)="abrirFicha($event)"
+          (verCatalogo)="abrirCatalogo($event)"
+          (cerrar)="scannedDevice.set(null)" />
+      }
+    }
+    @if (catalogoDevice(); as device) {
+      <app-catalogo-modal
+        [modeloNombre]="deviceDisplayName(device)"
+        [codigoActivo]="'ITAM-' + device.codigoInventario"
+        [rolUsuario]="auth.user()?.rol ?? 'SOLO_LECTURA'"
+        [archivos]="catalogosTecnicos()"
+        [cargando]="catalogoLoading()"
+        [error]="catalogoError()"
+        (descargar)="abrirArchivoCatalogo($event)"
+        (subirArchivo)="subirCatalogo($event)"
+        (cerrar)="cerrarCatalogo()" />
     }
     <nav class="state-shortcuts" aria-label="Filtros rápidos por estado">
       @for(shortcut of shortcuts;track shortcut.code){<button type="button" [class.active]="filters.estado===shortcut.code" (click)="selectState(shortcut.code)">@if(shortcut.color){<i class="state-dot" [style.background]="shortcut.color" aria-hidden="true"></i>}<span>{{shortcut.label}}</span><strong>{{stateCount(shortcut.code)}}</strong></button>}
@@ -312,6 +336,7 @@ export class DispositivosList implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly toast = inject(ToastService);
   private readonly typeService = inject(TiposDispositivoService);
+  private readonly catalogoService = inject(CatalogoTecnicoService);
   protected readonly items = signal<Dispositivo[]>([]);
   protected readonly states = signal<Estado[]>([]);
   protected readonly departments = signal<Departamento[]>([]);
@@ -321,6 +346,11 @@ export class DispositivosList implements OnInit {
   protected readonly loading = signal(true);
   protected readonly quickLoading = signal(false);
   protected readonly scannerOpen = signal(false);
+  protected readonly scannedDevice = signal<Dispositivo | null>(null);
+  protected readonly catalogoDevice = signal<Dispositivo | null>(null);
+  protected readonly catalogosTecnicos = signal<CatalogoTecnico[]>([]);
+  protected readonly catalogoLoading = signal(false);
+  protected readonly catalogoError = signal('');
   protected readonly filtersOpen = signal(false);
   protected readonly selectedIds = signal<ReadonlySet<string>>(new Set());
   protected readonly error = signal('');
@@ -483,7 +513,19 @@ export class DispositivosList implements OnInit {
       return;
     }
     if (target.entity === 'DISPOSITIVO') {
-      this.searchUniversalDevice(String(target.code));
+      this.service.listar({ q: String(target.code) }).subscribe({
+        next: (items) => {
+          const device = findUniversalDevice(items, String(target.code))?.dispositivo;
+          this.quickLoading.set(false);
+          if (!device) {
+            notFound();
+            return;
+          }
+          this.scannerOpen.set(false);
+          this.scannedDevice.set(device);
+        },
+        error: notFound
+      });
       return;
     }
     forkJoin({
@@ -495,8 +537,8 @@ export class DispositivosList implements OnInit {
     }).subscribe(({ device, sim }) => {
       this.quickLoading.set(false);
       if (device && !sim) {
-        const result = findUniversalDevice([device], String(target.code));
-        if (result) this.applyUniversalSearchResult(result);
+        this.scannerOpen.set(false);
+        this.scannedDevice.set(device);
         return;
       }
       if (sim && !device) {
@@ -504,6 +546,61 @@ export class DispositivosList implements OnInit {
         return;
       }
       notFound();
+    });
+  }
+  protected abrirFicha(codigo: number): void {
+    this.scannedDevice.set(null);
+    void this.router.navigate(['/dispositivos', codigo]);
+  }
+  protected abrirCatalogo(codigo: number): void {
+    const device = this.scannedDevice();
+    if (!device || device.codigoInventario !== codigo) return;
+    this.catalogoDevice.set(device);
+    this.catalogosTecnicos.set([]);
+    this.catalogoError.set('');
+    this.catalogoLoading.set(true);
+    this.catalogoService.obtener(codigo).subscribe({
+      next: (catalogos) => {
+        this.catalogosTecnicos.set(catalogos);
+        this.catalogoLoading.set(false);
+      },
+      error: (error) => {
+        this.catalogoError.set(errorMessage(error));
+        this.catalogoLoading.set(false);
+      }
+    });
+  }
+  protected cerrarCatalogo(): void {
+    this.catalogoDevice.set(null);
+  }
+  protected abrirArchivoCatalogo(catalogo: CatalogoTecnico): void {
+    const device = this.catalogoDevice();
+    if (!device) return;
+    window.open(this.catalogoService.archivoUrl(device.codigoInventario, catalogo.id), '_blank', 'noopener');
+  }
+  protected subirCatalogo(archivo: File): void {
+    const device = this.catalogoDevice();
+    if (!device || this.auth.isReadOnly()) return;
+    if (archivo.type !== 'application/pdf' && !archivo.name.toLowerCase().endsWith('.pdf')) {
+      this.catalogoError.set('Solo se permiten archivos PDF.');
+      return;
+    }
+    if (archivo.size > 10 * 1024 * 1024) {
+      this.catalogoError.set('El PDF debe pesar como máximo 10 MB.');
+      return;
+    }
+    this.catalogoLoading.set(true);
+    this.catalogoError.set('');
+    this.catalogoService.agregar(device.codigoInventario, [archivo]).subscribe({
+      next: (catalogos) => {
+        this.catalogosTecnicos.update((current) => [...catalogos, ...current]);
+        this.catalogoLoading.set(false);
+        this.toast.success('Catálogo guardado', 'El documento quedó asociado al dispositivo.');
+      },
+      error: (error) => {
+        this.catalogoError.set(errorMessage(error));
+        this.catalogoLoading.set(false);
+      }
     });
   }
   protected load(): void {
@@ -600,6 +697,9 @@ export class DispositivosList implements OnInit {
     this.load();
   }
   protected custody(item: Dispositivo): string { return item.colaborador?.nombre || item.departamento?.nombre || 'Sin responsable actual'; }
+  protected deviceDisplayName(item: Dispositivo): string {
+    return [item.marca, item.modelo].filter((value): value is string => Boolean(value)).join(' ') || item.tipoDispositivo;
+  }
   protected closedCustody(item: Dispositivo): boolean { return isClosedCustodyState(item.estado.codigo); }
   protected lastResponsibleName(item: Dispositivo): string {
     return item.ultimoResponsableConocido?.nombre

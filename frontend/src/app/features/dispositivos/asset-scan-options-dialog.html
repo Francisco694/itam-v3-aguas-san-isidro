@@ -1,0 +1,112 @@
+<div class="backdrop" (click)="onBackdrop($event)">
+  <section
+    #panel
+    class="dialog"
+    role="dialog"
+    aria-modal="true"
+    tabindex="-1"
+    [attr.aria-labelledby]="tituloId"
+    [attr.aria-describedby]="preguntaId"
+  >
+    <header class="head">
+      <button type="button" class="close" aria-label="Cerrar" (click)="cerrar.emit()">
+        <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <path d="M5 5l10 10M15 5L5 15" />
+        </svg>
+      </button>
+
+      <p class="detected"><span class="pulse" aria-hidden="true"></span>Escaneo QR detectado</p>
+
+      <div class="title-row">
+        <h2 [id]="tituloId">{{ nombre() }}</h2>
+        <span class="badge" [class]="'badge badge--' + estado().tono">
+          <span class="dot"></span>{{ estado().etiqueta }}
+        </span>
+      </div>
+
+      <dl class="ids">
+        <div>
+          <dt>Código ITAM</dt>
+          <dd>{{ codigo() }}</dd>
+        </div>
+        <div>
+          <dt>N.º de serie</dt>
+          <dd>{{ dispositivo().numeroSerie ?? 'Sin registrar' }}</dd>
+        </div>
+      </dl>
+    </header>
+
+    <div class="body">
+      <h3 [id]="preguntaId">¿Qué información deseas consultar?</h3>
+
+      <div class="cards">
+        <article class="card card--ficha">
+          <div class="card-title">
+            <span class="icon icon--blue">
+              <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M9 3h6l4 4v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h3z" />
+                <path d="M14 3v5h5" />
+                <path d="M8.5 13.5h7M8.5 17h4" />
+              </svg>
+            </span>
+            <h4>Ficha y Custodia del Activo</h4>
+          </div>
+
+          <ul class="facts">
+            <li>
+              <span class="k">Responsable:</span>
+              @if (responsable(); as r) {
+                <strong>{{ r.nombre }}</strong>
+                @if (r.rut) {
+                  <span class="mono">({{ r.rut }})</span>
+                }
+              } @else {
+                <span class="muted">Sin custodia</span>
+              }
+            </li>
+            @if (ubicacion(); as u) {
+              <li><span class="k">Ubicación:</span> <strong>{{ u }}</strong></li>
+            }
+            @if (dispositivo().imei; as imei) {
+              <li><span class="k">IMEI:</span> <span class="mono">{{ imei }}</span></li>
+            }
+            @if (dispositivo().numeroTelefonico; as linea) {
+              <li><span class="k">Línea móvil:</span> <strong>{{ linea }}</strong></li>
+            }
+            <li><span class="k">Historial de movimientos</span></li>
+          </ul>
+
+          <button type="button" class="cta cta--blue" (click)="onVerFicha()">
+            Ver Ficha <span aria-hidden="true">›</span>
+          </button>
+        </article>
+
+        <article class="card">
+          <div class="card-title">
+            <span class="icon icon--navy">
+              <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v16H5.5A1.5 1.5 0 0 1 4 18.5v-13z" />
+                <path d="M20 5.5A1.5 1.5 0 0 0 18.5 4H13v16h5.5a1.5 1.5 0 0 0 1.5-1.5v-13z" />
+              </svg>
+            </span>
+            <h4>Catálogo Técnico y Manuales PDF</h4>
+          </div>
+
+          <ul class="facts">
+            <li>Ficha técnica de fábrica</li>
+            <li>Manual de usuario en PDF</li>
+            <li>Garantías</li>
+          </ul>
+
+          <button type="button" class="cta cta--navy" (click)="onVerCatalogo()">
+            Ver Catálogo <span aria-hidden="true">›</span>
+          </button>
+        </article>
+      </div>
+    </div>
+
+    <footer class="foot">
+      <button type="button" class="cancel" (click)="cerrar.emit()">Cancelar</button>
+    </footer>
+  </section>
+</div>

@@ -9,6 +9,7 @@ import {
   signal
 } from '@angular/core';
 import { BrowserQRCodeReader, IScannerControls } from '@zxing/browser';
+import { BarcodeFormat, DecodeHintType } from '@zxing/library';
 import { LucideCamera, LucideRefreshCw, LucideX } from '@lucide/angular';
 import type { ItamQrTarget } from '../../utils/itam-qr';
 import {
@@ -86,10 +87,13 @@ export class QrScanner implements AfterViewInit, OnDestroy {
   readonly cancelled = output<void>();
   protected readonly error = signal('');
   protected readonly secureContext = window.isSecureContext;
-  private readonly reader = new BrowserQRCodeReader(undefined, {
-    delayBetweenScanAttempts: 250,
-    delayBetweenScanSuccess: 800
-  });
+  private readonly reader = new BrowserQRCodeReader(
+    new Map([[DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.QR_CODE]]]),
+    {
+      delayBetweenScanAttempts: 67,
+      delayBetweenScanSuccess: 500
+    }
+  );
   private controls?: IScannerControls;
 
   ngAfterViewInit(): void {

@@ -6,8 +6,10 @@ import { parsePositiveInteger } from "../../shared/validation";
 import { sendItem } from "../../shared/responses";
 import {
   agregarCatalogosTecnicos,
+  eliminarCatalogoTecnico,
   obtenerArchivoCatalogoTecnico,
   obtenerCatalogosTecnicos,
+  reemplazarCatalogoTecnico,
   removeUploadedTechnicalCatalogs
 } from "./catalogo-tecnico.service";
 import {
@@ -45,6 +47,43 @@ export const agregarCatalogosTecnicosController = asyncHandler(
       await removeUploadedTechnicalCatalogs(documents);
       throw error;
     }
+  }
+);
+
+export const reemplazarCatalogoTecnicoController = asyncHandler(
+  async (request: Request, response: Response): Promise<void> => {
+    const documents = catalogosTecnicosFromUpload(request.files);
+    if (documents.length !== 1) {
+      throw new ValidationError("Debe adjuntar exactamente un archivo PDF para reemplazar el catÃ¡logo tÃ©cnico.");
+    }
+
+    try {
+      await validateTechnicalCatalogSignature(documents[0]!);
+      sendItem(
+        response,
+        await reemplazarCatalogoTecnico(
+          parsePositiveInteger(request.params.codigo, "codigo"),
+          parsePositiveInteger(request.params.catalogoId, "catalogoId"),
+          documents[0]!,
+          authenticatedActorName(request)
+        )
+      );
+    } catch (error) {
+      await removeUploadedTechnicalCatalogs(documents);
+      throw error;
+    }
+  }
+);
+
+export const eliminarCatalogoTecnicoController = asyncHandler(
+  async (request: Request, response: Response): Promise<void> => {
+    sendItem(
+      response,
+      await eliminarCatalogoTecnico(
+        parsePositiveInteger(request.params.codigo, "codigo"),
+        parsePositiveInteger(request.params.catalogoId, "catalogoId")
+      )
+    );
   }
 );
 

@@ -1,0 +1,61 @@
+<div class="backdrop">
+  <section
+    #panel
+    class="dialog"
+    role="dialog"
+    aria-modal="true"
+    tabindex="-1"
+    aria-labelledby="catalogo-modal-title"
+  >
+    <header class="head">
+      <div>
+        <p class="eyebrow">Catálogo técnico y manuales PDF</p>
+        <h2 id="catalogo-modal-title">{{ modeloNombre() }}</h2>
+        <span class="asset-code">{{ codigoActivo() }}</span>
+      </div>
+      <button type="button" class="close" aria-label="Cerrar" (click)="cerrar.emit()">×</button>
+    </header>
+
+    <div class="body">
+      <div class="summary">
+        <p>Documentación técnica y manuales de fábrica disponibles para este equipo.</p>
+        <span class="permission" [class.permission--edit]="esEditable()">
+          {{ esEditable() ? 'Modo edición habilitado' : 'Solo lectura' }}
+        </span>
+      </div>
+
+      @if (esEditable()) {
+        <label class="upload">
+          <span><strong>Adjuntar documento</strong><small>Solo archivos PDF de hasta 10 MB</small></span>
+          <span class="upload-button">Subir PDF</span>
+          <input type="file" accept="application/pdf,.pdf" (change)="onFileSelected($event)" [disabled]="cargando()" />
+        </label>
+      }
+
+      @if (cargando()) {
+        <p class="status" role="status">Cargando catálogo…</p>
+      } @else if (error()) {
+        <p class="status status--error" role="alert">{{ error() }}</p>
+      } @else if (!archivos().length) {
+        <p class="empty">No hay documentos cargados para este equipo.</p>
+      } @else {
+        <div class="files" aria-label="Archivos del catálogo">
+          @for (archivo of archivos(); track archivo.id) {
+            <article class="file">
+              <div class="file-icon" aria-hidden="true">PDF</div>
+              <div class="file-info">
+                <strong>{{ archivo.nombreOriginal }}</strong>
+                <small>{{ formatoTamano(archivo.tamanoBytes) }} · {{ formatoFecha(archivo.creadoEn) }}</small>
+              </div>
+              <button type="button" class="open-file" (click)="descargar.emit(archivo)">Ver PDF</button>
+            </article>
+          }
+        </div>
+      }
+    </div>
+
+    <footer class="foot">
+      <button type="button" class="cancel" (click)="cerrar.emit()">Cerrar</button>
+    </footer>
+  </section>
+</div>

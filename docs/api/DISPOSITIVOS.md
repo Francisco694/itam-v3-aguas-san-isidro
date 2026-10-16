@@ -51,29 +51,57 @@ GET /api/v1/dispositivos/validar-identificador?tipo=imei&valor=356789012345678
 - **Respuesta:** `200` un `DispositivoResumen` ampliado con factura, línea, último responsable, resultado de offboarding, origen y verificación.
 - **Errores:** `400` si el código no es entero positivo; `404` si no existe.
 
+## Catálogos técnicos
+
+Un dispositivo puede tener varios documentos PDF. Todas las rutas requieren sesión; `SOLO_LECTURA`
+puede ejecutar únicamente las consultas `GET`.
+
 ## GET `/dispositivos/:codigo/catalogo-tecnico`
 
-- **Propósito:** consultar los metadatos del PDF técnico asociado al dispositivo.
-- **Respuesta:** `200` con `data: null` cuando no existe o con `id`, `dispositivoId`, `nombreOriginal`, `mimeType`, `tamanoBytes`, `subidoPor` y `creadoEn` cuando existe.
+- **Propósito:** consultar los metadatos de todos los PDF técnicos asociados al dispositivo.
+- **Respuesta:** `200` con `data: []` cuando no existen o una colección de objetos con `id`,
+  `dispositivoId`, `nombreOriginal`, `mimeType`, `tamanoBytes`, `subidoPor` y `creadoEn`.
 - **Errores:** `400` por código inválido; `401` sin sesión; `404` si no existe el dispositivo.
 
-## PUT `/dispositivos/:codigo/catalogo-tecnico`
+## POST `/dispositivos/:codigo/catalogo-tecnico`
 
-- **Propósito:** adjuntar o reemplazar manualmente el catálogo técnico del dispositivo.
-- **Body:** `multipart/form-data`, campo `archivo`, un único PDF.
-- **Validación:** extensión `.pdf`, MIME `application/pdf`, firma `%PDF-` y tamaño entre 1 byte y 10 MiB (10 MB).
-- **Respuesta:** `200` con los metadatos del catálogo guardado.
-- **Errores:** `400` por archivo ausente, formato inválido o tamaño excedido; `401` sin sesión; `403` por rol sin permiso o `SOLO_LECTURA`; `404` si no existe el dispositivo.
-- **Reglas:** reemplaza la asociación anterior sin modificar estado, custodio, SIM, línea móvil, verificación ni datos históricos del dispositivo. El usuario responsable se obtiene de la sesión.
+- **Propósito:** adjuntar uno o más catálogos.
+- **Body:** `multipart/form-data`, campo `archivos` repetido por cada PDF.
+- **Validación:** extensión `.pdf`, MIME `application/pdf`, firma `%PDF-` y tamaño entre 1 byte y
+  10 MiB por archivo.
+- **Respuesta:** `200` con los metadatos de los catálogos guardados.
+- **Errores:** `400` por archivo ausente, formato inválido o tamaño excedido; `401` sin sesión;
+  `403` para `SOLO_LECTURA`; `404` si no existe el dispositivo.
 
-## GET `/dispositivos/:codigo/catalogo-tecnico/archivo`
+## PUT `/dispositivos/:codigo/catalogo-tecnico/:catalogoId`
 
-- **Propósito:** entregar el PDF asociado para visualizarlo en el navegador.
-- **Query:** `download=true` puede solicitar disposición de descarga; la ficha usa la vista inline del navegador y no muestra un botón de descarga separado.
+- **Propósito:** reemplazar un documento específico.
+- **Body:** `multipart/form-data`, campo `archivos`, un único PDF.
+- **Respuesta:** `200` con los metadatos del documento reemplazado.
+- **Errores:** `400`, `401`, `403` para `SOLO_LECTURA` o `404` si el dispositivo o catálogo no existe.
+
+## DELETE `/dispositivos/:codigo/catalogo-tecnico/:catalogoId`
+
+- **Propósito:** eliminar un documento específico después de una confirmación en la interfaz.
+- **Respuesta:** `200` con los metadatos del documento eliminado.
+- **Errores:** `401`, `403` para `SOLO_LECTURA` o `404` si el dispositivo o catálogo no existe.
+
+## GET `/dispositivos/:codigo/catalogo-tecnico/:catalogoId/archivo`
+
+- **Propósito:** entregar un PDF concreto para visualizarlo en el navegador.
+- **Query:** `download=true` puede solicitar disposición de descarga.
 - **Respuesta:** `200` `application/pdf` desde almacenamiento persistente.
 - **Errores:** `401`, `404` si el dispositivo o catálogo no existe.
 
 El binario se almacena en la ruta configurada por `DOCUMENT_STORAGE_PATH` con un nombre interno UUID. La tabla `itam.catalogos_tecnicos_dispositivo` conserva la asociación y los metadatos; el PDF no se guarda en PostgreSQL, memoria de proceso ni almacenamiento del navegador.
+
+La ruta histórica `GET /dispositivos/:codigo/catalogo-tecnico/archivo` continúa disponible para
+compatibilidad y entrega el documento que resuelva el servicio cuando no se informa un
+`catalogoId`. Para nuevas pantallas se recomienda usar siempre la ruta con `catalogoId`.
+
+La ruta histórica `PUT /dispositivos/:codigo/catalogo-tecnico` se conserva como alias de carga y
+acepta el mismo campo `archivos`; la interfaz actual utiliza `POST` para adjuntar y `PUT` con
+`catalogoId` para reemplazar.
 
 ## POST `/dispositivos`
 

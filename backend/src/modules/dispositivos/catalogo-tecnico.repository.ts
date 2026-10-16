@@ -39,6 +39,56 @@ export const obtenerCatalogoTecnicoPorId = async (
   return result.rows[0] ?? null;
 };
 
+export const reemplazarCatalogoTecnico = async (
+  codigoInventario: number,
+  catalogoId: number,
+  document: CatalogoTecnicoAlmacenado,
+  subidoPor: string
+): Promise<CatalogoTecnicoRow | null> => {
+  const result = await pool.query<CatalogoTecnicoRow>(
+    `UPDATE itam.catalogos_tecnicos_dispositivo AS catalogo
+        SET nombre_original = $3,
+            nombre_almacenado = $4,
+            mime_type = $5,
+            tamano_bytes = $6,
+            ruta = $7,
+            subido_por = $8,
+            creado_en = NOW()
+       FROM itam.dispositivos AS dispositivo
+      WHERE catalogo.id = $1
+        AND catalogo.dispositivo_id = dispositivo.id
+        AND dispositivo.codigo_inventario = $2
+      RETURNING catalogo.*`,
+    [
+      catalogoId,
+      codigoInventario,
+      document.nombreOriginal,
+      document.nombreAlmacenado,
+      document.mimeType,
+      document.tamanoBytes,
+      document.ruta,
+      subidoPor
+    ]
+  );
+  return result.rows[0] ?? null;
+};
+
+export const eliminarCatalogoTecnico = async (
+  codigoInventario: number,
+  catalogoId: number
+): Promise<CatalogoTecnicoRow | null> => {
+  const result = await pool.query<CatalogoTecnicoRow>(
+    `DELETE FROM itam.catalogos_tecnicos_dispositivo AS catalogo
+      USING itam.dispositivos AS dispositivo
+      WHERE catalogo.id = $1
+        AND catalogo.dispositivo_id = dispositivo.id
+        AND dispositivo.codigo_inventario = $2
+      RETURNING catalogo.*`,
+    [catalogoId, codigoInventario]
+  );
+  return result.rows[0] ?? null;
+};
+
 export const agregarCatalogosTecnicos = async (
   codigoInventario: number,
   documents: CatalogoTecnicoAlmacenado[],

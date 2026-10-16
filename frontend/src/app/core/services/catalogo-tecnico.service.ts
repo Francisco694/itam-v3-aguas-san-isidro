@@ -29,6 +29,25 @@ export class CatalogoTecnicoService {
       .pipe(map((response) => response.data));
   }
 
+  reemplazar(codigo: string | number, catalogoId: string, archivo: File) {
+    const body = new FormData();
+    body.append('archivos', archivo);
+    return this.http
+      .put<ApiItemResponse<CatalogoTecnico>>(
+        `${this.url}/${codigo}/catalogo-tecnico/${catalogoId}`,
+        body
+      )
+      .pipe(map((response) => response.data));
+  }
+
+  eliminar(codigo: string | number, catalogoId: string) {
+    return this.http
+      .delete<ApiItemResponse<CatalogoTecnico>>(
+        `${this.url}/${codigo}/catalogo-tecnico/${catalogoId}`
+      )
+      .pipe(map((response) => response.data));
+  }
+
   archivoUrl(codigo: string | number, catalogoId: string, download = false): string {
     return `${this.url}/${codigo}/catalogo-tecnico/${catalogoId}/archivo${download ? '?download=true' : ''}`;
   }

@@ -1,5 +1,5 @@
 import { DatePipe } from '@angular/common';
-import { Component, DestroyRef, HostListener, OnInit, inject, signal } from '@angular/core';
+import { Component, DestroyRef, HostListener, OnInit, effect, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
@@ -306,7 +306,7 @@ interface SimilarAssignedDevicePrompt {
       @for(alert of traceability()?.alertas || [];track alert){<div class="notice notice--warning traceability-alert"><svg lucideCircleAlert></svg><div><strong>{{ alert.includes('Asignado') ? 'Requiere revisión' : (device.estado.codigo==='EXTRAVIADO' ? 'Equipo perdido' : 'Equipo retirado del inventario') }}</strong><span>{{alert}}</span></div></div>}
       @if(activeServiceOrder(); as order){<section class="notice technical-service-card" role="status"><svg lucideWrench></svg><div><strong>Equipo en servicio técnico</strong><span>Este equipo está apartado del inventario operativo mientras se encuentra en revisión técnica.</span><dl><div><dt>Revisión N°</dt><dd>#{{order.id}}</dd></div><div><dt>Fecha de envío</dt><dd>{{serviceDateLabel(order.fechaEnvio)}}</dd></div><div><dt>Proveedor / técnico / destino</dt><dd>{{order.proveedor || 'No informado'}}</dd></div><div><dt>Falla reportada</dt><dd>{{order.fallaReportada}}</dd></div><div><dt>Estado de la revisión</dt><dd>{{technicalServiceStatusLabel(order.estado)}}</dd></div></dl><a class="btn btn--secondary btn--small" [routerLink]="['/servicio-tecnico']" [queryParams]="{orden: order.id}">Ver revisión técnica</a></div></section>}
       @if(latestServiceOrder(); as latest){<section class="technical-history"><header class="technical-history__header"><div class="technical-history__title"><span class="technical-history__icon"><svg lucideWrench></svg></span><div><small>SERVICIO TÉCNICO</small><h3>Historial de servicio técnico</h3><p>Última revisión registrada para este equipo.</p></div></div><a class="btn btn--secondary btn--small" [routerLink]="['/servicio-tecnico']" [queryParams]="{dispositivo: codigo}"><svg lucideHistory></svg>Ver historial completo</a></header><article class="technical-history__latest"><div class="technical-history__summary"><div class="technical-history__status"><span>{{technicalServiceStatusLabel(latest.estado)}}</span><strong>Revisión #{{latest.id}}</strong><small>{{serviceDateLabel(latest.fechaEnvio)}}</small></div><div class="technical-history__details"><div><small>PROVEEDOR</small><strong>{{latest.proveedor || 'No informado'}}</strong></div><div><small>FALLA REPORTADA</small><strong>{{latest.fallaReportada || 'No informada'}}</strong></div><div><small>COSTO COTIZADO / FINAL</small><strong>{{latest.montoCotizacion === null ? 'No informado' : clp(latest.montoCotizacion)}} / {{latest.costoFinal === null ? 'No informado' : clp(latest.costoFinal)}}</strong></div></div></div><div class="technical-history__costs"><div><div><span>Costo cotizado</span><strong>{{latest.montoCotizacion === null ? 'No informado' : clp(latest.montoCotizacion)}}</strong></div><div class="technical-history__bar"><span [style.width.%]="technicalCostPercent(latest.montoCotizacion, latest)"></span></div></div><div><div><span>Costo final</span><strong>{{latest.costoFinal === null ? 'No informado' : clp(latest.costoFinal)}}</strong></div><div class="technical-history__bar technical-history__bar--final"><span [style.width.%]="technicalCostPercent(latest.costoFinal, latest)"></span></div></div></div><a class="btn btn--primary btn--small" [routerLink]="['/servicio-tecnico']" [queryParams]="{orden: latest.id}"><svg lucideFileText></svg>Ver orden y cotización</a></article></section>}
-      <section class="panoramic-card">
+      <section class="panoramic-card" [class.panoramic-card--reader]="auth.user()?.rol === 'SOLO_LECTURA'">
         <article class="panoramic-column details-column">
           <div class="column-title"><span>01</span><div><small>IDENTIFICACIÓN</small><h3>Detalles</h3></div></div>
           <div class="equipment-identity"><span>{{ device.tipo.nombre }}</span><strong>{{ device.marca || 'Sin marca' }}</strong><h4>{{ device.modelo || 'Modelo no registrado' }}</h4></div>
@@ -338,9 +338,10 @@ interface SimilarAssignedDevicePrompt {
           @if (!history().length) { <app-view-state kind="empty" title="Sin movimientos" message="Este equipo aún no registra movimientos." /> }
           @else { <div class="audit-timeline">@for(event of history(); track event.id){<article class="audit-event"><span class="audit-event__node"></span><div><strong>{{ eventLabel(event.tipoEvento) }}</strong>@if(event.tipoEvento==='VERIFICACION_FISICA' || event.tipoEvento==='EQUIPO_VERIFICADO_POR_REGISTRO_MANUAL'){<p>{{ verificationEventLabel(event) }}</p>}<p><span>{{ event.estadoAnterior?.nombre || 'Sin estado' }}</span><b>→</b><span>{{ event.estadoNuevo?.nombre || 'Sin cambio' }}</span></p>          @if(custodyText(event,'custodiaAnterior');as before){<p><span>{{before}}</span><b>→</b><span>{{custodyText(event,'custodiaNueva')||'Sin responsable'}}</span></p>}@if(event.observaciones){<blockquote>{{ event.observaciones }}</blockquote>}<footer><time>{{ event.fechaEvento | date:'dd/MM/yyyy HH:mm' }}</time><span>{{ event.responsable }}</span></footer></div></article>}</div> }
         </article>
+        @if (auth.user()?.rol !== 'SOLO_LECTURA') {
         <aside class="panoramic-column actions-column">
           <div class="column-title"><span>03</span><div><small>GESTIÓN</small><h3>Acciones del equipo</h3></div></div>
-          @if (!action()) {
+          @if (!action() || auth.user()?.rol === 'SOLO_LECTURA') {
             <div class="operation-list">
               @if (auth.user()?.rol !== 'SOLO_LECTURA') {
               <button type="button" [disabled]="terminal() || technicalServiceActive() || device.tipoCustodia!=='NONE'" (click)="open('assign-person')"><svg lucideUserCheck></svg><span>Entregar equipo<small>A un colaborador habilitado</small></span></button>
@@ -356,13 +357,21 @@ interface SimilarAssignedDevicePrompt {
               @if(device.estado.codigo==='EXTRAVIADO' || device.estado.codigo==='DADO_BAJA'){<button type="button" (click)="open('recover')"><svg lucideRotateCcw></svg><span>Registrar equipo encontrado<small>Reactivar con trazabilidad</small></span></button>}
               }
               @if (catalogosTecnicos().length) {
-                <div class="operation-document-group technical-catalog-list">
+                <div id="catalogo" class="operation-document-group technical-catalog-list">
                   <div class="technical-catalog-list__header"><strong>Catálogos técnicos</strong><small>{{ catalogosTecnicos().length }} archivo{{ catalogosTecnicos().length === 1 ? '' : 's' }}</small></div>
                   @for (catalogo of catalogosTecnicos(); track catalogo.id) {
-                    <a class="operation-document" [href]="catalogoArchivoUrl(device.codigoInventario, catalogo.id)" target="_blank" rel="noopener"><svg lucideEye></svg><span>{{ catalogo.nombreOriginal }}<small>{{ catalogoFileSize(catalogo.tamanoBytes) }} · {{ catalogo.creadoEn | date:'dd/MM/yyyy HH:mm' }}</small></span></a>
+                    <div class="technical-catalog-row">
+                      <a class="operation-document" [href]="catalogoArchivoUrl(device.codigoInventario, catalogo.id)" target="_blank" rel="noopener" [title]="catalogo.nombreOriginal"><svg lucideEye></svg><span>{{ catalogoNombreCorto(catalogo.nombreOriginal) }}<small>{{ catalogoFileSize(catalogo.tamanoBytes) }} · {{ catalogo.creadoEn | date:'dd/MM/yyyy HH:mm' }}</small></span></a>
+                      @if (auth.user()?.rol !== 'SOLO_LECTURA') {
+                        <div class="technical-catalog-actions">
+                          <button type="button" class="catalog-action catalog-action--replace" [disabled]="catalogoSubiendo()" (click)="abrirReemplazoCatalogo(catalogo)" aria-label="Reemplazar archivo">Cambiar</button>
+                          <button type="button" class="catalog-action catalog-action--delete" [disabled]="catalogoSubiendo()" (click)="eliminarCatalogo(catalogo)" aria-label="Eliminar archivo">Eliminar</button>
+                        </div>
+                      }
+                    </div>
                   }
                   @if (auth.user()?.rol !== 'SOLO_LECTURA') {
-                    <button type="button" class="operation-document-replace" [disabled]="catalogoSubiendo()" (click)="abrirCargaCatalogo()">Adjuntar más archivos</button>
+                    <button type="button" class="operation-document-replace" [disabled]="catalogoSubiendo()" (click)="abrirCargaCatalogo()">Adjuntar</button>
                   }
                 </div>
               } @else {
@@ -376,11 +385,38 @@ interface SimilarAssignedDevicePrompt {
                 <div class="catalogo-action-error" role="alert">{{ catalogoError() }}</div>
               }
               <input id="technical-catalog-upload" class="technical-catalog__input" type="file" accept="application/pdf,.pdf" multiple [disabled]="catalogoSubiendo()" (change)="catalogoSeleccionado($event)" />
+              <input id="technical-catalog-replace-upload" class="technical-catalog__input" type="file" accept="application/pdf,.pdf" [disabled]="catalogoSubiendo()" (change)="catalogoReemplazoSeleccionado($event)" />
+              @if (catalogoNombreAlertOpen()) {
+                <div class="catalog-name-modal-backdrop" role="presentation">
+                  <section class="catalog-name-modal" role="dialog" aria-modal="true" aria-labelledby="catalog-name-title" (click)="$event.stopPropagation()">
+                    <h3 id="catalog-name-title">Nombra el documento antes de subirlo</h3>
+                    <p>Usa un nombre claro para que cualquier persona pueda identificarlo.</p>
+                    <div class="catalog-name-example"><strong>Tipo de documento - Marca Modelo.pdf</strong><span>Ejemplo: Manual de usuario - Motorola Moto G30.pdf</span></div>
+                    <footer>
+                      <button type="button" class="btn btn--ghost" (click)="cancelarAyudaNombreCatalogo()">Cancelar</button>
+                      <button type="button" class="btn btn--primary" (click)="confirmarAyudaNombreCatalogo()">OK, continuar</button>
+                    </footer>
+                  </section>
+                </div>
+              }
+              @if (catalogoEliminarPendiente(); as catalogo) {
+                <div class="catalog-name-modal-backdrop" role="presentation">
+                  <section class="catalog-name-modal" role="dialog" aria-modal="true" aria-labelledby="catalog-delete-title" aria-describedby="catalog-delete-description">
+                    <h3 id="catalog-delete-title">¿Eliminar documento?</h3>
+                    <p id="catalog-delete-description">Esta acción eliminará el archivo del catálogo y no se puede deshacer.</p>
+                    <div class="catalog-name-example"><strong>{{ catalogoNombreCorto(catalogo.nombreOriginal) }}</strong><span>Se eliminará de este dispositivo.</span></div>
+                    <footer>
+                      <button type="button" class="btn btn--ghost" (click)="cancelarEliminarCatalogo()">Cancelar</button>
+                      <button type="button" class="btn catalog-delete-confirm" (click)="confirmarEliminarCatalogo()">Eliminar documento</button>
+                    </footer>
+                  </section>
+                </div>
+              }
               @if (auth.user()?.rol !== 'SOLO_LECTURA') {
               <button type="button" class="operation-danger" [disabled]="!stateExists('DADO_BAJA')" (click)="open('retire')"><svg lucideCircleAlert></svg><span>Da de Baja<small>Motivo obligatorio</small></span></button>
               }
             </div>
-          } @else if (auth.user()?.rol !== 'SOLO_LECTURA') {
+          } @else {
             <form class="action-form" [formGroup]="actionForm" (ngSubmit)="execute()">
               @if(action()==='service'){<section class="technical-order-identity"><strong>Orden de Trabajo - Servicio Técnico</strong><span>Revisa los antecedentes del equipo antes de registrar el envío.</span><dl><div><dt>Código ITAM</dt><dd>{{device.codigoInventario}}</dd></div><div><dt>Tipo de equipo</dt><dd>{{device.tipo.nombre}}</dd></div><div><dt>Marca / modelo</dt><dd>{{device.marca || 'Sin marca'}} {{device.modelo || ''}}</dd></div><div><dt>IMEI / serie</dt><dd>{{device.imei || device.numeroSerie || 'No informado'}}</dd></div><div><dt>Usuario / área</dt><dd>{{device.colaborador?.nombre || device.departamento?.nombre || 'No informado'}}</dd></div></dl></section>}
               <header><div><small>OPERACIÓN EN CURSO</small><h4>{{ actionTitle() }}</h4></div><button class="icon-button" type="button" aria-label="Cancelar operación" [disabled]="submitting()" (click)="action.set(null)"><svg lucideX></svg></button></header>
@@ -584,14 +620,53 @@ interface SimilarAssignedDevicePrompt {
               @if(action()==='service'){<div class="form-grid"><div class="field"><label for="service-area">Área solicitante</label><input id="service-area" formControlName="areaSolicitante" maxlength="180" /></div><div class="field"><label for="service-contact">Contacto del servicio técnico</label><input id="service-contact" formControlName="contactoServicio" maxlength="180" /></div></div><div class="field"><label for="service-responsible">Responsable TI *</label><input id="service-responsible" formControlName="responsable" maxlength="150" /></div>}
             </form>
           }
-          @if (auth.user()?.rol === 'SOLO_LECTURA') {
-            <div class="notice notice--info">
-              <strong>Perfil de solo lectura</strong>
-              <span>Puede consultar el equipo y su trazabilidad, pero no modificar operaciones.</span>
+        </aside>
+        }
+      </section>
+      @if (auth.user()?.rol === 'SOLO_LECTURA') {
+        <section id="catalogo" class="card reader-catalog-card">
+          <header class="reader-catalog-card__header">
+            <div>
+              <small>DOCUMENTACIÓN DEL EQUIPO</small>
+              <h3>Catálogos técnicos disponibles</h3>
+            </div>
+            @if (catalogosTecnicos().length) {
+              <span>{{ catalogosTecnicos().length }} archivo{{ catalogosTecnicos().length === 1 ? '' : 's' }}</span>
+            }
+          </header>
+          @if (catalogoError()) {
+            <div class="reader-catalog-card__state reader-catalog-card__state--error" role="alert">
+              <strong>No se pudieron cargar los catálogos.</strong>
+              <span>{{ catalogoError() }}</span>
+              <button type="button" class="btn btn--secondary btn--small" (click)="load()">Reintentar</button>
+            </div>
+          } @else if (catalogosTecnicos().length) {
+            <div class="reader-catalog-card__files">
+              @for (catalogo of catalogosTecnicos(); track catalogo.id) {
+                <a
+                  class="reader-catalog-card__file"
+                  [href]="catalogoArchivoUrl(device.codigoInventario, catalogo.id)"
+                  target="_blank"
+                  rel="noopener"
+                  [title]="catalogo.nombreOriginal"
+                >
+                  <svg lucideEye aria-hidden="true"></svg>
+                  <span>
+                    <strong>{{ catalogoNombreCorto(catalogo.nombreOriginal) }}</strong>
+                    <small>{{ catalogoFileSize(catalogo.tamanoBytes) }} · {{ catalogo.creadoEn | date:'dd/MM/yyyy HH:mm' }}</small>
+                  </span>
+                  <b>Ver PDF</b>
+                </a>
+              }
+            </div>
+          } @else {
+            <div class="reader-catalog-card__state">
+              <strong>No hay catálogos técnicos adjuntos.</strong>
+              <span>Este equipo todavía no tiene manuales o documentos PDF disponibles.</span>
             </div>
           }
-        </aside>
-      </section>
+        </section>
+      }
       @if(device.facturaAdquisicion;as factura){<section class="card device-notes"><strong>Antecedentes de adquisición</strong><p>Factura {{factura.numeroFactura}} · {{factura.fechaFactura||'Fecha no informada'}} · {{factura.proveedor||'Proveedor no informado'}} · {{factura.montoTotal===null?'Monto no informado':clp(factura.montoTotal)}}</p>@if(factura.observaciones){<p>{{factura.observaciones}}</p>}<div class="invoice-document">@if(factura.documento;as document){<span><svg lucideFileText></svg><strong>{{document.nombreOriginal}}</strong></span><a class="btn btn--ghost btn--small" [href]="facturas.documentoUrl(factura.id,false)" target="_blank" rel="noopener"><svg lucideExternalLink></svg>Ver documento</a><a class="btn btn--ghost btn--small" [href]="facturas.documentoUrl(factura.id,true)"><svg lucideDownload></svg>Descargar</a>}@else{<span>No se adjuntó documento.</span>}</div></section>}
       @if (device.observaciones) { <section class="card device-notes"><strong>Observaciones de la ficha</strong><p>{{ device.observaciones }}</p></section> }
     }
@@ -1218,6 +1293,10 @@ export class DispositivoDetail implements OnInit {
   protected readonly item = signal<Dispositivo | null>(null);
   protected readonly catalogosTecnicos = signal<CatalogoTecnico[]>([]);
   protected readonly catalogoSubiendo = signal(false);
+  protected readonly catalogoReemplazando = signal<CatalogoTecnico | null>(null);
+  protected readonly catalogoNombreAlertOpen = signal(false);
+  protected readonly catalogoEliminarPendiente = signal<CatalogoTecnico | null>(null);
+  private readonly catalogoNombreAlertTarget = signal<'adjuntar' | 'reemplazar' | null>(null);
   protected readonly catalogoError = signal('');
   protected readonly traceability = signal<TrazabilidadDispositivo | null>(null);
   protected readonly history = signal<HistorialEvento[]>([]);
@@ -1236,6 +1315,11 @@ export class DispositivoDetail implements OnInit {
   protected readonly actionErrorTitle = signal('');
   protected readonly submitting = signal(false);
   protected readonly action = signal<DeviceAction | null>(null);
+  private readonly clearReadOnlyAction = effect(() => {
+    if (this.auth.user()?.rol === 'SOLO_LECTURA' && this.action()) {
+      this.action.set(null);
+    }
+  });
   protected readonly activeServiceOrder = signal<OrdenServicio | null>(null);
   protected readonly serviceOrders = signal<OrdenServicio[]>([]);
   protected readonly pendingReplacement = signal<ReemplazoDispositivo | null>(null);
@@ -1266,13 +1350,104 @@ export class DispositivoDetail implements OnInit {
   protected catalogoArchivoUrl(codigo: number, catalogoId: string, download = false): string {
     return this.catalogos.archivoUrl(codigo, catalogoId, download);
   }
+  protected catalogoNombreCorto(nombre: string): string {
+    const extension = nombre.toLowerCase().endsWith('.pdf') ? '.pdf' : '';
+    const base = extension ? nombre.slice(0, -extension.length) : nombre;
+    const maxBaseLength = 32;
+    return base.length > maxBaseLength
+      ? `${base.slice(0, maxBaseLength).trimEnd()}…${extension}`
+      : nombre;
+  }
   protected catalogoFileSize(bytes: number): string {
     if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
   protected abrirCargaCatalogo(): void {
     if (this.auth.user()?.rol === 'SOLO_LECTURA' || this.catalogoSubiendo()) return;
-    document.getElementById('technical-catalog-upload')?.click();
+    this.catalogoNombreAlertTarget.set('adjuntar');
+    this.catalogoNombreAlertOpen.set(true);
+  }
+  protected abrirReemplazoCatalogo(catalogo: CatalogoTecnico): void {
+    if (this.auth.user()?.rol === 'SOLO_LECTURA' || this.catalogoSubiendo()) return;
+    this.catalogoReemplazando.set(catalogo);
+    this.catalogoNombreAlertTarget.set('reemplazar');
+    this.catalogoNombreAlertOpen.set(true);
+  }
+  protected confirmarAyudaNombreCatalogo(): void {
+    const target = this.catalogoNombreAlertTarget();
+    this.catalogoNombreAlertTarget.set(null);
+    this.catalogoNombreAlertOpen.set(false);
+    document.getElementById(target === 'reemplazar' ? 'technical-catalog-replace-upload' : 'technical-catalog-upload')?.click();
+  }
+  protected cancelarAyudaNombreCatalogo(): void {
+    this.catalogoNombreAlertTarget.set(null);
+    this.catalogoNombreAlertOpen.set(false);
+    this.catalogoReemplazando.set(null);
+  }
+  protected catalogoReemplazoSeleccionado(event: Event): void {
+    const input = event.target as HTMLInputElement | null;
+    const archivo = input?.files?.[0];
+    if (input) input.value = '';
+    const catalogo = this.catalogoReemplazando();
+    this.catalogoReemplazando.set(null);
+    if (!archivo || !catalogo || this.catalogoSubiendo()) return;
+
+    if (archivo.type !== 'application/pdf' || !archivo.name.toLowerCase().endsWith('.pdf')) {
+      this.catalogoError.set('Solo se permiten archivos PDF.');
+      this.toast.error('Archivo no válido', 'Selecciona un archivo PDF.');
+      return;
+    }
+    if (archivo.size < 1 || archivo.size > MAX_CATALOGO_TECNICO_BYTES) {
+      this.catalogoError.set('El PDF debe pesar como máximo 10 MB.');
+      this.toast.error('Archivo demasiado grande', 'El PDF debe pesar como máximo 10 MB.');
+      return;
+    }
+
+    this.catalogoSubiendo.set(true);
+    this.catalogoError.set('');
+    this.catalogos.reemplazar(this.codigo, catalogo.id, archivo)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (actualizado) => {
+          this.catalogosTecnicos.update((current) => current.map((item) => item.id === actualizado.id ? actualizado : item));
+          this.catalogoSubiendo.set(false);
+          this.toast.success('Catálogo reemplazado', 'El documento fue actualizado correctamente.');
+        },
+        error: (error) => {
+          this.catalogoSubiendo.set(false);
+          this.catalogoError.set(errorMessage(error));
+          this.toast.error('No se pudo reemplazar el catálogo', errorMessage(error));
+        }
+      });
+  }
+  protected eliminarCatalogo(catalogo: CatalogoTecnico): void {
+    if (this.auth.user()?.rol === 'SOLO_LECTURA' || this.catalogoSubiendo()) return;
+    this.catalogoEliminarPendiente.set(catalogo);
+  }
+  protected cancelarEliminarCatalogo(): void {
+    this.catalogoEliminarPendiente.set(null);
+  }
+  protected confirmarEliminarCatalogo(): void {
+    const catalogo = this.catalogoEliminarPendiente();
+    if (!catalogo || this.catalogoSubiendo()) return;
+    this.catalogoEliminarPendiente.set(null);
+
+    this.catalogoSubiendo.set(true);
+    this.catalogoError.set('');
+    this.catalogos.eliminar(this.codigo, catalogo.id)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.catalogosTecnicos.update((current) => current.filter((item) => item.id !== catalogo.id));
+          this.catalogoSubiendo.set(false);
+          this.toast.success('Catálogo eliminado', 'El documento fue eliminado correctamente.');
+        },
+        error: (error) => {
+          this.catalogoSubiendo.set(false);
+          this.catalogoError.set(errorMessage(error));
+          this.toast.error('No se pudo eliminar el catálogo', errorMessage(error));
+        }
+      });
   }
   protected catalogoSeleccionado(event: Event): void {
     const input = event.target as HTMLInputElement | null;

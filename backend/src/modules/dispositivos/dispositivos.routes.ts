@@ -23,8 +23,10 @@ import {
 } from "./dispositivos.controller";
 import {
   agregarCatalogosTecnicosController,
+  eliminarCatalogoTecnicoController,
   obtenerArchivoCatalogoTecnicoController,
   obtenerCatalogoTecnicoController,
+  reemplazarCatalogoTecnicoController,
 } from "./catalogo-tecnico.controller";
 import { technicalCatalogUpload } from "./catalogo-tecnico.upload";
 
@@ -43,6 +45,8 @@ router.get("/:codigo/catalogo-tecnico/archivo", obtenerArchivoCatalogoTecnicoCon
 router.get("/:codigo/catalogo-tecnico/:catalogoId/archivo", obtenerArchivoCatalogoTecnicoController);
 router.get("/:codigo/catalogo-tecnico", obtenerCatalogoTecnicoController);
 router.post("/:codigo/catalogo-tecnico", technicalCatalogUpload, agregarCatalogosTecnicosController);
+router.put("/:codigo/catalogo-tecnico/:catalogoId", technicalCatalogUpload, reemplazarCatalogoTecnicoController);
+router.delete("/:codigo/catalogo-tecnico/:catalogoId", eliminarCatalogoTecnicoController);
 router.put("/:codigo/catalogo-tecnico", technicalCatalogUpload, agregarCatalogosTecnicosController);
 router.get("/:codigo", obtenerDispositivoController);
 router.post("/", crearDispositivoController);

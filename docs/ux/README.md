@@ -10,6 +10,7 @@ y cómo se conectan sus vistas con la trazabilidad del inventario.
 
 - [Dashboard](DASHBOARD.md)
 - [Ficha de activo](FICHA_ACTIVO.md)
+- [Catálogos técnicos](CATALOGOS_TECNICOS.md)
 - [Actas](ACTAS.md)
 - [Servicio técnico](SERVICIO_TECNICO.md)
 - [Offboarding](OFFBOARDING.md)

@@ -3,8 +3,10 @@ import { NotFoundError, ValidationError } from "../../shared/errors";
 import { toIsoDateTime } from "../../shared/dates";
 import {
   agregarCatalogosTecnicos as agregarCatalogosTecnicosRows,
+  eliminarCatalogoTecnico as eliminarCatalogoTecnicoRow,
   obtenerCatalogoTecnicoPorId,
-  obtenerCatalogosTecnicosPorCodigo
+  obtenerCatalogosTecnicosPorCodigo,
+  reemplazarCatalogoTecnico as reemplazarCatalogoTecnicoRow
 } from "./catalogo-tecnico.repository";
 import {
   removeTechnicalCatalogFile,
@@ -41,6 +43,30 @@ export const agregarCatalogosTecnicos = async (
   if (!documents.length) throw new ValidationError("Debe adjuntar al menos un archivo PDF.");
   const rows = await agregarCatalogosTecnicosRows(codigoInventario, documents, subidoPor);
   return rows.map(mapCatalogoTecnico);
+};
+
+export const reemplazarCatalogoTecnico = async (
+  codigoInventario: number,
+  catalogoId: number,
+  document: CatalogoTecnicoAlmacenado,
+  subidoPor: string
+): Promise<CatalogoTecnico> => {
+  const previous = await obtenerCatalogoTecnicoPorId(codigoInventario, catalogoId);
+  if (!previous) throw new NotFoundError("El catÃ¡logo tÃ©cnico no existe para este dispositivo.");
+  const row = await reemplazarCatalogoTecnicoRow(codigoInventario, catalogoId, document, subidoPor);
+  if (!row) throw new NotFoundError("El catÃ¡logo tÃ©cnico no existe para este dispositivo.");
+  await removeTechnicalCatalogFile(previous.ruta).catch(() => undefined);
+  return mapCatalogoTecnico(row);
+};
+
+export const eliminarCatalogoTecnico = async (
+  codigoInventario: number,
+  catalogoId: number
+): Promise<CatalogoTecnico> => {
+  const row = await eliminarCatalogoTecnicoRow(codigoInventario, catalogoId);
+  if (!row) throw new NotFoundError("El catÃ¡logo tÃ©cnico no existe para este dispositivo.");
+  await removeTechnicalCatalogFile(row.ruta);
+  return mapCatalogoTecnico(row);
 };
 
 export const obtenerArchivoCatalogoTecnico = async (
