@@ -6,7 +6,6 @@ import { buildItamQrValue } from '../../utils/itam-qr';
 
 type LabelDevice = Pick<Dispositivo, 'colaborador' | 'departamento' | 'estado' | 'simAsociada' | 'lineaMovil' | 'numeroTelefonico' | 'labelPhone'>;
 
-export const PHYSICAL_LABEL_CALL_PHONE = '800 600 250';
 export const PHYSICAL_LABEL_WHATSAPP = '+56946659918';
 
 export const compactResponsibleName = (name: string): string => {
@@ -38,7 +37,7 @@ export const assetLabelPhone = (device: Pick<LabelDevice, 'simAsociada' | 'linea
   || null;
 
 @Component({selector:'app-asset-label',standalone:true,imports:[LucidePrinter],template:`
-<div class="asset-label-printable" [class.asset-label-printable--detail]="detail" [attr.aria-label]="'Etiqueta ITAM ' + code"><div class="asset-label__company">AGUAS SAN ISIDRO</div>@if(detail){<div class="asset-label__responsible">Responsable: {{responsible || 'Bodega TI'}}</div>}<div class="asset-label__divider" aria-hidden="true"></div><div class="asset-label__content"><canvas #qr class="asset-label__qr" role="img" [attr.aria-label]="'QR del activo ITAM ' + code"></canvas><div class="asset-label__identity"><small>INVENTARIO TI</small><strong>ITAM {{code}}</strong><span>{{assetType.toUpperCase()}}</span><span class="asset-label__description">{{labelDescription()}}</span></div></div><div class="asset-label__loss"><strong>EN CASO DE PÉRDIDA</strong><span>Llamar: {{labelCallPhone}}</span><span>WhatsApp: {{labelWhatsapp}}</span></div></div>
+<div class="asset-label-printable" [class.asset-label-printable--detail]="detail" [attr.aria-label]="'Etiqueta ITAM ' + code"><div class="asset-label__company">AGUAS SAN ISIDRO</div>@if(detail){<div class="asset-label__responsible">Responsable: {{responsible || 'Bodega TI'}}</div>}<div class="asset-label__divider" aria-hidden="true"></div><div class="asset-label__content"><canvas #qr class="asset-label__qr" role="img" [attr.aria-label]="'QR del activo ITAM ' + code"></canvas><div class="asset-label__identity"><small>INVENTARIO TI</small><strong>ITAM {{code}}</strong><span>{{assetType.toUpperCase()}}</span><span class="asset-label__description">{{labelDescription()}}</span></div></div><div class="asset-label__loss"><strong>EN CASO DE PÉRDIDA</strong><span>WhatsApp: {{labelWhatsapp}}</span></div></div>
 @if(showPrintButton){<button class="btn btn--secondary btn--small asset-label__print" type="button" (click)="print()"><svg lucidePrinter></svg>{{printLabel}}</button>}
 `,styleUrl:'./asset-label.scss'})
 export class AssetLabel implements AfterViewInit,OnChanges{
@@ -53,7 +52,6 @@ export class AssetLabel implements AfterViewInit,OnChanges{
   @Input() detail = false;
   @Input() showPrintButton = true;
   @Input() printLabel = 'Imprimir etiqueta';
-  protected readonly labelCallPhone = PHYSICAL_LABEL_CALL_PHONE;
   protected readonly labelWhatsapp = PHYSICAL_LABEL_WHATSAPP;
   @ViewChild('qr', { static: true }) private qr?: ElementRef<HTMLCanvasElement>;
 

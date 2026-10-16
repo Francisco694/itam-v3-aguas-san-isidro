@@ -15,7 +15,7 @@ import { SimService } from '../../core/services/sim.service';
 import { ToastService } from '../../core/services/toast.service';
 import { TiposDispositivoService } from '../../core/services/tipos-dispositivo.service';
 import { PageHeader } from '../../shared/components/page-header/page-header';
-import { PHYSICAL_LABEL_CALL_PHONE, PHYSICAL_LABEL_WHATSAPP, assetLabelResponsible } from '../../shared/components/asset-label/asset-label';
+import { PHYSICAL_LABEL_WHATSAPP, assetLabelResponsible } from '../../shared/components/asset-label/asset-label';
 import { QrScanner } from '../../shared/components/qr-scanner/qr-scanner';
 import { StatusBadge } from '../../shared/components/status-badge/status-badge';
 import { ViewState } from '../../shared/components/view-state/view-state';
@@ -136,7 +136,7 @@ const printableLabel = (device: Dispositivo, qrDataUrl: string, mode: 'A4' | 'TH
         <b class="label-model">${escapeHtml(`${device.marca ?? ''} ${device.modelo ?? ''}`.trim() || 'Modelo no registrado')}</b>
       </div>
     </div>
-    <div class="label-loss"><strong>EN CASO DE PÉRDIDA</strong><span>Llamar: ${PHYSICAL_LABEL_CALL_PHONE}</span><span>WhatsApp: ${PHYSICAL_LABEL_WHATSAPP}</span></div>
+    <div class="label-loss"><strong>EN CASO DE PÉRDIDA</strong><span>WhatsApp: ${PHYSICAL_LABEL_WHATSAPP}</span></div>
   </article>`;
 
 const printableDocument = (
@@ -176,7 +176,7 @@ const printableDocument = (
     .thermal-label__info small, .thermal-label__info span { font-size: 6.6pt; line-height: 1.05; }
     .thermal-label__code { font-size: 10pt; font-weight: 800; line-height: 1; margin: .25mm 0; }
     .thermal-label .label-model { display: -webkit-box; font-size: 6.2pt !important; line-height: 1.08; max-height: 2.16em; white-space: normal; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-    .label-loss { align-items: center; color: #000; display: flex; flex-direction: column; gap: .1mm; margin-top: .2mm; padding-top: .1mm; text-align: center; width: 100%; }
+    .label-loss { align-items: center; color: #000; display: flex; flex-direction: column; gap: .6mm; margin-top: .3mm; padding-top: .2mm; text-align: center; width: 100%; }
     .label-loss strong { font-size: 6.1pt; letter-spacing: .04em; line-height: 1; }
     .label-loss span { font-size: 6.3pt; font-weight: 700; line-height: 1.02; white-space: nowrap; }
     .thermal-label:last-child { break-after: auto; page-break-after: auto; }
