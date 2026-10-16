@@ -18,7 +18,7 @@ Estos son los documentos oficiales de entrega al cliente Aguas San Isidro y vali
 | 06 | [Versionado del Frontend](06_Versionado_del_Frontend.md) | Angular y rutas |
 | 07 | [Esquemático del Sistema](07_Esquematico_del_Sistema.md) | Vista de componentes y flujos |
 | 08 | [Arquitectura de la Aplicación](08_Arquitectura_de_la_Aplicacion.md) | Capas, seguridad y persistencia |
-| 09 | Gestión de Accesos (pendiente de crear) | Roles, sesiones y secretos |
+| 09 | [Gestión de Accesos y Credenciales](09_Gestion_de_Accesos_y_Credenciales.md) | Roles, sesiones y secretos |
 | 10 | Checklist de Entrega (pendiente de crear) | Cierre formal de la entrega |
 
 ## Documentos históricos

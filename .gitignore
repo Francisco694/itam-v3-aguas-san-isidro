@@ -28,6 +28,7 @@ backups/
 # Temporales
 tmp/
 temp/
+credenciales-produccion-TEMPORAL.txt
 
 # Documentos privados cargados localmente
 backend/storage/

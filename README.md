@@ -47,6 +47,7 @@ CI ejecuta typecheck y build backend, build frontend y verifica `frontend/dist/f
 - [Versionado del frontend](docs/entrega/06_Versionado_del_Frontend.md)
 - [Esquemático del sistema](docs/entrega/07_Esquematico_del_Sistema.md)
 - [Arquitectura de la aplicación](docs/entrega/08_Arquitectura_de_la_Aplicacion.md)
+- [Gestión de accesos y credenciales de producción](docs/entrega/09_Gestion_de_Accesos_y_Credenciales.md)
 - [Documentación API](docs/api/README.md)
 - [Documentación de arquitectura](docs/arquitectura/README.md)
 - [Documentación de base de datos](docs/database/README.md)
